@@ -51,6 +51,7 @@ windows = { version = "0.62", features = [
     "Win32_Media_Audio",
     "Win32_Media_MediaFoundation",
     "Win32_System_LibraryLoader",
+    "Win32_Globalization",
 ] }
 
 [dev-dependencies]

@@ -20,6 +20,10 @@ pub struct AppSettings {
     pub gif_max_long_side: u32,
     pub video_fps: u32,
     pub video_max_seconds: u32,
+    /// Interface language code (`it`, `pt-BR`…); absent or unknown means
+    /// "follow Windows". Kept as text so an unknown code never resets the
+    /// other settings.
+    pub language: Option<String>,
 }
 
 /// Defaults with an empty save folder; `normalized` fills it in.
@@ -37,6 +41,7 @@ impl Default for AppSettings {
             gif_max_long_side: 800,
             video_fps: 30,
             video_max_seconds: 300,
+            language: None,
         }
     }
 }
@@ -46,6 +51,11 @@ const VIDEO_FPS_STEPS: [u32; 3] = [15, 30, 60];
 impl AppSettings {
     pub fn defaults(capture_dir: &Path) -> AppSettings {
         AppSettings { save_folder: capture_dir.to_path_buf(), ..AppSettings::default() }
+    }
+
+    /// The chosen interface language, or `None` for automatic.
+    pub fn language(&self) -> Option<crate::i18n::Language> {
+        self.language.as_deref().and_then(crate::i18n::Language::from_code)
     }
 
     /// Brings every value back into its allowed range.
@@ -190,6 +200,26 @@ mod tests {
             .save(&AppSettings { mode: CaptureMode::Gif, ..AppSettings::defaults(&cap()) })
             .unwrap();
         assert!(fs::read_to_string(p).unwrap().contains(r#""mode": "Gif""#));
+    }
+
+    #[test]
+    fn language_defaults_to_automatic_and_roundtrips() {
+        use crate::i18n::Language;
+        let d = tempdir().unwrap();
+        let st = SettingsStore::new(d.path().join("s.json"), cap());
+        assert_eq!(st.load().language(), None);
+        let s = AppSettings { language: Some("ja".into()), ..AppSettings::defaults(&cap()) };
+        st.save(&s).unwrap();
+        assert_eq!(st.load().language(), Some(Language::Ja));
+    }
+
+    #[test]
+    fn unknown_language_code_means_automatic_and_keeps_other_settings() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "language": "xx", "gif_fps": 15 }"#).unwrap();
+        let s = SettingsStore::new(p, cap()).load();
+        assert_eq!((s.language(), s.gif_fps), (None, 15));
     }
 
     #[test]

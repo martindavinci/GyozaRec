@@ -37,3 +37,11 @@ fn window_snapshot_has_only_non_empty_bounds() {
     let list = Win32WindowList { exclude_pid: std::process::id() }.snapshot();
     assert!(list.iter().all(|w| !w.bounds.is_empty()));
 }
+
+#[test]
+#[ignore = "desktop"]
+fn system_ui_languages_are_locale_tags() {
+    let langs = system_ui_languages();
+    assert!(!langs.is_empty());
+    assert!(langs.iter().all(|l| l.len() >= 2 && !l.contains('\0')), "{langs:?}");
+}

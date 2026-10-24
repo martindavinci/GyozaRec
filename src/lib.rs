@@ -6,6 +6,7 @@ pub mod output;
 pub mod paths;
 pub mod pixels;
 pub mod platform;
+pub mod render;
 pub mod settings;
 #[cfg(test)]
 pub(crate) mod testing;

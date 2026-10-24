@@ -4,6 +4,21 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+/// A release tag must be `v` + the package version.
+fn check_tag(tag: &str, version: &str) -> Result<(), String> {
+    if tag == format!("v{version}") {
+        Ok(())
+    } else {
+        Err(format!("tag {tag} non corrisponde alla versione {version}"))
+    }
+}
+
+fn current_version() -> Result<String, String> {
+    let manifest = String::from_utf8(read(&workspace_root().join("Cargo.toml"))?)
+        .map_err(|e| e.to_string())?;
+    package_version(&manifest).ok_or_else(|| "versione non trovata in Cargo.toml".into())
+}
+
 fn portable_zip_name(version: &str) -> String {
     format!("GyozaRec-{version}-windows-x64-portable.zip")
 }
@@ -107,7 +122,11 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("dist") => dist(),
-        _ => Err("uso: cargo xtask dist".into()),
+        Some("check-tag") => match args.get(1) {
+            Some(tag) => current_version().and_then(|v| check_tag(tag, &v)),
+            None => Err("uso: cargo xtask check-tag <tag>".into()),
+        },
+        _ => Err("uso: cargo xtask dist | cargo xtask check-tag <tag>".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -121,6 +140,20 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn check_tag_accepts_matching_version() {
+        assert_eq!(check_tag("v0.1.0", "0.1.0"), Ok(()));
+    }
+
+    #[test]
+    fn check_tag_rejects_mismatch() {
+        assert_eq!(
+            check_tag("v0.2.0", "0.1.0"),
+            Err("tag v0.2.0 non corrisponde alla versione 0.1.0".to_string())
+        );
+        assert!(check_tag("0.1.0", "0.1.0").is_err());
+    }
 
     #[test]
     fn portable_zip_name_has_version_and_platform() {

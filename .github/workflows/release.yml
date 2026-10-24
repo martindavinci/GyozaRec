@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # WiX 3 (MSI) needs .NET Framework 3.5, available on this image.
+          - os: windows-2022
+          # fase 2: macos-latest · fase 3: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tag e versione coincidono
+        run: cargo xtask check-tag ${{ github.ref_name }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-packager
+      - name: Installer e zip portable
+        run: cargo xtask dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            dist/*.msi
+            dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Bozza di release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >
+          gh release create "${{ github.ref_name }}" dist/*
+          --draft --title "GyozaRec ${{ github.ref_name }}" --generate-notes

@@ -1,0 +1,22 @@
+# Build output
+/target
+/dist
+
+# Local working notes and agent scratch
+docs/superpowers/
+.superpowers/
+
+# Data created when running a portable build from the repo
+/data/
+/Catture/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store

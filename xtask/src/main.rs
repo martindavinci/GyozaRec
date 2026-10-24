@@ -9,14 +9,14 @@ fn check_tag(tag: &str, version: &str) -> Result<(), String> {
     if tag == format!("v{version}") {
         Ok(())
     } else {
-        Err(format!("tag {tag} non corrisponde alla versione {version}"))
+        Err(format!("tag {tag} does not match version {version}"))
     }
 }
 
 fn current_version() -> Result<String, String> {
     let manifest = String::from_utf8(read(&workspace_root().join("Cargo.toml"))?)
         .map_err(|e| e.to_string())?;
-    package_version(&manifest).ok_or_else(|| "versione non trovata in Cargo.toml".into())
+    package_version(&manifest).ok_or_else(|| "version not found in Cargo.toml".into())
 }
 
 fn portable_zip_name(version: &str) -> String {
@@ -69,7 +69,7 @@ fn run(root: &Path, args: &[&str]) -> Result<(), String> {
         .current_dir(root)
         .status()
         .map_err(|e| format!("cargo {}: {e}", args.join(" ")))?;
-    if status.success() { Ok(()) } else { Err(format!("cargo {} non riuscito", args.join(" "))) }
+    if status.success() { Ok(()) } else { Err(format!("cargo {} failed", args.join(" "))) }
 }
 
 fn read(path: &Path) -> Result<Vec<u8>, String> {
@@ -80,7 +80,7 @@ fn dist() -> Result<(), String> {
     let root = workspace_root();
     run(&root, &["build", "--release", "-p", "gyozarec"])?;
     let manifest = String::from_utf8(read(&root.join("Cargo.toml"))?).map_err(|e| e.to_string())?;
-    let version = package_version(&manifest).ok_or("versione non trovata in Cargo.toml")?;
+    let version = package_version(&manifest).ok_or("version not found in Cargo.toml")?;
     let dist = root.join("dist");
     std::fs::create_dir_all(&dist).map_err(|e| e.to_string())?;
 
@@ -88,16 +88,16 @@ fn dist() -> Result<(), String> {
         Ok(to_crlf(&String::from_utf8_lossy(&read(&root.join(p))?)).into_bytes())
     };
     let (readme, license, ofl) =
-        (text("packaging/LEGGIMI.txt")?, text("LICENSE")?, text("assets/fonts/OFL.txt")?);
+        (text("packaging/README.txt")?, text("LICENSE")?, text("assets/fonts/OFL.txt")?);
     let extra: [(&str, &[u8]); 4] =
-        [("portable", b""), ("LEGGIMI.txt", &readme), ("LICENSE.txt", &license), ("OFL.txt", &ofl)];
+        [("portable", b""), ("README.txt", &readme), ("LICENSE.txt", &license), ("OFL.txt", &ofl)];
     let zip_path = dist.join(portable_zip_name(&version));
     let exe = root.join("target").join("release").join("gyozarec.exe");
     write_portable_zip(&zip_path, &exe, &extra).map_err(|e| e.to_string())?;
 
     let packager = Command::new("cargo").args(["packager", "--version"]).output();
     if !packager.is_ok_and(|o| o.status.success()) {
-        return Err("cargo-packager mancante: cargo install cargo-packager --locked".into());
+        return Err("cargo-packager is missing: cargo install cargo-packager --locked".into());
     }
     run(&root, &["packager", "--release", "--formats", "wix"])?;
     for entry in std::fs::read_dir(&dist).map_err(|e| e.to_string())?.flatten() {
@@ -107,7 +107,7 @@ fn dist() -> Result<(), String> {
         }
     }
 
-    println!("Pacchetti in {}:", dist.display());
+    println!("Packages in {}:", dist.display());
     for entry in std::fs::read_dir(&dist).map_err(|e| e.to_string())?.flatten() {
         if entry.path().is_dir() {
             continue;
@@ -124,9 +124,9 @@ fn main() -> ExitCode {
         Some("dist") => dist(),
         Some("check-tag") => match args.get(1) {
             Some(tag) => current_version().and_then(|v| check_tag(tag, &v)),
-            None => Err("uso: cargo xtask check-tag <tag>".into()),
+            None => Err("usage: cargo xtask check-tag <tag>".into()),
         },
-        _ => Err("uso: cargo xtask dist | cargo xtask check-tag <tag>".into()),
+        _ => Err("usage: cargo xtask dist | cargo xtask check-tag <tag>".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -150,7 +150,7 @@ mod tests {
     fn check_tag_rejects_mismatch() {
         assert_eq!(
             check_tag("v0.2.0", "0.1.0"),
-            Err("tag v0.2.0 non corrisponde alla versione 0.1.0".to_string())
+            Err("tag v0.2.0 does not match version 0.1.0".to_string())
         );
         assert!(check_tag("0.1.0", "0.1.0").is_err());
     }
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn installer_name_gets_product_capitalization() {
         assert_eq!(
-            installer_display_name("gyozarec_0.1.0_x64_it-IT.msi"),
+            installer_display_name("gyozarec_0.1.0_x64_en-US.msi"),
             Some("GyozaRec_0.1.0_x64.msi".to_string())
         );
         assert_eq!(installer_display_name("GyozaRec-0.1.0-windows-x64-portable.zip"), None);
@@ -182,11 +182,11 @@ mod tests {
         std::fs::write(&exe, b"MZ").unwrap();
         let out = d.path().join("p.zip");
         let extra: [(&str, &[u8]); 4] =
-            [("portable", b""), ("LEGGIMI.txt", b"x"), ("LICENSE.txt", b"m"), ("OFL.txt", b"y")];
+            [("portable", b""), ("README.txt", b"x"), ("LICENSE.txt", b"m"), ("OFL.txt", b"y")];
         write_portable_zip(&out, &exe, &extra).unwrap();
         let mut z = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
         let names: Vec<String> =
             (0..z.len()).map(|i| z.by_index(i).unwrap().name().unwrap().to_string()).collect();
-        assert_eq!(names, ["gyozarec.exe", "portable", "LEGGIMI.txt", "LICENSE.txt", "OFL.txt"]);
+        assert_eq!(names, ["gyozarec.exe", "portable", "README.txt", "LICENSE.txt", "OFL.txt"]);
     }
 }

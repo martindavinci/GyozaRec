@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-          # fase 2: macos-latest · fase 3: ubuntu-22.04
+          # phase 2: macos-latest · phase 3: ubuntu-22.04
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -23,10 +23,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Formattazione
+      - name: Format
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        # I test #[ignore] (desktop reale, Media Foundation) restano esclusi.
+      - name: Tests
+        # #[ignore] tests (real desktop, Media Foundation) stay excluded.
         run: cargo test --workspace

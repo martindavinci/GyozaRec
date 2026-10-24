@@ -4,47 +4,49 @@
 
 <h1 align="center">GyozaRec</h1>
 
-<p align="center">Cattura schermo veloce e carina: PNG, GIF e MP4, tutto in locale.</p>
+<p align="center">Fast, cute screen capture: PNG, GIF and MP4, entirely local.</p>
 
-## Funzionalità
+## Features
 
-Una piccola barra con quattro pulsanti:
+A small toolbar with four buttons:
 
-- **Cattura** — avvia la cattura con la modalità e il ritardo scelti.
-- **Modalità** — Rettangolo, Finestra, Schermo intero, Video MP4, GIF animata.
-- **Ritarda** — da nessun ritardo fino a 5 secondi.
-- **Opzioni** — cartella di salvataggio, copia negli appunti, suono, cursore nei video, fotogrammi al secondo e durata massima di GIF e video.
+- **Capture** — starts a capture with the selected mode and delay.
+- **Mode** — Rectangle, Window, Full screen, MP4 video, Animated GIF.
+- **Delay** — from no delay up to 5 seconds.
+- **Options** — save folder, copy to clipboard, sound, cursor in recordings, frame rate and maximum length of GIFs and videos, language.
 
-Le immagini vengono salvate in PNG e copiate negli appunti. Video e GIF registrano un'area scelta sullo schermo; durante la registrazione un pannello mostra il tempo trascorso con i pulsanti **Stop** e **Annulla**. Nessun file lascia il computer: niente upload, niente account.
+Images are saved as PNG and copied to the clipboard. Videos and GIFs record an area you pick on screen; while recording, a small panel shows the elapsed time with **Stop** and **Cancel** buttons. Nothing leaves your computer: no uploads, no accounts.
 
-Avviando `gyozarec --capture` la selezione parte subito; se l'app è già aperta, la cattura parte nella finestra esistente.
+Running `gyozarec --capture` starts the selection right away; if the app is already open, the capture starts in the running instance.
+
+The interface is available in English, Spanish, French, German, Italian, Brazilian Portuguese, Japanese, Korean and Simplified Chinese. The language follows Windows on first start and can be changed in **Options**.
 
 ## Download
 
-Dalla pagina Releases del repository:
+From the repository's Releases page:
 
-| Pacchetto | Cosa fa |
+| Package | What it does |
 |---|---|
-| `GyozaRec_<versione>_x64.msi` | Installazione per l'utente corrente in `%LOCALAPPDATA%\Programs\GyozaRec`, senza permessi di amministratore, con collegamento nel menu Start. Impostazioni in `%APPDATA%\GyozaRec`, catture in `Immagini\GyozaRec`. Si disinstalla da "App installate". |
-| `GyozaRec-<versione>-windows-x64-portable.zip` | Versione portable: estrai e avvia `gyozarec.exe`. Impostazioni e catture restano nella cartella (`data\` e `Catture\`). |
+| `GyozaRec_<version>_x64.msi` | Installs for the current user in `%LOCALAPPDATA%\Programs\GyozaRec`, without administrator rights, with a Start menu shortcut. Settings live in `%APPDATA%\GyozaRec`, captures in `Pictures\GyozaRec`. Uninstall from "Installed apps". |
+| `GyozaRec-<version>-windows-x64-portable.zip` | Portable version: extract it and run `gyozarec.exe`. Settings and captures stay in the folder (`data\` and `Captures\`). |
 
-Richiede Windows 10 (versione 2004 o successiva) o Windows 11, a 64 bit. macOS e Linux sono previsti nelle prossime versioni.
+Requires Windows 10 (version 2004 or later) or Windows 11, 64-bit. macOS and Linux are planned.
 
-## Compilare
+## Building
 
-Serve Rust stabile (1.93 o successivo) con il toolchain MSVC.
+You need stable Rust (1.93 or later) with the MSVC toolchain.
 
 ```
 cargo build --release
 cargo test
 ```
 
-Per creare installer MSI e zip portable (richiede `cargo install cargo-packager --locked`; WiX viene scaricato da cargo-packager e usa .NET Framework 3.5):
+To build the MSI installer and the portable zip (requires `cargo install cargo-packager --locked`; cargo-packager downloads WiX, which needs .NET Framework 3.5):
 
 ```
 cargo xtask dist
 ```
 
-## Licenza
+## License
 
-MIT, vedi [`LICENSE`](LICENSE). Il font Nunito è distribuito sotto SIL Open Font License, vedi [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt).
+MIT, see [`LICENSE`](LICENSE). The Nunito font is distributed under the SIL Open Font License, see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt).

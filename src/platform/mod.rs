@@ -8,4 +8,4 @@ mod windows;
 pub use self::windows::*;
 
 #[cfg(not(windows))]
-compile_error!("GyozaRec fase 1 supporta solo Windows (fasi 2–3: macOS, Linux)");
+compile_error!("GyozaRec currently supports Windows only (macOS and Linux are planned)");

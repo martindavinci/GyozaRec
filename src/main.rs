@@ -12,7 +12,7 @@ fn main() {
     let options = StartupOptions::parse(&args);
     let user = std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
-        .unwrap_or_else(|_| "utente".into());
+        .unwrap_or_else(|_| "user".into());
 
     // A second launch hands its request to the running instance and exits.
     let listener = match instance::acquire(&instance::socket_name(&user)) {
@@ -28,7 +28,7 @@ fn main() {
         }
         Ok(Instance::Primary(listener)) => Some(listener),
         Err(err) => {
-            eprintln!("istanza singola non disponibile: {err}");
+            eprintln!("single instance unavailable: {err}");
             None
         }
     };
@@ -42,6 +42,6 @@ fn main() {
     }
     let mut app = app::App::new(event_loop.create_proxy(), options.capture_now);
     if let Err(err) = event_loop.run_app(&mut app) {
-        eprintln!("errore dell'event loop: {err}");
+        eprintln!("event loop error: {err}");
     }
 }

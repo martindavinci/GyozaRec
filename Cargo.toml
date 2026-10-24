@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.93"
 license = "MIT"
-description = "Cattura schermo: PNG, GIF e MP4, tutto in locale"
+description = "Screen capture to PNG, GIF and MP4, entirely local"
 
 [workspace]
 members = [".", "xtask", "tools/make-ico"]
@@ -20,7 +20,6 @@ license-file = "packaging/wix/License.rtf"
 
 [package.metadata.packager.wix]
 template = "packaging/wix/main.wxs"
-languages = [{ identifier = "it-IT", path = "packaging/wix/it-IT.wxl" }]
 
 [dependencies]
 winit = "0.30"

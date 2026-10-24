@@ -45,6 +45,8 @@ pub struct OptionsForm {
     pub gif_max_long_side: u32,
     pub video_fps: u32,
     pub video_max_seconds: u32,
+    /// `None` = follow Windows.
+    pub language: Option<crate::i18n::Language>,
 }
 
 impl OptionsForm {
@@ -59,6 +61,7 @@ impl OptionsForm {
             gif_max_long_side: s.gif_max_long_side,
             video_fps: s.video_fps,
             video_max_seconds: s.video_max_seconds,
+            language: s.language(),
         }
     }
 
@@ -74,6 +77,7 @@ impl OptionsForm {
             gif_max_long_side: self.gif_max_long_side,
             video_fps: self.video_fps,
             video_max_seconds: self.video_max_seconds,
+            language: self.language.map(|l| l.code().to_string()),
             ..base.clone()
         }
         .normalized(capture_dir)
@@ -96,7 +100,7 @@ mod tests {
         let s = shorten_middle(r"C:\Users\someone\Pictures\Screenshots\GyozaRec", 24);
         assert_eq!(s.chars().count(), 24);
         assert!(s.starts_with(r"C:\Users") && s.ends_with("GyozaRec") && s.contains('…'));
-        assert_eq!(shorten_middle("corto", 24), "corto");
+        assert_eq!(shorten_middle("short", 24), "short");
     }
 
     #[test]
@@ -132,5 +136,17 @@ mod tests {
         let mut f = OptionsForm::from_settings(&AppSettings::defaults(&cap()));
         f.save_folder = PathBuf::new();
         assert_eq!(f.to_settings(&AppSettings::defaults(&cap()), &cap()).save_folder, cap());
+    }
+
+    #[test]
+    fn language_choice_roundtrips_through_the_form() {
+        use crate::i18n::Language;
+        let base = AppSettings { language: Some("ko".into()), ..AppSettings::defaults(&cap()) };
+        let mut f = OptionsForm::from_settings(&base);
+        assert_eq!(f.language, Some(Language::Ko));
+        f.language = Some(Language::PtBr);
+        assert_eq!(f.to_settings(&base, &cap()).language(), Some(Language::PtBr));
+        f.language = None;
+        assert_eq!(f.to_settings(&base, &cap()).language, None);
     }
 }

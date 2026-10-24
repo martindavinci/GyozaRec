@@ -3,6 +3,7 @@
 use super::surface::WindowSurface;
 use gyozarec::bridge::RecordingCommand;
 use gyozarec::geometry::{MonitorInfo, PixelRect, PixelSize};
+use gyozarec::i18n::Texts;
 use gyozarec::platform::{exclude_from_capture, make_color_keyed};
 use gyozarec::presentation::format_elapsed;
 use gyozarec::recording::{frame_bounds, place_panel, render_frame};
@@ -42,13 +43,13 @@ fn popup(event_loop: &ActiveEventLoop, rect: PixelRect) -> Option<WindowSurface>
     Some(surface)
 }
 
-fn build_panel_ui(elapsed: Duration, max: Duration, fonts: &Fonts) -> Ui {
+fn build_panel_ui(elapsed: Duration, max: Duration, texts: &Texts, fonts: &Fonts) -> Ui {
     let button = |label: &str| WidgetKind::Button { label: label.into(), dropdown: false };
     Ui::new(layout_row(
         vec![
             (ID_TIME, WidgetKind::Label { text: format_elapsed(elapsed, max), color: GYOZA.text }),
-            (ID_STOP, button("Stop")),
-            (ID_CANCEL, button("Annulla")),
+            (ID_STOP, button(texts.stop)),
+            (ID_CANCEL, button(texts.cancel)),
         ],
         PAD + DOT + 6.0,
         PAD,
@@ -65,6 +66,7 @@ pub struct RecordingSession {
     scale: f32,
     cursor: (f32, f32),
     max: Duration,
+    texts: &'static Texts,
     commands: Sender<RecordingCommand>,
 }
 
@@ -75,11 +77,12 @@ impl RecordingSession {
         monitor: &MonitorInfo,
         max: Duration,
         commands: Sender<RecordingCommand>,
+        texts: &'static Texts,
         fonts: &Fonts,
     ) -> Option<RecordingSession> {
         let frame = open_frame(event_loop, region);
         let scale = monitor.scale as f32;
-        let ui = build_panel_ui(Duration::ZERO, max, fonts);
+        let ui = build_panel_ui(Duration::ZERO, max, texts, fonts);
         let b = ui.bounds();
         let size = PixelSize {
             width: ((b.right() + PAD) * scale).ceil() as i32,
@@ -87,8 +90,16 @@ impl RecordingSession {
         };
         let at = place_panel(region, size, monitor.bounds);
         let panel = popup(event_loop, PixelRect::new(at.x, at.y, size.width, size.height))?;
-        let mut session =
-            RecordingSession { frame, panel, ui, scale, cursor: (-1.0, -1.0), max, commands };
+        let mut session = RecordingSession {
+            frame,
+            panel,
+            ui,
+            scale,
+            cursor: (-1.0, -1.0),
+            max,
+            texts,
+            commands,
+        };
         session.redraw(fonts);
         session.panel.window.set_visible(true);
         session.panel.window.focus_window();
@@ -104,7 +115,7 @@ impl RecordingSession {
     }
 
     pub fn tick(&mut self, elapsed: Duration, fonts: &Fonts) {
-        self.ui = build_panel_ui(elapsed, self.max, fonts);
+        self.ui = build_panel_ui(elapsed, self.max, self.texts, fonts);
         self.panel.window.request_redraw();
     }
 

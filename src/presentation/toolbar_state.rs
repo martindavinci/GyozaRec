@@ -7,25 +7,25 @@ use crate::i18n::{Language, Texts};
 use crate::settings::AppSettings;
 use std::path::PathBuf;
 
-pub const MODE_OPTIONS: [(CaptureMode, &str); 5] = [
-    (CaptureMode::Rectangle, "Rettangolo"),
-    (CaptureMode::Window, "Finestra"),
-    (CaptureMode::FullScreen, "Schermo intero"),
-    (CaptureMode::Video, "Video MP4"),
-    (CaptureMode::Gif, "GIF animata"),
+/// Modes in menu order; `Texts::modes` uses the same order.
+pub const MODES: [CaptureMode; 5] = [
+    CaptureMode::Rectangle,
+    CaptureMode::Window,
+    CaptureMode::FullScreen,
+    CaptureMode::Video,
+    CaptureMode::Gif,
 ];
 
-pub const DELAY_OPTIONS: [(u32, &str); 6] = [
-    (0, "Nessun ritardo"),
-    (1, "1 secondo"),
-    (2, "2 secondi"),
-    (3, "3 secondi"),
-    (4, "4 secondi"),
-    (5, "5 secondi"),
-];
+/// Delay choices in seconds; `Texts::delays` uses the same order.
+pub const DELAYS: [u32; 6] = [0, 1, 2, 3, 4, 5];
 
-pub fn mode_label(mode: CaptureMode) -> &'static str {
-    MODE_OPTIONS.iter().find(|(m, _)| *m == mode).map(|(_, l)| *l).unwrap_or("Rettangolo")
+pub fn mode_label(mode: CaptureMode, texts: &Texts) -> &'static str {
+    let index = MODES.iter().position(|m| *m == mode).unwrap_or(0);
+    texts.modes[index]
+}
+
+pub fn delay_label(seconds: u32, texts: &Texts) -> &'static str {
+    texts.delays[(seconds as usize).min(DELAYS.len() - 1)]
 }
 
 /// Recording timer, e.g. `00:07 / 05:00`.
@@ -124,16 +124,18 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn mode_and_delay_labels_match_spec() {
-        let labels: Vec<_> = MODE_OPTIONS.iter().map(|(_, l)| *l).collect();
+    fn mode_and_delay_labels_follow_the_language() {
+        let it = Language::It.texts();
+        let labels: Vec<_> = MODES.iter().map(|m| mode_label(*m, it)).collect();
         assert_eq!(
             labels,
             ["Rettangolo", "Finestra", "Schermo intero", "Video MP4", "GIF animata"]
         );
-        assert_eq!(
-            (DELAY_OPTIONS[0].1, DELAY_OPTIONS[1].1, DELAY_OPTIONS[5].1),
-            ("Nessun ritardo", "1 secondo", "5 secondi")
-        );
+        assert_eq!(mode_label(CaptureMode::Gif, Language::En.texts()), "Animated GIF");
+        assert_eq!(mode_label(CaptureMode::Window, Language::Ja.texts()), "ウィンドウ");
+        assert_eq!(DELAYS, [0, 1, 2, 3, 4, 5]);
+        assert_eq!(delay_label(5, Language::En.texts()), "5 seconds");
+        assert_eq!(delay_label(0, it), "Nessun ritardo");
     }
 
     #[test]
@@ -203,7 +205,10 @@ mod tests {
             error: None,
             copied_to_clipboard: false,
         };
-        assert_eq!(format_status(&o, "prima", Language::It.texts()), ("prima".to_string(), false));
+        assert_eq!(
+            format_status(&o, "before", Language::It.texts()),
+            ("before".to_string(), false)
+        );
     }
 
     #[test]

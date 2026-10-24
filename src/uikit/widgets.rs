@@ -211,7 +211,7 @@ mod tests {
     fn layout_row_places_widgets_with_gap() {
         let f = Fonts::embedded();
         let ws =
-            layout_row(vec![(1, btn("Cattura")), (2, btn("Opzioni"))], 6.0, 6.0, 6.0, &f, &GYOZA);
+            layout_row(vec![(1, btn("Capture")), (2, btn("Options"))], 6.0, 6.0, 6.0, &f, &GYOZA);
         assert_eq!(ws[1].rect.x, ws[0].rect.right() + 6.0);
         assert_eq!(ws[0].rect.h, 28.0);
     }

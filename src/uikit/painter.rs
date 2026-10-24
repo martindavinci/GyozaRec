@@ -34,14 +34,15 @@ impl RectF {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GlyphSource {
     Primary,
-    Fallback,
+    /// Index into the fallback fonts, in the order they were loaded.
+    Fallback(usize),
 }
 
 pub struct Fonts {
     pub regular: FontVec,
     pub bold: FontVec,
-    /// System font for characters the embedded Latin font lacks (CJK).
-    fallback: Option<FontVec>,
+    /// System fonts for characters the embedded Latin font lacks (CJK).
+    fallbacks: Vec<FontVec>,
 }
 
 impl Fonts {
@@ -52,24 +53,41 @@ impl Fonts {
             font.set_variation(b"wght", weight);
             font
         };
-        Fonts { regular: instance(400.0), bold: instance(700.0), fallback: None }
+        Fonts { regular: instance(400.0), bold: instance(700.0), fallbacks: Vec::new() }
     }
 
     /// Embedded fonts plus the first face of `path` as fallback; a missing or
     /// unreadable file just means no fallback.
     pub fn with_fallback_file(path: &std::path::Path) -> Fonts {
-        let fallback = std::fs::read(path)
+        let mut fonts = Fonts::embedded();
+        fonts.push_fallback(path);
+        fonts
+    }
+
+    fn push_fallback(&mut self, path: &std::path::Path) {
+        let font = std::fs::read(path)
             .ok()
             .and_then(|bytes| FontVec::try_from_vec_and_index(bytes, 0).ok());
-        Fonts { fallback, ..Fonts::embedded() }
+        self.fallbacks.extend(font);
     }
 
     /// The fonts a language needs: CJK languages get a system fallback font.
     pub fn for_language(language: crate::i18n::Language) -> Fonts {
-        match crate::platform::cjk_font_path(language) {
-            Some(path) => Fonts::with_fallback_file(&path),
-            None => Fonts::embedded(),
+        Fonts::for_languages(&[language])
+    }
+
+    /// The fonts for text in several languages; earlier languages win when
+    /// more than one fallback has a character.
+    pub fn for_languages(languages: &[crate::i18n::Language]) -> Fonts {
+        let mut fonts = Fonts::embedded();
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
+        for path in languages.iter().filter_map(|l| crate::platform::cjk_font_path(*l)) {
+            if !paths.contains(&path) {
+                fonts.push_fallback(&path);
+                paths.push(path);
+            }
         }
+        fonts
     }
 
     fn primary(&self, bold: bool) -> &FontVec {
@@ -80,16 +98,16 @@ impl Fonts {
         if self.primary(bold).glyph_id(c).0 != 0 {
             return GlyphSource::Primary;
         }
-        match &self.fallback {
-            Some(fallback) if fallback.glyph_id(c).0 != 0 => GlyphSource::Fallback,
-            _ => GlyphSource::Primary,
-        }
+        self.fallbacks
+            .iter()
+            .position(|f| f.glyph_id(c).0 != 0)
+            .map_or(GlyphSource::Primary, GlyphSource::Fallback)
     }
 
     fn font_for(&self, c: char, bold: bool) -> &FontVec {
-        match (self.source_for(c, bold), &self.fallback) {
-            (GlyphSource::Fallback, Some(fallback)) => fallback,
-            _ => self.primary(bold),
+        match self.source_for(c, bold) {
+            GlyphSource::Fallback(i) => &self.fallbacks[i],
+            GlyphSource::Primary => self.primary(bold),
         }
     }
 }
@@ -277,9 +295,9 @@ mod tests {
     #[test]
     fn measure_text_is_positive_and_bold_not_narrower() {
         let f = Fonts::embedded();
-        let (w, h) = measure_text(&f, "Cattura", 14.0, false);
+        let (w, h) = measure_text(&f, "Capture", 14.0, false);
         assert!(w > 20.0 && h > 10.0, "{w}x{h}");
-        assert!(measure_text(&f, "Cattura", 14.0, true).0 >= w);
+        assert!(measure_text(&f, "Capture", 14.0, true).0 >= w);
     }
 
     #[test]
@@ -298,7 +316,7 @@ mod tests {
         let f = Fonts::embedded();
         let mut p = Painter::new(PixelSize { width: 100, height: 30 }, 1.0);
         p.clear(GYOZA.bg);
-        p.text(&f, "Cattura", 4.0, 4.0, 14.0, GYOZA.text, false);
+        p.text(&f, "Capture", 4.0, 4.0, 14.0, GYOZA.text, false);
         let mut out = vec![0; 3000];
         p.to_softbuffer(&mut out);
         assert!(out.iter().any(|&c| c != GYOZA.bg.0));
@@ -337,7 +355,7 @@ mod tests {
             let f = Fonts::for_language(lang);
             let sample = lang.texts().capture;
             let c = sample.chars().next().unwrap();
-            assert_eq!(f.source_for(c, false), GlyphSource::Fallback, "{lang:?}");
+            assert_eq!(f.source_for(c, false), GlyphSource::Fallback(0), "{lang:?}");
             assert_eq!(f.source_for('A', false), GlyphSource::Primary);
             let mut p = Painter::new(PixelSize { width: 120, height: 30 }, 1.0);
             p.clear(GYOZA.bg);
@@ -346,5 +364,15 @@ mod tests {
             p.to_softbuffer(&mut out);
             assert!(out.iter().any(|&px| px != GYOZA.bg.0), "{lang:?}");
         }
+    }
+
+    #[test]
+    #[ignore = "desktop"]
+    fn several_languages_load_each_fallback_once() {
+        use crate::i18n::Language;
+        let f = Fonts::for_languages(&[Language::Ja, Language::Ko, Language::Ja, Language::En]);
+        assert_eq!(f.fallbacks.len(), 2);
+        assert_eq!(f.source_for('한', false), GlyphSource::Fallback(1));
+        assert_eq!(f.source_for('あ', false), GlyphSource::Fallback(0));
     }
 }

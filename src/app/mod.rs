@@ -16,7 +16,7 @@ use gyozarec::platform::{
     DefaultSinkFactory, GdiGrabber, SystemSound, Win32Clipboard, Win32Cursor, Win32Monitors,
     Win32WindowList, system_ui_languages,
 };
-use gyozarec::presentation::{DELAY_OPTIONS, MODE_OPTIONS, OptionsForm, ToolbarState};
+use gyozarec::presentation::{DELAYS, MODES, OptionsForm, ToolbarState, delay_label, mode_label};
 use gyozarec::settings::SettingsStore;
 use gyozarec::uikit::painter::Fonts;
 use muda::{CheckMenuItem, ContextMenu, Menu, MenuEvent};
@@ -104,7 +104,7 @@ impl App {
             let _ = menu_proxy.lock().unwrap().send_event(AppEvent::Menu(event));
         }));
         App {
-            fonts: Fonts::embedded(),
+            fonts: Fonts::for_language(language),
             store,
             state,
             capture,
@@ -144,9 +144,11 @@ impl App {
     fn show_menu(&self, action: ToolbarAction) {
         let Some(t) = &self.toolbar else { return };
         let menu = Menu::new();
+        let texts = self.state.texts();
         if action == ToolbarAction::ModeMenu {
-            for (i, (mode, label)) in MODE_OPTIONS.iter().enumerate() {
+            for (i, mode) in MODES.iter().enumerate() {
                 let checked = *mode == self.state.settings.mode;
+                let label = mode_label(*mode, texts);
                 let _ = menu.append(&CheckMenuItem::with_id(
                     format!("mode:{i}"),
                     label,
@@ -156,8 +158,9 @@ impl App {
                 ));
             }
         } else {
-            for (seconds, label) in DELAY_OPTIONS {
+            for seconds in DELAYS {
                 let checked = seconds == self.state.settings.delay_seconds;
+                let label = delay_label(seconds, texts);
                 let _ = menu.append(&CheckMenuItem::with_id(
                     format!("delay:{seconds}"),
                     label,
@@ -182,7 +185,7 @@ impl App {
         }
         let Some(t) = &self.toolbar else { return };
         let form = OptionsForm::from_settings(&self.state.settings);
-        self.options = OptionsWindow::open(event_loop, t.surface.hwnd(), form, &self.fonts);
+        self.options = OptionsWindow::open(event_loop, t.surface.hwnd(), form, self.state.language);
     }
 
     fn close_options(&mut self, result: OptionsResult) {
@@ -191,6 +194,7 @@ impl App {
             OptionsResult::Accepted(form) => {
                 self.state.settings = form.to_settings(&self.state.settings, &self.capture_dir);
                 self.save_settings();
+                self.apply_language();
                 self.refresh_toolbar();
             }
             OptionsResult::Canceled => {}
@@ -198,16 +202,30 @@ impl App {
         self.options = None;
     }
 
+    /// Switches the interface to the language the settings now ask for.
+    fn apply_language(&mut self) {
+        let language = resolve(self.state.settings.language(), &system_ui_languages());
+        if language == self.state.language {
+            return;
+        }
+        let old_initial = self.state.texts().initial_status;
+        self.state.language = language;
+        if self.state.status == old_initial {
+            self.state.status = language.texts().initial_status.to_string();
+        }
+        self.fonts = Fonts::for_language(language);
+    }
+
     fn on_menu(&mut self, event: MenuEvent) {
         let id = event.id.0.as_str();
         if id.starts_with(options::MENU_PREFIX) {
             if let Some(o) = &mut self.options {
-                o.on_menu(id, &self.fonts);
+                o.on_menu(id);
             }
             return;
         }
         if let Some(i) = id.strip_prefix("mode:").and_then(|v| v.parse::<usize>().ok()) {
-            if let Some((mode, _)) = MODE_OPTIONS.get(i) {
+            if let Some(mode) = MODES.get(i) {
                 self.state.settings.mode = *mode;
             }
         } else if let Some(s) = id.strip_prefix("delay:").and_then(|v| v.parse::<u32>().ok()) {
@@ -254,6 +272,7 @@ impl App {
                     &monitor,
                     max,
                     commands,
+                    self.state.texts(),
                     &self.fonts,
                 );
             }
@@ -315,7 +334,7 @@ impl ApplicationHandler<AppEvent> for App {
             return;
         }
         if let Some(options) = self.options.as_mut().filter(|o| o.id() == id) {
-            let result = options.handle(&event, &self.fonts);
+            let result = options.handle(&event);
             self.close_options(result);
             return;
         }

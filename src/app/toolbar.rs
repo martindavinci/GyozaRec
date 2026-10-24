@@ -13,6 +13,8 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowButtons};
 
 const PAD: f32 = 8.0;
+/// Keeps the title readable when the labels are short (e.g. Chinese).
+const MIN_WIDTH: f32 = 320.0;
 const ID_CAPTURE: u32 = 1;
 const ID_MODE: u32 = 2;
 const ID_DELAY: u32 = 3;
@@ -37,13 +39,14 @@ pub struct Toolbar {
 }
 
 fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
+    let texts = state.texts();
     let button = |label: &str, dropdown: bool| WidgetKind::Button { label: label.into(), dropdown };
     let mut widgets = layout_row(
         vec![
-            (ID_CAPTURE, button("Cattura", false)),
-            (ID_MODE, button(mode_label(state.settings.mode), true)),
-            (ID_DELAY, button("Ritarda", true)),
-            (ID_OPTIONS, button("Opzioni", false)),
+            (ID_CAPTURE, button(texts.capture, false)),
+            (ID_MODE, button(mode_label(state.settings.mode, texts), true)),
+            (ID_DELAY, button(texts.delay, true)),
+            (ID_OPTIONS, button(texts.options, false)),
         ],
         PAD,
         PAD,
@@ -58,7 +61,7 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let color = if state.status_is_error { GYOZA.error } else { GYOZA.text };
     let mut row2 = vec![(ID_STATUS, WidgetKind::Label { text: state.status.clone(), color })];
     if state.last_saved.is_some() {
-        row2.push((ID_FOLDER, WidgetKind::Link { text: "Apri cartella".into() }));
+        row2.push((ID_FOLDER, WidgetKind::Link { text: texts.open_folder.into() }));
     }
     widgets.extend(layout_row(row2, PAD, row1_bottom + 8.0, 12.0, fonts, &GYOZA));
     Ui::new(widgets)
@@ -66,7 +69,7 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
 
 fn logical_size(ui: &Ui) -> (f32, f32) {
     let b = ui.bounds();
-    ((b.right() + PAD).ceil(), (b.bottom() + PAD).ceil())
+    ((b.right() + PAD).ceil().max(MIN_WIDTH), (b.bottom() + PAD).ceil())
 }
 
 impl Toolbar {

@@ -10,6 +10,33 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_TRANSPARENT,
 };
 
+/// `/select,"<path>"`: explorer wants the switch outside the quotes, and the
+/// quotes protect spaces and commas in the path.
+fn explorer_select_arg(path: &Path) -> String {
+    format!("/select,\"{}\"", path.display())
+}
+
+/// Opens Explorer with `path` selected.
+pub fn reveal_in_explorer(path: &Path) {
+    use std::os::windows::process::CommandExt;
+    // raw_arg: Rust's own quoting would wrap the whole argument, switch included.
+    let _ = std::process::Command::new("explorer.exe").raw_arg(explorer_select_arg(path)).spawn();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explorer_select_arg_quotes_only_the_path() {
+        let p = Path::new(r"C:\Users\Mario Rossi\Pictures\GyozaRec\a, b.png");
+        assert_eq!(
+            explorer_select_arg(p),
+            r#"/select,"C:\Users\Mario Rossi\Pictures\GyozaRec\a, b.png""#
+        );
+    }
+}
+
 /// Lets the running instance take the foreground when this process asks it to.
 pub fn allow_foreground_for_others() {
     use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};

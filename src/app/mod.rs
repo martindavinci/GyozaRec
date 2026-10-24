@@ -265,9 +265,7 @@ impl App {
 
     fn open_folder(&self) {
         if let Some(path) = &self.state.last_saved {
-            let _ = std::process::Command::new("explorer.exe")
-                .arg(format!("/select,{}", path.display()))
-                .spawn();
+            gyozarec::platform::reveal_in_explorer(path);
         }
     }
 }

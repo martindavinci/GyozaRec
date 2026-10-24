@@ -2,7 +2,9 @@
 pub mod clock;
 mod error;
 pub mod geometry;
+pub mod output;
 pub mod paths;
+pub mod pixels;
 pub mod platform;
 pub mod settings;
 #[cfg(test)]

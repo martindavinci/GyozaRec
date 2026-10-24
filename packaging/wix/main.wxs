@@ -79,6 +79,20 @@
             </Component>
         </DirectoryRef>
 
+        <!-- License notices: the Nunito font is embedded in the exe and its
+             OFL notice must travel with every copy. cargo-packager renders this
+             template into dist/.cargo-packager/wix/x64/, four levels below the
+             repository root. -->
+        <?define RepoRoot = "$(sys.SOURCEFILEDIR)..\..\..\..\" ?>
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="LicenseNotices" Guid="E823F7AD-0BE2-4D40-A1DB-FFA811395E95" Win64="$(var.Win64)">
+                <File Id="LicenseTxt" Name="LICENSE.txt" Source="$(var.RepoRoot)LICENSE"/>
+                <File Id="OflTxt" Name="OFL.txt" Source="$(var.RepoRoot)assets\fonts\OFL.txt"/>
+                <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}"
+                               Name="LicenseNotices" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="StartMenuShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut"
@@ -98,6 +112,7 @@
 
         <Feature Id="MainProgram" Title="{{product_name}}" Level="1" Absent="disallow" AllowAdvertise="no">
             <ComponentRef Id="MainExecutable"/>
+            <ComponentRef Id="LicenseNotices"/>
             <ComponentRef Id="StartMenuShortcut"/>
         </Feature>
 

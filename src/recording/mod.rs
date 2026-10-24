@@ -6,6 +6,7 @@ mod gif_sink;
 mod worker;
 
 pub use capture_loop::run_capture_loop;
+pub use gif_sink::GifSink;
 pub use worker::RecordingWorker;
 
 use crate::geometry::PixelRect;

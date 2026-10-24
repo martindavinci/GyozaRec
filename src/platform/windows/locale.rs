@@ -31,3 +31,17 @@ pub fn system_ui_languages() -> Vec<String> {
             .collect()
     }
 }
+
+/// A Windows font with glyphs for a CJK language, if installed.
+pub fn cjk_font_path(language: crate::i18n::Language) -> Option<std::path::PathBuf> {
+    use crate::i18n::Language;
+    let file = match language {
+        Language::Ja => "YuGothM.ttc",
+        Language::Ko => "malgun.ttf",
+        Language::ZhCn => "msyh.ttc",
+        _ => return None,
+    };
+    let windir = std::env::var_os("WINDIR").unwrap_or_else(|| r"C:\Windows".into());
+    let path = std::path::Path::new(&windir).join("Fonts").join(file);
+    path.is_file().then_some(path)
+}

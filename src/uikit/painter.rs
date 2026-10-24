@@ -30,9 +30,18 @@ impl RectF {
     }
 }
 
+/// Which font draws a character.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GlyphSource {
+    Primary,
+    Fallback,
+}
+
 pub struct Fonts {
     pub regular: FontVec,
     pub bold: FontVec,
+    /// System font for characters the embedded Latin font lacks (CJK).
+    fallback: Option<FontVec>,
 }
 
 impl Fonts {
@@ -43,28 +52,67 @@ impl Fonts {
             font.set_variation(b"wght", weight);
             font
         };
-        Fonts { regular: instance(400.0), bold: instance(700.0) }
+        Fonts { regular: instance(400.0), bold: instance(700.0), fallback: None }
     }
 
-    fn pick(&self, bold: bool) -> &FontVec {
+    /// Embedded fonts plus the first face of `path` as fallback; a missing or
+    /// unreadable file just means no fallback.
+    pub fn with_fallback_file(path: &std::path::Path) -> Fonts {
+        let fallback = std::fs::read(path)
+            .ok()
+            .and_then(|bytes| FontVec::try_from_vec_and_index(bytes, 0).ok());
+        Fonts { fallback, ..Fonts::embedded() }
+    }
+
+    /// The fonts a language needs: CJK languages get a system fallback font.
+    pub fn for_language(language: crate::i18n::Language) -> Fonts {
+        match crate::platform::cjk_font_path(language) {
+            Some(path) => Fonts::with_fallback_file(&path),
+            None => Fonts::embedded(),
+        }
+    }
+
+    fn primary(&self, bold: bool) -> &FontVec {
         if bold { &self.bold } else { &self.regular }
+    }
+
+    pub fn source_for(&self, c: char, bold: bool) -> GlyphSource {
+        if self.primary(bold).glyph_id(c).0 != 0 {
+            return GlyphSource::Primary;
+        }
+        match &self.fallback {
+            Some(fallback) if fallback.glyph_id(c).0 != 0 => GlyphSource::Fallback,
+            _ => GlyphSource::Primary,
+        }
+    }
+
+    fn font_for(&self, c: char, bold: bool) -> &FontVec {
+        match (self.source_for(c, bold), &self.fallback) {
+            (GlyphSource::Fallback, Some(fallback)) => fallback,
+            _ => self.primary(bold),
+        }
     }
 }
 
 /// Width and line height of `text` in logical units.
 pub fn measure_text(fonts: &Fonts, text: &str, px: f32, bold: bool) -> (f32, f32) {
-    let font = fonts.pick(bold).as_scaled(PxScale::from(px));
+    let scale = PxScale::from(px);
     let mut width = 0.0;
-    let mut prev = None;
+    let mut prev: Option<(GlyphSource, ab_glyph::GlyphId)> = None;
     for c in text.chars() {
+        let source = fonts.source_for(c, bold);
+        let font = fonts.font_for(c, bold).as_scaled(scale);
         let id = font.glyph_id(c);
-        if let Some(p) = prev {
-            width += font.kern(p, id);
+        if let Some((prev_source, prev_id)) = prev
+            && prev_source == source
+        {
+            width += font.kern(prev_id, id);
         }
         width += font.h_advance(id);
-        prev = Some(id);
+        prev = Some((source, id));
     }
-    (width, font.ascent() - font.descent())
+    let primary = fonts.primary(bold).as_scaled(scale);
+    (width, primary.ascent() - primary.descent())
 }
 
 pub struct Painter {
@@ -145,21 +193,26 @@ impl Painter {
         bold: bool,
     ) {
         let s = self.scale;
-        let font = fonts.pick(bold);
-        let scaled = font.as_scaled(PxScale::from(px * s));
-        let baseline = y * s + scaled.ascent();
+        let scale = PxScale::from(px * s);
+        // One baseline for the whole run, from the primary font.
+        let baseline = y * s + fonts.primary(bold).as_scaled(scale).ascent();
         let mut caret = x * s;
-        let mut prev = None;
+        let mut prev: Option<(GlyphSource, ab_glyph::GlyphId)> = None;
         let (cr, cg, cb) = color.rgb();
         let (width, height) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
         for c in text.chars() {
+            let source = fonts.source_for(c, bold);
+            let font = fonts.font_for(c, bold);
+            let scaled = font.as_scaled(scale);
             let id = scaled.glyph_id(c);
-            if let Some(p) = prev {
-                caret += scaled.kern(p, id);
+            if let Some((prev_source, prev_id)) = prev
+                && prev_source == source
+            {
+                caret += scaled.kern(prev_id, id);
             }
-            let glyph = id.with_scale_and_position(px * s, point(caret, baseline));
+            let glyph = id.with_scale_and_position(scale, point(caret, baseline));
             caret += scaled.h_advance(id);
-            prev = Some(id);
+            prev = Some((source, id));
             let Some(outline) = font.outline_glyph(glyph) else { continue };
             let bounds = outline.px_bounds();
             let pixels = self.pixmap.pixels_mut();
@@ -260,5 +313,38 @@ mod tests {
         assert_eq!(dst[4 * 6 + 4], GYOZA.accent.0);
         assert_eq!(dst[5 * 6 + 5], GYOZA.accent.0);
         assert_eq!(dst[3 * 6 + 3], 0);
+    }
+
+    #[test]
+    fn latin_text_uses_the_embedded_font() {
+        let f = Fonts::embedded();
+        assert_eq!(f.source_for('A', false), GlyphSource::Primary);
+        assert_eq!(f.source_for('日', false), GlyphSource::Primary); // no fallback loaded
+    }
+
+    #[test]
+    fn missing_fallback_file_does_not_panic() {
+        let f = Fonts::with_fallback_file(std::path::Path::new("Z:/does/not/exist.ttc"));
+        assert_eq!(f.source_for('日', false), GlyphSource::Primary);
+        assert!(measure_text(&f, "日本語", 14.0, false).0 > 0.0);
+    }
+
+    #[test]
+    #[ignore = "desktop"]
+    fn cjk_text_uses_the_system_fallback_font() {
+        use crate::i18n::Language;
+        for lang in [Language::Ja, Language::Ko, Language::ZhCn] {
+            let f = Fonts::for_language(lang);
+            let sample = lang.texts().capture;
+            let c = sample.chars().next().unwrap();
+            assert_eq!(f.source_for(c, false), GlyphSource::Fallback, "{lang:?}");
+            assert_eq!(f.source_for('A', false), GlyphSource::Primary);
+            let mut p = Painter::new(PixelSize { width: 120, height: 30 }, 1.0);
+            p.clear(GYOZA.bg);
+            p.text(&f, sample, 4.0, 4.0, 14.0, GYOZA.text, false);
+            let mut out = vec![0; 3600];
+            p.to_softbuffer(&mut out);
+            assert!(out.iter().any(|&px| px != GYOZA.bg.0), "{lang:?}");
+        }
     }
 }

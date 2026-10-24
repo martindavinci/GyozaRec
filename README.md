@@ -25,7 +25,7 @@ Dalla pagina Releases del repository:
 
 | Pacchetto | Cosa fa |
 |---|---|
-| `GyozaRec_<versione>_x64-setup.exe` | Installazione per l'utente corrente, senza permessi di amministratore. Impostazioni in `%APPDATA%\GyozaRec`, catture in `Immagini\GyozaRec`. |
+| `GyozaRec_<versione>_x64.msi` | Installazione per l'utente corrente in `%LOCALAPPDATA%\Programs\GyozaRec`, senza permessi di amministratore, con collegamento nel menu Start. Impostazioni in `%APPDATA%\GyozaRec`, catture in `Immagini\GyozaRec`. Si disinstalla da "App installate". |
 | `GyozaRec-<versione>-windows-x64-portable.zip` | Versione portable: estrai e avvia `gyozarec.exe`. Impostazioni e catture restano nella cartella (`data\` e `Catture\`). |
 
 Richiede Windows 10 (versione 2004 o successiva) o Windows 11, a 64 bit. macOS e Linux sono previsti nelle prossime versioni.
@@ -39,7 +39,7 @@ cargo build --release
 cargo test
 ```
 
-Per creare installer e zip portable (richiede `cargo install cargo-packager --locked`):
+Per creare installer MSI e zip portable (richiede `cargo install cargo-packager --locked`; WiX viene scaricato da cargo-packager e usa .NET Framework 3.5):
 
 ```
 cargo xtask dist

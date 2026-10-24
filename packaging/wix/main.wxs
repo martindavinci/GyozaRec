@@ -1,0 +1,106 @@
+<?if $(sys.BUILDARCH)="x64"?>
+    <?define Win64 = "yes" ?>
+<?else?>
+    <?error GyozaRec is packaged for x64 only?>
+<?endif?>
+
+<!--
+  Per-user MSI: installs into %LOCALAPPDATA%\Programs\GyozaRec without
+  administrator rights. Uninstall is handled by Windows Installer, so no
+  separate uninstaller executable is shipped.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product
+            Id="*"
+            Name="{{product_name}}"
+            UpgradeCode="{{upgrade_code}}"
+            Language="!(loc.CargoPackagerLanguage)"
+            Manufacturer="{{manufacturer}}"
+            Version="{{version}}">
+
+        <Package Id="*"
+                 Keywords="Installer"
+                 InstallerVersion="500"
+                 Languages="0"
+                 Compressed="yes"
+                 InstallScope="perUser"
+                 InstallPrivileges="limited"
+                 SummaryCodepage="!(loc.CargoPackagerCodepage)"/>
+
+        <Property Id="REINSTALLMODE" Value="amus" />
+        <MajorUpgrade Schedule="afterInstallInitialize"
+                      DowngradeErrorMessage="!(loc.DowngradeErrorMessage)"
+                      AllowSameVersionUpgrades="yes" />
+
+        <Media Id="1" Cabinet="app.cab" EmbedCab="yes" />
+
+        {{#if license}}
+        <WixVariable Id="WixUILicenseRtf" Value="{{license}}" />
+        {{/if}}
+        {{#if icon_path}}
+        <Icon Id="ProductIcon" SourceFile="{{icon_path}}"/>
+        <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
+        {{/if}}
+        <!-- ARPNOMODIFY is already set by WixUI_Minimal -->
+        <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
+
+        <!-- "Launch GyozaRec" checkbox on the last page -->
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchApp)" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1"/>
+        <Property Id="WixShellExecTarget" Value="[#MainExe]" />
+        <CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
+        <UI>
+            <UIRef Id="WixUI_Minimal" />
+            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+        </UI>
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="LocalAppDataFolder">
+                <Directory Id="ProgramsDir" Name="Programs">
+                    <Directory Id="INSTALLDIR" Name="{{product_name}}"/>
+                </Directory>
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="{{product_name}}"/>
+            </Directory>
+        </Directory>
+
+        <!-- Per-user components use an HKCU value as key path (ICE38) and
+             remove their profile folders on uninstall (ICE64). -->
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="MainExecutable" Guid="{{path_component_guid}}" Win64="$(var.Win64)">
+                <File Id="MainExe" Source="{{app_exe_source}}" Checksum="yes"/>
+                <RemoveFolder Id="RemoveInstallDir" On="uninstall"/>
+                <RemoveFolder Id="RemoveProgramsDir" Directory="ProgramsDir" On="uninstall"/>
+                <RegistryKey Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}"
+                             ForceDeleteOnUninstall="yes">
+                    <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes"/>
+                </RegistryKey>
+            </Component>
+        </DirectoryRef>
+
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="StartMenuShortcut" Guid="*">
+                <Shortcut Id="ApplicationStartMenuShortcut"
+                          Name="{{product_name}}"
+                          Target="[#MainExe]"
+                          {{#if icon_path}}
+                          Icon="ProductIcon"
+                          {{/if}}
+                          WorkingDirectory="INSTALLDIR">
+                    <ShortcutProperty Key="System.AppUserModel.ID" Value="{{identifier}}"/>
+                </Shortcut>
+                <RemoveFolder Id="RemoveStartMenuDir" On="uninstall"/>
+                <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}"
+                               Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+
+        <Feature Id="MainProgram" Title="{{product_name}}" Level="1" Absent="disallow" AllowAdvertise="no">
+            <ComponentRef Id="MainExecutable"/>
+            <ComponentRef Id="StartMenuShortcut"/>
+        </Feature>
+
+        <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLDIR]" After="CostFinalize"/>
+    </Product>
+</Wix>

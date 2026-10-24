@@ -16,6 +16,7 @@ packaging/*.txt text eol=crlf
 *.zip binary
 *.exe binary
 *.dll binary
+*.msi binary
 *.gif binary
 *.mp4 binary
 

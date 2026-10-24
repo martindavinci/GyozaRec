@@ -139,6 +139,7 @@ impl OptionsWindow {
         let logical = logical_size(&ui);
         let attrs = Window::default_attributes()
             .with_title("Opzioni")
+            .with_window_icon(super::window_icon())
             .with_resizable(false)
             .with_enabled_buttons(WindowButtons::CLOSE)
             .with_owner_window(owner)

@@ -7,3 +7,5 @@ license = "MIT"
 publish = false
 
 [dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+ico = "0.6"

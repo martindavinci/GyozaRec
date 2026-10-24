@@ -30,6 +30,14 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::WindowId;
 
+/// The gyoza icon for title bars and the taskbar (derived from GyozaRec.ico).
+pub fn window_icon() -> Option<winit::window::Icon> {
+    let png = include_bytes!("../../assets/icon/gyozarec-256.png");
+    let img = image::load_from_memory(png).ok()?.to_rgba8();
+    let (w, h) = img.dimensions();
+    winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
+}
+
 /// Events delivered to the UI thread through the event loop proxy.
 pub enum AppEvent {
     Ui(UiRequest),

@@ -9,6 +9,7 @@ use gyozarec::uikit::widgets::{Ui, WidgetKind, layout_row};
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
+use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowButtons};
 
 const PAD: f32 = 8.0;
@@ -74,6 +75,8 @@ impl Toolbar {
         let logical = logical_size(&ui);
         let attrs = Window::default_attributes()
             .with_title("GyozaRec")
+            .with_window_icon(super::window_icon())
+            .with_taskbar_icon(super::window_icon())
             .with_resizable(false)
             .with_enabled_buttons(WindowButtons::CLOSE | WindowButtons::MINIMIZE)
             .with_inner_size(LogicalSize::new(logical.0, logical.1));

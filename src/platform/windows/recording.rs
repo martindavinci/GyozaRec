@@ -23,20 +23,6 @@ pub fn reveal_in_explorer(path: &Path) {
     let _ = std::process::Command::new("explorer.exe").raw_arg(explorer_select_arg(path)).spawn();
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn explorer_select_arg_quotes_only_the_path() {
-        let p = Path::new(r"C:\Users\Mario Rossi\Pictures\GyozaRec\a, b.png");
-        assert_eq!(
-            explorer_select_arg(p),
-            r#"/select,"C:\Users\Mario Rossi\Pictures\GyozaRec\a, b.png""#
-        );
-    }
-}
-
 /// Lets the running instance take the foreground when this process asks it to.
 pub fn allow_foreground_for_others() {
     use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};
@@ -111,5 +97,19 @@ pub fn exclude_from_capture(hwnd: isize) {
     // SAFETY: `hwnd` is a live top-level window owned by this process.
     unsafe {
         let _ = SetWindowDisplayAffinity(HWND(hwnd as *mut _), WDA_EXCLUDEFROMCAPTURE);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explorer_select_arg_quotes_only_the_path() {
+        let p = Path::new(r"C:\Users\Mario Rossi\Pictures\GyozaRec\a, b.png");
+        assert_eq!(
+            explorer_select_arg(p),
+            r#"/select,"C:\Users\Mario Rossi\Pictures\GyozaRec\a, b.png""#
+        );
     }
 }

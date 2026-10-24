@@ -81,6 +81,8 @@ pub struct ToolbarState {
     pub status_is_error: bool,
     pub last_saved: Option<PathBuf>,
     pub busy: bool,
+    /// The outcome the status line shows, so it can be re-translated.
+    shown_outcome: Option<CaptureOutcome>,
 }
 
 impl ToolbarState {
@@ -92,6 +94,19 @@ impl ToolbarState {
             status_is_error: false,
             last_saved: None,
             busy: false,
+            shown_outcome: None,
+        }
+    }
+
+    /// Switches language; the status follows unless it is free text.
+    pub fn set_language(&mut self, language: Language) {
+        let old_initial = self.texts().initial_status;
+        self.language = language;
+        if let Some(o) = &self.shown_outcome {
+            let (text, _) = format_status(o, &self.status, self.texts());
+            self.status = text;
+        } else if self.status == old_initial {
+            self.status = self.texts().initial_status.to_string();
         }
     }
 
@@ -106,11 +121,15 @@ impl ToolbarState {
         if o.kind == CaptureOutcomeKind::Saved {
             self.last_saved = o.path.clone();
         }
+        if o.kind != CaptureOutcomeKind::Canceled {
+            self.shown_outcome = Some(o.clone());
+        }
     }
 
     pub fn set_error(&mut self, msg: &str) {
         self.status = format!("{}{msg}", self.texts().error_prefix);
         self.status_is_error = true;
+        self.shown_outcome = None;
     }
 }
 
@@ -179,10 +198,10 @@ mod tests {
 
     #[test]
     fn os_failure_keeps_the_system_message() {
-        let o = failed(Failure::Other("disco pieno".into()));
+        let o = failed(Failure::Other("disk full".into()));
         assert_eq!(
             format_status(&o, "x", Language::It.texts()),
-            ("Errore: disco pieno".to_string(), true)
+            ("Errore: disk full".to_string(), true)
         );
     }
 
@@ -209,6 +228,19 @@ mod tests {
             format_status(&o, "before", Language::It.texts()),
             ("before".to_string(), false)
         );
+    }
+
+    #[test]
+    fn language_switch_retranslates_the_status() {
+        let mut s = ToolbarState::new(AppSettings::default(), Language::En);
+        s.set_language(Language::It);
+        assert_eq!(s.status, Language::It.texts().initial_status);
+        s.apply_outcome(&saved(true));
+        s.set_language(Language::En);
+        assert_eq!(s.status, "Saved: GyozaRec_1.png · copied to clipboard");
+        s.set_error("disk full");
+        s.set_language(Language::It);
+        assert_eq!(s.status, "Error: disk full", "free text has no translation");
     }
 
     #[test]

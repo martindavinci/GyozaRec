@@ -32,7 +32,7 @@ fn package_version(cargo_toml: &str) -> Option<String> {
 }
 
 /// cargo-packager names the MSI after the crate and the language
-/// (`gyozarec_0.1.0_x64_it-IT.msi`); the published name is `GyozaRec_0.1.0_x64.msi`.
+/// (`gyozarec_0.1.0_x64_en-US.msi`); the published name is `GyozaRec_0.1.0_x64.msi`.
 fn installer_display_name(file: &str) -> Option<String> {
     let stem = file.strip_prefix("gyozarec_")?.strip_suffix(".msi")?;
     let without_language = stem.rsplit_once('_').map_or(stem, |(rest, _)| rest);

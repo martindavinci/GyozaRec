@@ -208,11 +208,7 @@ impl App {
         if language == self.state.language {
             return;
         }
-        let old_initial = self.state.texts().initial_status;
-        self.state.language = language;
-        if self.state.status == old_initial {
-            self.state.status = language.texts().initial_status.to_string();
-        }
+        self.state.set_language(language);
         self.fonts = Fonts::for_language(language);
     }
 

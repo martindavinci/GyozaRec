@@ -30,6 +30,12 @@ pub fn mode_label(mode: CaptureMode) -> &'static str {
 
 const COPIED_SUFFIX: &str = " · copiato negli appunti";
 
+/// Recording timer, e.g. `00:07 / 05:00`.
+pub fn format_elapsed(elapsed: std::time::Duration, max: std::time::Duration) -> String {
+    let mmss = |d: std::time::Duration| format!("{:02}:{:02}", d.as_secs() / 60, d.as_secs() % 60);
+    format!("{} / {}", mmss(elapsed), mmss(max))
+}
+
 /// Status line text after a capture, and whether it is an error.
 pub fn format_status(o: &CaptureOutcome, current: &str) -> (String, bool) {
     let copied = if o.copied_to_clipboard { COPIED_SUFFIX } else { "" };
@@ -101,6 +107,15 @@ mod tests {
         assert_eq!(
             (DELAY_OPTIONS[0].1, DELAY_OPTIONS[1].1, DELAY_OPTIONS[5].1),
             ("Nessun ritardo", "1 secondo", "5 secondi")
+        );
+    }
+
+    #[test]
+    fn elapsed_is_formatted_as_minutes_and_seconds() {
+        use std::time::Duration;
+        assert_eq!(
+            format_elapsed(Duration::from_millis(7_900), Duration::from_secs(300)),
+            "00:07 / 05:00"
         );
     }
 

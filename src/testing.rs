@@ -1,15 +1,16 @@
 //! Fakes shared by unit tests. Later tasks pick them up one by one.
 #![allow(dead_code)]
 
-use crate::bridge::{UiRequest, UiSender};
+use crate::bridge::{RecordingCommand, UiRequest, UiSender};
 use crate::capture::{
     CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, MonitorProvider,
-    ScreenGrabber, SelectionRequest, SelectionUi, SoundPlayer, ToolbarVisibility, WindowCandidate,
-    WindowSnapshotter,
+    RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind,
+    SoundPlayer, ToolbarVisibility, WindowCandidate, WindowSnapshotter,
 };
 use crate::clock::Clock;
 use crate::geometry::{MonitorInfo, PixelPoint, PixelRect};
 use crate::pixels::PixelBuffer;
+use crate::recording::{FrameSink, RecordingOutcome, RecordingResult};
 use crate::settings::AppSettings;
 use chrono::{NaiveDate, NaiveDateTime};
 use std::path::Path;
@@ -55,15 +56,30 @@ pub struct FakeUiSender {
     select_reply: Option<PixelRect>,
     closed: bool,
     finished: Mutex<Option<std::sync::mpsc::Sender<CaptureOutcome>>>,
+    /// Sent back as soon as a recording starts.
+    answer: Option<RecordingCommand>,
+    /// Kept alive like the real panel does while recording.
+    held: Mutex<Option<std::sync::mpsc::Sender<RecordingCommand>>>,
 }
 
 impl Default for FakeUiSender {
     fn default() -> Self {
-        Self { log: Arc::default(), select_reply: None, closed: false, finished: Mutex::new(None) }
+        Self {
+            log: Arc::default(),
+            select_reply: None,
+            closed: false,
+            finished: Mutex::new(None),
+            answer: None,
+            held: Mutex::new(None),
+        }
     }
 }
 
 impl FakeUiSender {
+    pub fn answering(command: RecordingCommand) -> Self {
+        Self { answer: Some(command), ..Self::default() }
+    }
+
     pub fn replying(reply: Option<PixelRect>) -> Self {
         Self { select_reply: reply, ..Self::default() }
     }
@@ -103,8 +119,61 @@ impl UiSender for FakeUiSender {
                     let _ = tx.send(outcome);
                 }
             }
+            UiRequest::RecordingStarted { commands, .. } => {
+                log_event(&log, "ui:rec-start");
+                if let Some(cmd) = self.answer {
+                    let _ = commands.send(cmd);
+                }
+                *self.held.lock().unwrap() = Some(commands);
+            }
+            UiRequest::RecordingTick { .. } => log_event(&log, "ui:rec-tick"),
+            UiRequest::RecordingEnded => {
+                log_event(&log, "ui:rec-end");
+                self.held.lock().unwrap().take();
+            }
         }
         true
+    }
+}
+
+/// Records the job and answers with a preset outcome, without recording.
+pub struct FakeRecordingUi {
+    pub outcome: RecordingOutcome,
+    pub log: EventLog,
+}
+
+impl RecordingUi for FakeRecordingUi {
+    fn record(&mut self, job: RecordingJob) -> RecordingResult {
+        let ext =
+            job.path.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+        log_event(
+            &Some(self.log.clone()),
+            format!(
+                "record:{}:{ext}:fps={}:max={}",
+                rect_label(&job.region),
+                job.config.fps,
+                job.config.max_duration.as_secs()
+            ),
+        );
+        let path = (self.outcome == RecordingOutcome::Saved).then_some(job.path);
+        RecordingResult { outcome: self.outcome, path, error: None }
+    }
+}
+
+pub struct FakeSinkFactory {
+    pub log: EventLog,
+}
+
+impl SinkFactory for FakeSinkFactory {
+    fn create(
+        &self,
+        kind: &SinkKind,
+        _path: &Path,
+        size: crate::geometry::PixelSize,
+        _fps: u32,
+    ) -> crate::Result<Box<dyn FrameSink>> {
+        log_event(&Some(self.log.clone()), format!("sink:{kind:?}:{}x{}", size.width, size.height));
+        Ok(Box::new(VecSink::default()))
     }
 }
 
@@ -277,6 +346,11 @@ impl CoordinatorHarness {
             clipboard: Box::new(FakeClipboard { log: log.clone() }),
             sound: Box::new(FakeSound { log: log.clone() }),
             toolbar: Box::new(FakeToolbar { log: log.clone() }),
+            recording_ui: Box::new(FakeRecordingUi {
+                outcome: RecordingOutcome::Saved,
+                log: log.clone(),
+            }),
+            sinks: Box::new(FakeSinkFactory { log: log.clone() }),
             clock: Arc::new(clock.clone()),
         };
         Self { coordinator, clock, log, temp: tempfile::tempdir().unwrap() }
@@ -309,6 +383,13 @@ impl CoordinatorHarness {
             virtual_screen: PixelRect::new(-1920, 0, 3840, 1080),
         };
         Self::build(None, monitors, cursor, Vec::new())
+    }
+
+    /// Makes the fake recording UI answer with `outcome`.
+    pub fn recording(mut self, outcome: RecordingOutcome) -> Self {
+        self.coordinator.recording_ui =
+            Box::new(FakeRecordingUi { outcome, log: self.log.clone() });
+        self
     }
 
     pub fn run(&mut self, settings: AppSettings) -> CaptureOutcome {

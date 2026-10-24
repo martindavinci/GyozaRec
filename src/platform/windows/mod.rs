@@ -4,6 +4,7 @@ mod clipboard;
 mod grab;
 mod monitors;
 mod mp4;
+mod recording;
 mod sound;
 mod window_snapshot;
 
@@ -11,6 +12,7 @@ pub use clipboard::Win32Clipboard;
 pub use grab::GdiGrabber;
 pub use monitors::{Win32Cursor, Win32Monitors};
 pub use mp4::{Mp4Sink, probe_mp4};
+pub use recording::{DefaultSinkFactory, exclude_from_capture, make_color_keyed};
 pub use sound::SystemSound;
 pub use window_snapshot::Win32WindowList;
 

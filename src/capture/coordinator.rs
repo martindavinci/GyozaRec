@@ -1,20 +1,23 @@
 //! Runs one capture end to end: hide toolbar, wait, grab, select, save.
 
 use super::{
-    CaptureOutcome, ClipboardService, CursorLocator, MonitorProvider, ScreenGrabber,
-    SelectionRequest, SelectionUi, SoundPlayer, ToolbarVisibility, WindowSnapshotter,
-    monitor_from_point,
+    CaptureOutcome, ClipboardService, CursorLocator, MonitorProvider, RecordingJob, RecordingUi,
+    ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind, SoundPlayer,
+    ToolbarVisibility, WindowSnapshotter, monitor_from_point,
 };
 use crate::clock::Clock;
-use crate::geometry::{CaptureMode, meets_minimum};
-use crate::output::{FileNamer, save_png};
+use crate::geometry::{CaptureMode, PixelRect, meets_minimum};
+use crate::output::{FileNamer, ensure_folder, save_png};
 use crate::pixels::PixelBuffer;
+use crate::recording::{LoopConfig, RecordingOutcome};
 use crate::settings::AppSettings;
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Time for the hidden toolbar to disappear from the screen before grabbing.
 pub const HIDE_SETTLE_DELAY: Duration = Duration::from_millis(200);
+/// Time for the selection overlays to disappear before recording starts.
+pub const OVERLAY_CLOSE_SETTLE: Duration = Duration::from_millis(150);
 
 pub struct CaptureCoordinator {
     pub monitors: Box<dyn MonitorProvider>,
@@ -25,6 +28,8 @@ pub struct CaptureCoordinator {
     pub clipboard: Box<dyn ClipboardService>,
     pub sound: Box<dyn SoundPlayer>,
     pub toolbar: Box<dyn ToolbarVisibility>,
+    pub recording_ui: Box<dyn RecordingUi>,
+    pub sinks: Box<dyn SinkFactory>,
     pub clock: Arc<dyn Clock>,
 }
 
@@ -42,16 +47,18 @@ impl CaptureCoordinator {
         match settings.mode {
             CaptureMode::Rectangle | CaptureMode::Window => self.capture_region(settings),
             CaptureMode::FullScreen => self.capture_fullscreen(settings),
-            CaptureMode::Video | CaptureMode::Gif => {
-                CaptureOutcome::failed("non ancora supportato", false)
-            }
+            CaptureMode::Video | CaptureMode::Gif => self.capture_recording(settings),
         }
     }
 
-    fn capture_region(&mut self, settings: &AppSettings) -> CaptureOutcome {
+    /// Freezes the desktop and lets the user pick a region on it.
+    fn select_on_frozen(
+        &mut self,
+        settings: &AppSettings,
+    ) -> Result<(Arc<PixelBuffer>, PixelRect), CaptureOutcome> {
         let frozen = match self.grabber.grab(self.monitors.virtual_screen(), false) {
             Ok(frozen) => Arc::new(frozen),
-            Err(err) => return CaptureOutcome::failed(err, false),
+            Err(err) => return Err(CaptureOutcome::failed(err, false)),
         };
         let windows =
             if settings.mode == CaptureMode::Window { self.windows.snapshot() } else { Vec::new() };
@@ -62,10 +69,71 @@ impl CaptureCoordinator {
             monitors: self.monitors.monitors(),
         };
         match self.selection.select_region(request) {
-            Some(region) if meets_minimum(settings.mode, &region) => {
+            Some(region) => Ok((frozen, region)),
+            None => Err(CaptureOutcome::canceled()),
+        }
+    }
+
+    fn capture_region(&mut self, settings: &AppSettings) -> CaptureOutcome {
+        match self.select_on_frozen(settings) {
+            Ok((frozen, region)) if meets_minimum(settings.mode, &region) => {
                 self.finish_image(&frozen.crop(&region), settings)
             }
-            _ => CaptureOutcome::canceled(),
+            Ok(_) => CaptureOutcome::canceled(),
+            Err(outcome) => outcome,
+        }
+    }
+
+    fn capture_recording(&mut self, settings: &AppSettings) -> CaptureOutcome {
+        let video = settings.mode == CaptureMode::Video;
+        let region = match self.select_on_frozen(settings) {
+            Ok((_, region)) if video => region.even_floor(),
+            Ok((_, region)) => region,
+            Err(outcome) => return outcome,
+        };
+        if !meets_minimum(settings.mode, &region) {
+            return CaptureOutcome::canceled();
+        }
+        if let Err(err) = ensure_folder(&settings.save_folder) {
+            return CaptureOutcome::failed(err, false);
+        }
+        let monitors = self.monitors.monitors();
+        if monitors.is_empty() {
+            return CaptureOutcome::failed("nessun monitor trovato", false);
+        }
+        let monitor = monitor_from_point(&monitors, region.center()).clone();
+        let (ext, fps, max_seconds, kind) = if video {
+            ("mp4", settings.video_fps, settings.video_max_seconds, SinkKind::Mp4)
+        } else {
+            let kind = SinkKind::Gif { max_long_side: settings.gif_max_long_side };
+            ("gif", settings.gif_fps, settings.gif_max_seconds, kind)
+        };
+        let path = FileNamer::new(self.clock.clone()).next_path(&settings.save_folder, ext);
+        let sink = match self.sinks.create(&kind, &path, region.size(), fps) {
+            Ok(sink) => sink,
+            Err(err) => return CaptureOutcome::failed(err, false),
+        };
+        let config = LoopConfig {
+            region,
+            fps,
+            include_cursor: settings.include_cursor,
+            max_duration: Duration::from_secs(u64::from(max_seconds)),
+        };
+        self.clock.sleep(OVERLAY_CLOSE_SETTLE);
+        let result = self.recording_ui.record(RecordingJob { region, monitor, path, config, sink });
+        match (result.outcome, result.path) {
+            (RecordingOutcome::Saved, Some(path)) => {
+                let copied = settings.copy_to_clipboard && self.clipboard.set_file(&path);
+                if settings.play_sound {
+                    self.sound.play_capture();
+                }
+                CaptureOutcome::saved(path, copied)
+            }
+            (RecordingOutcome::Canceled, _) => CaptureOutcome::canceled(),
+            _ => CaptureOutcome::failed(
+                result.error.unwrap_or_else(|| "registrazione non riuscita".into()),
+                false,
+            ),
         }
     }
 
@@ -102,10 +170,58 @@ impl CaptureCoordinator {
 mod tests {
     use crate::capture::{CaptureOutcomeKind, WindowCandidate};
     use crate::geometry::{CaptureMode, PixelPoint, PixelRect};
+    use crate::recording::RecordingOutcome;
     use crate::settings::AppSettings;
     use crate::testing::CoordinatorHarness;
     use std::fs;
     use std::time::Duration;
+
+    #[test]
+    fn video_region_is_floored_to_even_and_saved_as_mp4() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 101, 65)))
+            .recording(RecordingOutcome::Saved);
+        let o = h.run(AppSettings { mode: CaptureMode::Video, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let ev = h.events();
+        assert!(ev.contains(&"select:Video:frozen=true:windows=0".to_string()));
+        assert!(ev.contains(&"sink:Mp4:100x64".to_string()));
+        assert!(ev.contains(&"record:0,0,100,64:mp4:fps=30:max=300".to_string()));
+        assert!(ev.iter().any(|e| e.starts_with("clip:file:") && e.ends_with(".mp4")));
+        assert_eq!(h.clock.sleeps(), [Duration::from_millis(200), Duration::from_millis(150)]);
+    }
+
+    #[test]
+    fn gif_below_minimum_cancels_without_sink() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 10, 10)))
+            .recording(RecordingOutcome::Saved);
+        let o = h.run(AppSettings { mode: CaptureMode::Gif, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Canceled);
+        assert!(!h.events().iter().any(|e| e.starts_with("sink")));
+    }
+
+    #[test]
+    fn gif_uses_gif_settings() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        h.run(AppSettings {
+            mode: CaptureMode::Gif,
+            gif_fps: 15,
+            gif_max_seconds: 7,
+            gif_max_long_side: 640,
+            ..h.settings()
+        });
+        assert!(h.events().contains(&"sink:Gif { max_long_side: 640 }:200x100".to_string()));
+        assert!(h.events().contains(&"record:0,0,200,100:gif:fps=15:max=7".to_string()));
+    }
+
+    #[test]
+    fn canceled_recording_leaves_clipboard_untouched() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Canceled);
+        let o = h.run(AppSettings { mode: CaptureMode::Gif, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Canceled);
+        assert!(!h.events().iter().any(|e| e.starts_with("clip:")));
+    }
 
     #[test]
     fn canceled_selection_saves_nothing_and_restores_toolbar() {

@@ -1,19 +1,24 @@
 mod overlay;
+mod recording;
 mod surface;
 mod toolbar;
 
-use gyozarec::bridge::{BridgeSelectionUi, BridgeToolbar, CaptureThread, UiRequest, UiSender};
-use gyozarec::capture::{CaptureCoordinator, CursorLocator};
-use gyozarec::clock::SystemClock;
+use gyozarec::bridge::{
+    BridgeRecordingUi, BridgeSelectionUi, BridgeToolbar, CaptureThread, UiRequest, UiSender,
+};
+use gyozarec::capture::{CaptureCoordinator, CursorLocator, ScreenGrabber};
+use gyozarec::clock::{Clock, SystemClock};
 use gyozarec::paths::AppPaths;
 use gyozarec::platform::{
-    GdiGrabber, SystemSound, Win32Clipboard, Win32Cursor, Win32Monitors, Win32WindowList,
+    DefaultSinkFactory, GdiGrabber, SystemSound, Win32Clipboard, Win32Cursor, Win32Monitors,
+    Win32WindowList,
 };
 use gyozarec::presentation::{DELAY_OPTIONS, MODE_OPTIONS, ToolbarState};
 use gyozarec::settings::SettingsStore;
 use gyozarec::uikit::painter::Fonts;
 use muda::{CheckMenuItem, ContextMenu, Menu, MenuEvent};
 use overlay::OverlaySession;
+use recording::RecordingSession;
 use std::sync::{Arc, Mutex};
 use toolbar::{Toolbar, ToolbarAction};
 use winit::application::ApplicationHandler;
@@ -44,6 +49,7 @@ pub struct App {
     capture: CaptureThread,
     toolbar: Option<Toolbar>,
     overlay: Option<OverlaySession>,
+    recording: Option<RecordingSession>,
 }
 
 impl App {
@@ -52,23 +58,39 @@ impl App {
         let store = SettingsStore::from_paths(&paths);
         let state = ToolbarState::new(store.load());
         let sender = ProxySender(proxy.clone());
+        let grabber: Arc<dyn ScreenGrabber> = Arc::new(GdiGrabber);
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
         let coordinator = CaptureCoordinator {
             monitors: Box::new(Win32Monitors),
-            grabber: Arc::new(GdiGrabber),
+            grabber: grabber.clone(),
             cursor: Box::new(Win32Cursor),
             windows: Box::new(Win32WindowList { exclude_pid: std::process::id() }),
             selection: Box::new(BridgeSelectionUi { sender: sender.clone() }),
             clipboard: Box::new(Win32Clipboard),
             sound: Box::new(SystemSound),
             toolbar: Box::new(BridgeToolbar { sender: sender.clone() }),
-            clock: Arc::new(SystemClock::new()),
+            recording_ui: Box::new(BridgeRecordingUi {
+                sender: sender.clone(),
+                grabber,
+                clock: clock.clone(),
+            }),
+            sinks: Box::new(DefaultSinkFactory),
+            clock,
         };
         let capture = CaptureThread::spawn(coordinator, sender);
         let menu_proxy = Mutex::new(proxy);
         MenuEvent::set_event_handler(Some(move |event| {
             let _ = menu_proxy.lock().unwrap().send_event(AppEvent::Menu(event));
         }));
-        App { fonts: Fonts::embedded(), store, state, capture, toolbar: None, overlay: None }
+        App {
+            fonts: Fonts::embedded(),
+            store,
+            state,
+            capture,
+            toolbar: None,
+            overlay: None,
+            recording: None,
+        }
     }
 
     fn refresh_toolbar(&mut self) {
@@ -171,6 +193,24 @@ impl App {
                 self.state.apply_outcome(&outcome);
                 self.refresh_toolbar();
             }
+            UiRequest::RecordingStarted { region, monitor, max, commands } => {
+                // If the panel cannot open, `commands` is dropped and the
+                // recording is canceled by the bridge.
+                self.recording = RecordingSession::open(
+                    event_loop,
+                    region,
+                    &monitor,
+                    max,
+                    commands,
+                    &self.fonts,
+                );
+            }
+            UiRequest::RecordingTick { elapsed, .. } => {
+                if let Some(session) = &mut self.recording {
+                    session.tick(elapsed, &self.fonts);
+                }
+            }
+            UiRequest::RecordingEnded => self.recording = None,
         }
     }
 
@@ -203,6 +243,10 @@ impl ApplicationHandler<AppEvent> for App {
             if session.is_finished() {
                 self.overlay = None;
             }
+            return;
+        }
+        if let Some(session) = self.recording.as_mut().filter(|s| s.owns(id)) {
+            session.handle(id, &event, &self.fonts);
             return;
         }
         let Some(t) = &mut self.toolbar else { return };

@@ -2,12 +2,43 @@
 
 mod coordinator;
 
-pub use coordinator::{CaptureCoordinator, HIDE_SETTLE_DELAY};
+pub use coordinator::{CaptureCoordinator, HIDE_SETTLE_DELAY, OVERLAY_CLOSE_SETTLE};
 
-use crate::geometry::{CaptureMode, MonitorInfo, PixelPoint, PixelRect};
+use crate::geometry::{CaptureMode, MonitorInfo, PixelPoint, PixelRect, PixelSize};
 use crate::pixels::PixelBuffer;
+use crate::recording::{FrameSink, LoopConfig, RecordingResult};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SinkKind {
+    Mp4,
+    Gif { max_long_side: u32 },
+}
+
+pub trait SinkFactory: Send {
+    fn create(
+        &self,
+        kind: &SinkKind,
+        path: &Path,
+        size: PixelSize,
+        fps: u32,
+    ) -> crate::Result<Box<dyn FrameSink>>;
+}
+
+/// Everything the recording UI needs to run one recording.
+pub struct RecordingJob {
+    pub region: PixelRect,
+    pub monitor: MonitorInfo,
+    pub path: PathBuf,
+    pub config: LoopConfig,
+    pub sink: Box<dyn FrameSink>,
+}
+
+pub trait RecordingUi: Send {
+    /// Shows the recording controls and blocks until the recording ends.
+    fn record(&mut self, job: RecordingJob) -> RecordingResult;
+}
 
 /// What the selection UI needs; owned so it can cross to the UI thread.
 #[derive(Clone, Debug)]

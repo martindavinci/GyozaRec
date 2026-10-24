@@ -2,10 +2,12 @@
 
 mod capture_loop;
 mod gif_sink;
+mod placement;
 mod worker;
 
 pub use capture_loop::run_capture_loop;
 pub use gif_sink::GifSink;
+pub use placement::{frame_bounds, place_panel, render_frame};
 pub use worker::RecordingWorker;
 
 use crate::geometry::PixelRect;

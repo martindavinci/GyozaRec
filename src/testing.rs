@@ -20,6 +20,35 @@ use std::time::Duration;
 /// Ordered record of what fakes were asked to do.
 pub type EventLog = Arc<Mutex<Vec<String>>>;
 
+/// Frame sink that only records timestamps.
+#[derive(Clone, Default)]
+pub struct VecSink {
+    times: Arc<Mutex<Vec<Duration>>>,
+    finished: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl VecSink {
+    pub fn times(&self) -> Vec<Duration> {
+        self.times.lock().unwrap().clone()
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.finished.load(Ordering::SeqCst)
+    }
+}
+
+impl crate::recording::FrameSink for VecSink {
+    fn push(&mut self, _frame: &PixelBuffer, t: Duration) -> crate::Result<()> {
+        self.times.lock().unwrap().push(t);
+        Ok(())
+    }
+
+    fn finish(&mut self) -> crate::Result<()> {
+        self.finished.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
 /// Stands in for the event loop: answers selections at once, records requests.
 pub struct FakeUiSender {
     pub log: EventLog,

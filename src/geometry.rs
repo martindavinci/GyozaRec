@@ -25,12 +25,7 @@ pub struct PixelRect {
 
 impl PixelRect {
     pub const fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self {
-            x,
-            y,
-            width,
-            height,
-        }
+        Self { x, y, width, height }
     }
 
     pub fn right(&self) -> i32 {
@@ -62,10 +57,7 @@ impl PixelRect {
     }
 
     pub fn center(&self) -> PixelPoint {
-        PixelPoint {
-            x: self.x + self.width / 2,
-            y: self.y + self.height / 2,
-        }
+        PixelPoint { x: self.x + self.width / 2, y: self.y + self.height / 2 }
     }
 
     pub fn offset(&self, dx: i32, dy: i32) -> PixelRect {
@@ -73,20 +65,12 @@ impl PixelRect {
     }
 
     pub fn size(&self) -> PixelSize {
-        PixelSize {
-            width: self.width,
-            height: self.height,
-        }
+        PixelSize { width: self.width, height: self.height }
     }
 
     /// Rectangle spanned by two drag points, in any order.
     pub fn from_points(a: PixelPoint, b: PixelPoint) -> PixelRect {
-        PixelRect::new(
-            a.x.min(b.x),
-            a.y.min(b.y),
-            (b.x - a.x).abs(),
-            (b.y - a.y).abs(),
-        )
+        PixelRect::new(a.x.min(b.x), a.y.min(b.y), (b.x - a.x).abs(), (b.y - a.y).abs())
     }
 
     pub fn clamp_to(&self, bounds: &PixelRect) -> PixelRect {
@@ -141,10 +125,7 @@ pub fn fit(size: PixelSize, max_long_side: i32) -> PixelSize {
     }
     let ratio = f64::from(max_long_side) / f64::from(long);
     let scale = |v: i32| ((f64::from(v) * ratio).round() as i32).max(1);
-    PixelSize {
-        width: scale(size.width),
-        height: scale(size.height),
-    }
+    PixelSize { width: scale(size.width), height: scale(size.height) }
 }
 
 #[cfg(test)]
@@ -162,10 +143,7 @@ mod tests {
 
     #[test]
     fn from_points_normalizes_reversed_drag() {
-        assert_eq!(
-            PixelRect::from_points(p(40, 60), p(10, 20)),
-            r(10, 20, 30, 40)
-        );
+        assert_eq!(PixelRect::from_points(p(40, 60), p(10, 20)), r(10, 20, 30, 40));
     }
     #[test]
     fn intersect_returns_empty_when_disjoint() {
@@ -178,10 +156,7 @@ mod tests {
     }
     #[test]
     fn clamp_keeps_selection_inside_monitor() {
-        assert_eq!(
-            r(-10, -10, 60, 60).clamp_to(&r(0, 0, 100, 100)),
-            r(0, 0, 50, 50)
-        );
+        assert_eq!(r(-10, -10, 60, 60).clamp_to(&r(0, 0, 100, 100)), r(0, 0, 50, 50));
     }
     #[test]
     fn even_floor_rounds_size_down() {
@@ -189,10 +164,7 @@ mod tests {
     }
     #[test]
     fn offset_moves_rect() {
-        assert_eq!(
-            r(-1500, 100, 640, 480).offset(1920, 0),
-            r(420, 100, 640, 480)
-        );
+        assert_eq!(r(-1500, 100, 640, 480).offset(1920, 0), r(420, 100, 640, 480));
     }
 
     #[test]

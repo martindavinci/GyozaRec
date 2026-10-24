@@ -1,6 +1,11 @@
+pub mod clock;
 mod error;
 pub mod geometry;
+pub mod paths;
 pub mod platform;
+pub mod settings;
+#[cfg(test)]
+pub(crate) mod testing;
 
 pub use error::{Error, Result};
 

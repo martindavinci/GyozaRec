@@ -10,6 +10,7 @@ pub mod render;
 pub mod settings;
 #[cfg(test)]
 pub(crate) mod testing;
+pub mod uikit;
 
 pub use error::{Error, Result};
 

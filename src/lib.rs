@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+pub mod capture;
 pub mod clock;
 mod error;
 pub mod geometry;

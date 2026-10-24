@@ -1,6 +1,7 @@
 //! Video and GIF recording: frame loop, worker thread, sinks.
 
 mod capture_loop;
+mod gif_sink;
 mod worker;
 
 pub use capture_loop::run_capture_loop;

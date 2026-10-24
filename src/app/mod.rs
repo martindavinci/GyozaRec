@@ -9,6 +9,7 @@ use gyozarec::bridge::{
 };
 use gyozarec::capture::{CaptureCoordinator, CursorLocator, ScreenGrabber};
 use gyozarec::clock::{Clock, SystemClock};
+use gyozarec::instance::InstanceCommand;
 use gyozarec::paths::AppPaths;
 use gyozarec::platform::{
     DefaultSinkFactory, GdiGrabber, SystemSound, Win32Clipboard, Win32Cursor, Win32Monitors,
@@ -33,6 +34,7 @@ use winit::window::WindowId;
 pub enum AppEvent {
     Ui(UiRequest),
     Menu(MenuEvent),
+    Instance(InstanceCommand),
 }
 
 /// Sends coordinator requests into the event loop.
@@ -55,10 +57,12 @@ pub struct App {
     recording: Option<RecordingSession>,
     options: Option<OptionsWindow>,
     capture_dir: PathBuf,
+    /// `--capture`: start a capture as soon as the toolbar exists.
+    capture_on_start: bool,
 }
 
 impl App {
-    pub fn new(proxy: EventLoopProxy<AppEvent>) -> App {
+    pub fn new(proxy: EventLoopProxy<AppEvent>, capture_on_start: bool) -> App {
         let paths = AppPaths::current();
         let capture_dir = paths.capture_dir.clone();
         let store = SettingsStore::from_paths(&paths);
@@ -98,6 +102,7 @@ impl App {
             recording: None,
             options: None,
             capture_dir,
+            capture_on_start,
         }
     }
 
@@ -263,6 +268,9 @@ impl ApplicationHandler<AppEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.toolbar.is_none() {
             self.toolbar = Some(Toolbar::create(event_loop, &self.state, &self.fonts));
+            if std::mem::take(&mut self.capture_on_start) {
+                self.start_capture();
+            }
         }
     }
 
@@ -270,6 +278,14 @@ impl ApplicationHandler<AppEvent> for App {
         match event {
             AppEvent::Ui(req) => self.on_ui(event_loop, req),
             AppEvent::Menu(event) => self.on_menu(event),
+            AppEvent::Instance(InstanceCommand::Capture) => self.start_capture(),
+            AppEvent::Instance(InstanceCommand::Activate) => {
+                if let Some(t) = &self.toolbar {
+                    t.surface.window.set_minimized(false);
+                    t.surface.window.set_visible(true);
+                    t.surface.window.focus_window();
+                }
+            }
         }
     }
 

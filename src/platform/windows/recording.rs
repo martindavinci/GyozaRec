@@ -10,6 +10,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_TRANSPARENT,
 };
 
+/// Lets the running instance take the foreground when this process asks it to.
+pub fn allow_foreground_for_others() {
+    use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};
+    // SAFETY: no pointers; only grants foreground permission.
+    unsafe {
+        let _ = AllowSetForegroundWindow(ASFW_ANY);
+    }
+}
+
 /// Makes pixels of `key` (`0x00RRGGBB`) fully transparent and the whole
 /// window click-through.
 pub fn make_color_keyed(hwnd: isize, key: u32) {

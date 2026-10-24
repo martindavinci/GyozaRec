@@ -3,6 +3,7 @@ pub mod capture;
 pub mod clock;
 mod error;
 pub mod geometry;
+pub mod instance;
 pub mod output;
 pub mod paths;
 pub mod pixels;

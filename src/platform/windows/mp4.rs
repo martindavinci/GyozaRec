@@ -178,6 +178,67 @@ impl FrameSink for Mp4Sink {
     }
 }
 
+/// First video frame of an MP4 file, decoded to BGRA (used to verify output).
+#[cfg(test)]
+pub fn decode_first_frame(path: &Path) -> crate::Result<PixelBuffer> {
+    use windows::Win32::Media::MediaFoundation::{
+        IMF2DBuffer, IMFSample, MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING,
+    };
+    use windows::core::Interface;
+    let size = probe_mp4(path)?;
+    let _session = MfSession::start()?;
+    let stream = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
+    // SAFETY: source reader calls with checked HRESULTs; the 2D buffer is unlocked
+    // before release, and the copy stays within `pitch × height`.
+    unsafe {
+        let mut attrs = None;
+        MFCreateAttributes(&mut attrs, 1)?;
+        let attrs = attrs.ok_or_else(|| crate::Error::Message("attributi MF".into()))?;
+        attrs.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)?;
+        let reader = MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), &attrs)?;
+        let wanted = MFCreateMediaType()?;
+        wanted.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+        wanted.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32)?;
+        reader.SetCurrentMediaType(stream, None, &wanted)?;
+        let mut sample: Option<IMFSample> = None;
+        let mut flags = 0u32;
+        reader.ReadSample(stream, 0, None, Some(&mut flags), None, Some(&mut sample))?;
+        let sample = sample.ok_or_else(|| crate::Error::Message("nessun fotogramma".into()))?;
+        let row = size.width as usize * 4;
+        let mut bgra = Vec::with_capacity(row * size.height as usize);
+        let mut copy_rows = |first: *const u8, pitch: isize| {
+            for y in 0..size.height as isize {
+                bgra.extend_from_slice(std::slice::from_raw_parts(first.offset(y * pitch), row));
+            }
+        };
+        if let Ok(buffer2d) = sample.GetBufferByIndex(0)?.cast::<IMF2DBuffer>() {
+            // Lock2D gives the top row and a signed pitch: orientation is explicit.
+            let mut scanline0 = std::ptr::null_mut();
+            let mut pitch = 0i32;
+            buffer2d.Lock2D(&mut scanline0, &mut pitch)?;
+            copy_rows(scanline0, pitch as isize);
+            buffer2d.Unlock2D()?;
+        } else {
+            // Plain buffer: the media type's signed stride says which way rows go;
+            // without it, RGB32 is bottom-up.
+            let current = reader.GetCurrentMediaType(stream)?;
+            let stride = current.GetUINT32(&MF_MT_DEFAULT_STRIDE).map(|s| s as i32);
+            let stride = stride.unwrap_or(-(row as i32)) as isize;
+            let buffer = sample.ConvertToContiguousBuffer()?;
+            let mut data = std::ptr::null_mut();
+            buffer.Lock(&mut data, None, None)?;
+            let first =
+                if stride < 0 { data.offset(-stride * (size.height as isize - 1)) } else { data };
+            copy_rows(first, stride);
+            buffer.Unlock()?;
+        }
+        for px in bgra.chunks_exact_mut(4) {
+            px[3] = 255;
+        }
+        Ok(PixelBuffer::new(crate::geometry::PixelRect::new(0, 0, size.width, size.height), bgra))
+    }
+}
+
 /// Frame size of the first video stream of an MP4 file.
 pub fn probe_mp4(path: &Path) -> crate::Result<PixelSize> {
     let _session = MfSession::start()?;
@@ -224,5 +285,31 @@ mod tests {
         drop(s);
         assert!(fs::metadata(&p).unwrap().len() > 1024);
         assert_eq!(probe_mp4(&p).unwrap(), PixelSize { width: 320, height: 240 });
+    }
+
+    /// Top half red, bottom half blue: catches flipped rows and swapped channels.
+    #[test]
+    #[ignore = "media-foundation"]
+    fn decoded_frame_keeps_orientation_and_colors() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("a.mp4");
+        let mut frame = PixelBuffer::solid(PixelRect::new(0, 0, 320, 240), 255, 0, 0); // blue
+        for y in 0..120 {
+            for x in 0..320 {
+                frame.put_pixel(crate::geometry::PixelPoint { x, y }, [0, 0, 255, 255]); // red
+            }
+        }
+        let mut s = Mp4Sink::new(&p, PixelSize { width: 320, height: 240 }, 30).unwrap();
+        for i in 0..10u64 {
+            s.push(&frame, Duration::from_millis(i * 33)).unwrap();
+        }
+        s.finish().unwrap();
+        drop(s);
+
+        let decoded = decode_first_frame(&p).unwrap();
+        let top = decoded.pixel(crate::geometry::PixelPoint { x: 160, y: 40 });
+        let bottom = decoded.pixel(crate::geometry::PixelPoint { x: 160, y: 200 });
+        assert!(top[2] > 200 && top[0] < 60, "top should be red, got BGRA {top:?}");
+        assert!(bottom[0] > 200 && bottom[2] < 60, "bottom should be blue, got BGRA {bottom:?}");
     }
 }

@@ -77,12 +77,7 @@ impl RecordingSession {
         commands: Sender<RecordingCommand>,
         fonts: &Fonts,
     ) -> Option<RecordingSession> {
-        let mut frame = popup(event_loop, frame_bounds(region, FRAME_THICKNESS));
-        if let Some(f) = &mut frame {
-            make_color_keyed(f.hwnd(), FRAME_KEY);
-            paint_frame(f);
-            f.window.set_visible(true);
-        }
+        let frame = open_frame(event_loop, region);
         let scale = monitor.scale as f32;
         let ui = build_panel_ui(Duration::ZERO, max, fonts);
         let b = ui.bounds();
@@ -166,9 +161,60 @@ impl RecordingSession {
     }
 }
 
+/// The red ring around `region`: a window whose inside is transparent and
+/// click-through, so the recorded area stays visible and usable.
+fn open_frame(event_loop: &ActiveEventLoop, region: PixelRect) -> Option<WindowSurface> {
+    let mut frame = popup(event_loop, frame_bounds(region, FRAME_THICKNESS))?;
+    // Order matters: winit rewrites the extended style when visibility changes,
+    // and keeps LAYERED|TRANSPARENT only while cursor hit-testing is off.
+    frame.window.set_visible(true);
+    let _ = frame.window.set_cursor_hittest(false);
+    make_color_keyed(frame.hwnd(), FRAME_KEY);
+    paint_frame(&mut frame);
+    Some(frame)
+}
+
 fn paint_frame(frame: &mut WindowSurface) {
     let size = frame.size();
     let mut pixels = vec![0u32; (size.width.max(0) * size.height.max(0)) as usize];
     render_frame(size, FRAME_THICKNESS, GYOZA.accent.0, FRAME_KEY, &mut pixels);
     frame.present(&pixels);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use winit::application::ApplicationHandler;
+    use winit::event_loop::EventLoop;
+    use winit::platform::pump_events::EventLoopExtPumpEvents;
+    use winit::platform::windows::EventLoopBuilderExtWindows;
+
+    #[derive(Default)]
+    struct FrameProbe {
+        frame: Option<WindowSurface>,
+    }
+
+    impl ApplicationHandler for FrameProbe {
+        fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+            if self.frame.is_none() {
+                self.frame = open_frame(event_loop, PixelRect::new(200, 200, 160, 120));
+            }
+        }
+
+        fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
+    }
+
+    /// The frame must stay transparent inside after it is shown; winit
+    /// rewrites the extended style when visibility changes.
+    #[test]
+    #[ignore = "desktop"]
+    fn frame_stays_color_keyed_after_show() {
+        let mut event_loop = EventLoop::builder().with_any_thread(true).build().unwrap();
+        let mut probe = FrameProbe::default();
+        for _ in 0..5 {
+            event_loop.pump_app_events(Some(Duration::from_millis(40)), &mut probe);
+        }
+        let frame = probe.frame.as_ref().expect("frame window");
+        assert_eq!(gyozarec::platform::layered_color_key(frame.hwnd()), Some(FRAME_KEY));
+    }
 }

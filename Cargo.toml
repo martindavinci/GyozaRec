@@ -9,6 +9,19 @@ description = "Cattura schermo: PNG, GIF e MP4, tutto in locale"
 [workspace]
 members = [".", "xtask", "tools/make-ico"]
 
+[package.metadata.packager]
+product-name = "GyozaRec"
+identifier = "com.martindavinci.gyozarec"
+publisher = "Martin DaVinci"
+out-dir = "dist"
+binaries = [{ path = "gyozarec", main = true }]
+icons = ["res/GyozaRec.ico"]
+license-file = "packaging/wix/License.rtf"
+
+[package.metadata.packager.wix]
+template = "packaging/wix/main.wxs"
+languages = [{ identifier = "it-IT", path = "packaging/wix/it-IT.wxl" }]
+
 [dependencies]
 winit = "0.30"
 softbuffer = "0.4"

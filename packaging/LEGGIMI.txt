@@ -1,0 +1,11 @@
+GyozaRec — versione portable
+
+Questa cartella contiene tutto il necessario: avvia gyozarec.exe.
+Il file "portable" fa sì che impostazioni e catture restino qui:
+  data\settings.json   impostazioni
+  Catture\             immagini, GIF e video salvati
+Per spostare l'app copia l'intera cartella. Per disinstallarla eliminala.
+Se la cartella non è scrivibile (es. dentro Programmi), spostala altrove.
+
+GyozaRec: licenza MIT, vedi LICENSE.txt.
+Font Nunito: SIL Open Font License, vedi OFL.txt.

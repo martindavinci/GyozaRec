@@ -100,7 +100,7 @@ impl CaptureCoordinator {
         }
         let monitors = self.monitors.monitors();
         if monitors.is_empty() {
-            return CaptureOutcome::failed("nessun monitor trovato", false);
+            return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
         }
         let monitor = monitor_from_point(&monitors, region.center()).clone();
         let (ext, fps, max_seconds, kind) = if video {
@@ -132,7 +132,7 @@ impl CaptureCoordinator {
             }
             (RecordingOutcome::Canceled, _) => CaptureOutcome::canceled(),
             _ => CaptureOutcome::failed(
-                result.error.unwrap_or_else(|| "registrazione non riuscita".into()),
+                result.error.unwrap_or(crate::Failure::User(crate::UserError::RecordingFailed)),
                 false,
             ),
         }
@@ -141,7 +141,7 @@ impl CaptureCoordinator {
     fn capture_fullscreen(&mut self, settings: &AppSettings) -> CaptureOutcome {
         let monitors = self.monitors.monitors();
         if monitors.is_empty() {
-            return CaptureOutcome::failed("nessun monitor trovato", false);
+            return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
         }
         let monitor = monitor_from_point(&monitors, self.cursor.position());
         match self.grabber.grab(monitor.bounds, false) {

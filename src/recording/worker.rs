@@ -64,7 +64,7 @@ impl RecordingWorker {
     }
 
     pub fn wait(self) -> RecordingResult {
-        let failed = |error: String| RecordingResult {
+        let failed = |error: crate::Failure| RecordingResult {
             outcome: RecordingOutcome::Failed,
             path: None,
             error: Some(error),
@@ -81,11 +81,12 @@ impl RecordingWorker {
             },
             Ok(Err(err)) => {
                 remove_partial(&self.output);
-                failed(err.to_string())
+                failed(err.into())
             }
             Err(_) => {
+                // The recording thread panicked.
                 remove_partial(&self.output);
-                failed("errore interno durante la registrazione".into())
+                failed(crate::UserError::RecordingFailed.into())
             }
         }
     }

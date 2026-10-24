@@ -52,7 +52,7 @@ pub enum RecordingOutcome {
 pub struct RecordingResult {
     pub outcome: RecordingOutcome,
     pub path: Option<PathBuf>,
-    pub error: Option<String>,
+    pub error: Option<crate::Failure>,
 }
 
 /// H.264 bitrate: width × height × fps / 10, within 1–24 Mbit/s.

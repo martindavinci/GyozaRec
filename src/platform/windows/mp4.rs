@@ -89,7 +89,9 @@ impl Writer {
         unsafe {
             let mut attrs = None;
             MFCreateAttributes(&mut attrs, 1)?;
-            let attrs = attrs.ok_or_else(|| crate::Error::Message("attributi MF".into()))?;
+            let attrs = attrs.ok_or_else(|| {
+                crate::Error::Message("Media Foundation attributes unavailable".into())
+            })?;
             attrs.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)?;
             let url = HSTRING::from(path.as_os_str());
             let writer = MFCreateSinkWriterFromURL(&url, None, &attrs)?;
@@ -107,8 +109,10 @@ impl Writer {
     }
 
     fn write(&self, frame: &PixelBuffer, t: Duration, fps: u32) -> crate::Result<()> {
-        let writer =
-            self.writer.as_ref().ok_or_else(|| crate::Error::Message("MP4 chiuso".into()))?;
+        let writer = self
+            .writer
+            .as_ref()
+            .ok_or_else(|| crate::Error::Message("MP4 writer already closed".into()))?;
         let len = frame.bgra.len() as u32;
         // SAFETY: the locked buffer holds `len` bytes; it is unlocked before use.
         unsafe {
@@ -148,10 +152,11 @@ pub struct Mp4Sink {
 impl Mp4Sink {
     pub fn new(path: &Path, size: PixelSize, fps: u32) -> crate::Result<Mp4Sink> {
         if size.width < 2 || size.height < 2 || size.width % 2 != 0 || size.height % 2 != 0 {
-            return Err(crate::Error::Message(format!(
-                "dimensioni video non valide: {}×{} (servono lati pari)",
-                size.width, size.height
-            )));
+            return Err(crate::UserError::InvalidVideoSize {
+                width: size.width,
+                height: size.height,
+            }
+            .into());
         }
         Ok(Mp4Sink { path: path.to_path_buf(), size, fps, writer: None })
     }
@@ -173,7 +178,7 @@ impl FrameSink for Mp4Sink {
     fn finish(&mut self) -> crate::Result<()> {
         match self.writer.as_mut() {
             Some(writer) => writer.finalize(),
-            None => Err(crate::Error::Message("nessun fotogramma".into())),
+            None => Err(crate::Error::from(crate::UserError::NoFrames)),
         }
     }
 }
@@ -193,7 +198,9 @@ pub fn decode_first_frame(path: &Path) -> crate::Result<PixelBuffer> {
     unsafe {
         let mut attrs = None;
         MFCreateAttributes(&mut attrs, 1)?;
-        let attrs = attrs.ok_or_else(|| crate::Error::Message("attributi MF".into()))?;
+        let attrs = attrs.ok_or_else(|| {
+            crate::Error::Message("Media Foundation attributes unavailable".into())
+        })?;
         attrs.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)?;
         let reader = MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), &attrs)?;
         let wanted = MFCreateMediaType()?;
@@ -203,7 +210,7 @@ pub fn decode_first_frame(path: &Path) -> crate::Result<PixelBuffer> {
         let mut sample: Option<IMFSample> = None;
         let mut flags = 0u32;
         reader.ReadSample(stream, 0, None, Some(&mut flags), None, Some(&mut sample))?;
-        let sample = sample.ok_or_else(|| crate::Error::Message("nessun fotogramma".into()))?;
+        let sample = sample.ok_or_else(|| crate::Error::from(crate::UserError::NoFrames))?;
         let row = size.width as usize * 4;
         let mut bgra = Vec::with_capacity(row * size.height as usize);
         let mut copy_rows = |first: *const u8, pitch: isize| {

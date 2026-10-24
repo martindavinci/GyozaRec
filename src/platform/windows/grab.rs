@@ -16,7 +16,7 @@ pub struct GdiGrabber;
 impl ScreenGrabber for GdiGrabber {
     fn grab(&self, rect: PixelRect, include_cursor: bool) -> crate::Result<PixelBuffer> {
         if rect.is_empty() {
-            return Err(crate::Error::Message("area di cattura vuota".into()));
+            return Err(crate::UserError::EmptyArea.into());
         }
         // SAFETY: every GDI object created here is released before returning;
         // `bits` points into the DIB section, valid until DeleteObject.

@@ -17,7 +17,7 @@ pub mod settings;
 pub(crate) mod testing;
 pub mod uikit;
 
-pub use error::{Error, Result};
+pub use error::{Error, Failure, Result, UserError};
 
 #[cfg(test)]
 mod tests {

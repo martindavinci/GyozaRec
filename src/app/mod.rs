@@ -9,11 +9,12 @@ use gyozarec::bridge::{
 };
 use gyozarec::capture::{CaptureCoordinator, CursorLocator, ScreenGrabber};
 use gyozarec::clock::{Clock, SystemClock};
+use gyozarec::i18n::resolve;
 use gyozarec::instance::InstanceCommand;
 use gyozarec::paths::AppPaths;
 use gyozarec::platform::{
     DefaultSinkFactory, GdiGrabber, SystemSound, Win32Clipboard, Win32Cursor, Win32Monitors,
-    Win32WindowList,
+    Win32WindowList, system_ui_languages,
 };
 use gyozarec::presentation::{DELAY_OPTIONS, MODE_OPTIONS, OptionsForm, ToolbarState};
 use gyozarec::settings::SettingsStore;
@@ -74,7 +75,9 @@ impl App {
         let paths = AppPaths::current();
         let capture_dir = paths.capture_dir.clone();
         let store = SettingsStore::from_paths(&paths);
-        let state = ToolbarState::new(store.load());
+        let settings = store.load();
+        let language = resolve(settings.language(), &system_ui_languages());
+        let state = ToolbarState::new(settings, language);
         let sender = ProxySender(proxy.clone());
         let grabber: Arc<dyn ScreenGrabber> = Arc::new(GdiGrabber);
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
@@ -133,7 +136,7 @@ impl App {
         self.state.busy = true;
         if !self.capture.request(self.state.settings.clone()) {
             self.state.busy = false;
-            self.state.set_error("il thread di cattura non risponde");
+            self.state.set_error(self.state.texts().err_capture_thread);
         }
         self.refresh_toolbar();
     }

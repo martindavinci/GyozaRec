@@ -79,7 +79,7 @@ pub enum CaptureOutcomeKind {
 pub struct CaptureOutcome {
     pub kind: CaptureOutcomeKind,
     pub path: Option<PathBuf>,
-    pub error: Option<String>,
+    pub error: Option<crate::Failure>,
     pub copied_to_clipboard: bool,
 }
 
@@ -93,11 +93,11 @@ impl CaptureOutcome {
         }
     }
 
-    pub fn failed(error: impl ToString, copied_to_clipboard: bool) -> Self {
+    pub fn failed(error: impl Into<crate::Failure>, copied_to_clipboard: bool) -> Self {
         Self {
             kind: CaptureOutcomeKind::Failed,
             path: None,
-            error: Some(error.to_string()),
+            error: Some(error.into()),
             copied_to_clipboard,
         }
     }

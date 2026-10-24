@@ -47,7 +47,7 @@ impl GifSink {
 }
 
 fn closed() -> crate::Error {
-    crate::Error::Message("GIF già chiusa".into())
+    crate::Error::Message("GIF encoder already closed".into())
 }
 
 fn centiseconds(d: Duration) -> u16 {
@@ -69,7 +69,7 @@ impl FrameSink for GifSink {
 
     fn finish(&mut self) -> crate::Result<()> {
         let Some((last, _)) = self.pending.take() else {
-            return Err(crate::Error::Message("nessun fotogramma".into()));
+            return Err(crate::UserError::NoFrames.into());
         };
         let nominal = Duration::from_secs(1) / self.fps.max(1);
         self.write(last, centiseconds(nominal))?;

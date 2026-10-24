@@ -122,7 +122,7 @@ impl OverlaySession {
             };
             let cache = OverlayCache::new(&part);
             windows.push(OverlayWindow {
-                surface: WindowSurface::new(window),
+                surface: WindowSurface::pinned(window, b),
                 monitor: monitor.clone(),
                 buffer: vec![0; (b.width * b.height) as usize],
                 cache,
@@ -151,6 +151,10 @@ impl OverlaySession {
         self.windows.iter().any(|w| w.surface.window.id() == id)
     }
 
+    pub fn surface(&self, id: WindowId) -> Option<&WindowSurface> {
+        self.windows.iter().map(|w| &w.surface).find(|s| s.window.id() == id)
+    }
+
     fn finish(&mut self, result: Option<PixelRect>) {
         if let Some(reply) = self.reply.take() {
             let _ = reply.send(result);
@@ -172,14 +176,10 @@ impl OverlaySession {
         };
         match event {
             WindowEvent::RedrawRequested => self.windows[index].redraw(fonts),
-            WindowEvent::ScaleFactorChanged { .. } => {
-                let b = self.windows[index].monitor.bounds;
-                let window = &self.windows[index].surface.window;
-                let _ =
-                    window.request_inner_size(PhysicalSize::new(b.width as u32, b.height as u32));
-                window.request_redraw();
+            // Geometry after DPI changes is restored by WindowSurface::keep_on_target.
+            WindowEvent::ScaleFactorChanged { .. } | WindowEvent::Resized(_) => {
+                self.windows[index].surface.window.request_redraw()
             }
-            WindowEvent::Resized(_) => self.windows[index].surface.window.request_redraw(),
             WindowEvent::KeyboardInput {
                 event: KeyEvent { logical_key: Key::Named(NamedKey::Escape), state, .. },
                 ..

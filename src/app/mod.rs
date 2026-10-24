@@ -297,7 +297,11 @@ impl ApplicationHandler<AppEvent> for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
+        let pinned = self.overlay.as_ref().and_then(|o| o.surface(id));
+        if let Some(surface) = pinned.or_else(|| self.recording.as_ref()?.surface(id)) {
+            surface.keep_on_target(&mut event);
+        }
         if let Some(session) = self.overlay.as_mut().filter(|s| s.owns(id)) {
             session.handle(id, &event, &self.fonts);
             if session.is_finished() {

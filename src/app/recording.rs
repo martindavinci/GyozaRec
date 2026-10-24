@@ -37,7 +37,7 @@ fn popup(event_loop: &ActiveEventLoop, rect: PixelRect) -> Option<WindowSurface>
         .with_skip_taskbar(true)
         .with_position(PhysicalPosition::new(rect.x, rect.y))
         .with_inner_size(PhysicalSize::new(rect.width.max(1) as u32, rect.height.max(1) as u32));
-    let surface = WindowSurface::new(event_loop.create_window(attrs).ok()?);
+    let surface = WindowSurface::pinned(event_loop.create_window(attrs).ok()?, rect);
     exclude_from_capture(surface.hwnd());
     Some(surface)
 }
@@ -96,7 +96,11 @@ impl RecordingSession {
     }
 
     pub fn owns(&self, id: WindowId) -> bool {
-        self.panel.window.id() == id || self.frame.as_ref().is_some_and(|f| f.window.id() == id)
+        self.surface(id).is_some()
+    }
+
+    pub fn surface(&self, id: WindowId) -> Option<&WindowSurface> {
+        std::iter::once(&self.panel).chain(self.frame.as_ref()).find(|s| s.window.id() == id)
     }
 
     pub fn tick(&mut self, elapsed: Duration, fonts: &Fonts) {
@@ -189,32 +193,51 @@ mod tests {
     use winit::platform::pump_events::EventLoopExtPumpEvents;
     use winit::platform::windows::EventLoopBuilderExtWindows;
 
-    #[derive(Default)]
     struct FrameProbe {
+        region: PixelRect,
         frame: Option<WindowSurface>,
     }
 
     impl ApplicationHandler for FrameProbe {
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {
             if self.frame.is_none() {
-                self.frame = open_frame(event_loop, PixelRect::new(200, 200, 160, 120));
+                self.frame = open_frame(event_loop, self.region);
             }
         }
 
-        fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
+        fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, mut event: WindowEvent) {
+            if let Some(frame) = &self.frame {
+                frame.keep_on_target(&mut event);
+            }
+        }
     }
 
-    /// The frame must stay transparent inside after it is shown; winit
-    /// rewrites the extended style when visibility changes.
+    /// The frame must stay transparent inside after it is shown (winit
+    /// rewrites the extended style when visibility changes) and sit exactly
+    /// around the region, also on a secondary monitor whose DPI may differ
+    /// from the primary's.
     #[test]
     #[ignore = "desktop"]
-    fn frame_stays_color_keyed_after_show() {
+    fn frame_is_transparent_and_exactly_placed() {
+        use gyozarec::capture::MonitorProvider;
+        let monitors = gyozarec::platform::Win32Monitors.monitors();
+        let primary = gyozarec::geometry::PixelPoint { x: 0, y: 0 };
+        let target = monitors
+            .iter()
+            .find(|m| !m.bounds.contains(primary))
+            .or_else(|| monitors.first())
+            .expect("a monitor");
+        let region = PixelRect::new(target.bounds.x + 200, target.bounds.y + 200, 160, 120);
         let mut event_loop = EventLoop::builder().with_any_thread(true).build().unwrap();
-        let mut probe = FrameProbe::default();
+        let mut probe = FrameProbe { region, frame: None };
         for _ in 0..5 {
             event_loop.pump_app_events(Some(Duration::from_millis(40)), &mut probe);
         }
         let frame = probe.frame.as_ref().expect("frame window");
         assert_eq!(gyozarec::platform::layered_color_key(frame.hwnd()), Some(FRAME_KEY));
+        let expected = frame_bounds(region, FRAME_THICKNESS);
+        let pos = frame.window.outer_position().unwrap();
+        let size = frame.window.inner_size();
+        assert_eq!(PixelRect::new(pos.x, pos.y, size.width as i32, size.height as i32), expected);
     }
 }

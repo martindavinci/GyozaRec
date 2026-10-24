@@ -1,6 +1,7 @@
 //! Fakes shared by unit tests. Later tasks pick them up one by one.
 #![allow(dead_code)]
 
+use crate::bridge::{UiRequest, UiSender};
 use crate::capture::{
     CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, MonitorProvider,
     ScreenGrabber, SelectionRequest, SelectionUi, SoundPlayer, ToolbarVisibility, WindowCandidate,
@@ -18,6 +19,65 @@ use std::time::Duration;
 
 /// Ordered record of what fakes were asked to do.
 pub type EventLog = Arc<Mutex<Vec<String>>>;
+
+/// Stands in for the event loop: answers selections at once, records requests.
+pub struct FakeUiSender {
+    pub log: EventLog,
+    select_reply: Option<PixelRect>,
+    closed: bool,
+    finished: Mutex<Option<std::sync::mpsc::Sender<CaptureOutcome>>>,
+}
+
+impl Default for FakeUiSender {
+    fn default() -> Self {
+        Self { log: Arc::default(), select_reply: None, closed: false, finished: Mutex::new(None) }
+    }
+}
+
+impl FakeUiSender {
+    pub fn replying(reply: Option<PixelRect>) -> Self {
+        Self { select_reply: reply, ..Self::default() }
+    }
+
+    pub fn closed() -> Self {
+        Self { closed: true, ..Self::default() }
+    }
+
+    pub fn with_log(log: EventLog) -> Self {
+        Self { log, ..Self::default() }
+    }
+
+    /// Receives every `CaptureFinished` outcome.
+    pub fn finished_signal(&self) -> std::sync::mpsc::Receiver<CaptureOutcome> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *self.finished.lock().unwrap() = Some(tx);
+        rx
+    }
+}
+
+impl UiSender for FakeUiSender {
+    fn send(&self, req: UiRequest) -> bool {
+        if self.closed {
+            return false;
+        }
+        let log = Some(self.log.clone());
+        match req {
+            UiRequest::HideToolbar => log_event(&log, "ui:hide"),
+            UiRequest::ShowToolbar => log_event(&log, "ui:show"),
+            UiRequest::Select { reply, .. } => {
+                log_event(&log, "ui:select");
+                let _ = reply.send(self.select_reply);
+            }
+            UiRequest::CaptureFinished(outcome) => {
+                log_event(&log, format!("ui:finished:{:?}", outcome.kind));
+                if let Some(tx) = self.finished.lock().unwrap().as_ref() {
+                    let _ = tx.send(outcome);
+                }
+            }
+        }
+        true
+    }
+}
 
 pub fn log_event(log: &Option<EventLog>, event: impl Into<String>) {
     if let Some(log) = log {

@@ -1,3 +1,4 @@
+pub mod bridge;
 pub mod capture;
 pub mod clock;
 mod error;

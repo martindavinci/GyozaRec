@@ -7,6 +7,7 @@ pub mod output;
 pub mod paths;
 pub mod pixels;
 pub mod platform;
+pub mod presentation;
 pub mod render;
 pub mod settings;
 #[cfg(test)]

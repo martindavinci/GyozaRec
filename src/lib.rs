@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 mod error;
+pub mod geometry;
 pub mod platform;
 
 pub use error::{Error, Result};

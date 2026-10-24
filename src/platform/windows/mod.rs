@@ -3,6 +3,7 @@
 
 mod clipboard;
 mod grab;
+mod locale;
 mod monitors;
 mod mp4;
 mod recording;
@@ -11,6 +12,7 @@ mod window_snapshot;
 
 pub use clipboard::Win32Clipboard;
 pub use grab::GdiGrabber;
+pub use locale::system_ui_languages;
 pub use monitors::{Win32Cursor, Win32Monitors};
 pub use mp4::{Mp4Sink, probe_mp4};
 pub use recording::{

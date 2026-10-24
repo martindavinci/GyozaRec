@@ -1,7 +1,80 @@
 //! Capture abstractions implemented by each platform backend.
 
-use crate::geometry::{MonitorInfo, PixelPoint, PixelRect};
+mod coordinator;
+
+pub use coordinator::{CaptureCoordinator, HIDE_SETTLE_DELAY};
+
+use crate::geometry::{CaptureMode, MonitorInfo, PixelPoint, PixelRect};
 use crate::pixels::PixelBuffer;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+/// What the selection UI needs; owned so it can cross to the UI thread.
+#[derive(Clone, Debug)]
+pub struct SelectionRequest {
+    pub mode: CaptureMode,
+    pub frozen: Option<Arc<PixelBuffer>>,
+    pub windows: Vec<WindowCandidate>,
+    pub monitors: Vec<MonitorInfo>,
+}
+
+pub trait SelectionUi: Send {
+    /// `None` means the user canceled.
+    fn select_region(&mut self, req: SelectionRequest) -> Option<PixelRect>;
+}
+
+pub trait ClipboardService: Send {
+    fn set_image(&self, img: &PixelBuffer) -> bool;
+    fn set_file(&self, path: &Path) -> bool;
+}
+
+pub trait SoundPlayer: Send {
+    fn play_capture(&self);
+}
+
+pub trait ToolbarVisibility: Send {
+    fn hide(&mut self);
+    fn show(&mut self);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureOutcomeKind {
+    Saved,
+    Canceled,
+    Failed,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CaptureOutcome {
+    pub kind: CaptureOutcomeKind,
+    pub path: Option<PathBuf>,
+    pub error: Option<String>,
+    pub copied_to_clipboard: bool,
+}
+
+impl CaptureOutcome {
+    pub fn canceled() -> Self {
+        Self {
+            kind: CaptureOutcomeKind::Canceled,
+            path: None,
+            error: None,
+            copied_to_clipboard: false,
+        }
+    }
+
+    pub fn failed(error: impl ToString, copied_to_clipboard: bool) -> Self {
+        Self {
+            kind: CaptureOutcomeKind::Failed,
+            path: None,
+            error: Some(error.to_string()),
+            copied_to_clipboard,
+        }
+    }
+
+    pub fn saved(path: PathBuf, copied_to_clipboard: bool) -> Self {
+        Self { kind: CaptureOutcomeKind::Saved, path: Some(path), error: None, copied_to_clipboard }
+    }
+}
 
 pub trait MonitorProvider: Send {
     fn monitors(&self) -> Vec<MonitorInfo>;

@@ -2,12 +2,16 @@
 #![allow(dead_code)]
 
 use crate::capture::{
-    CursorLocator, MonitorProvider, ScreenGrabber, WindowCandidate, WindowSnapshotter,
+    CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, MonitorProvider,
+    ScreenGrabber, SelectionRequest, SelectionUi, SoundPlayer, ToolbarVisibility, WindowCandidate,
+    WindowSnapshotter,
 };
 use crate::clock::Clock;
 use crate::geometry::{MonitorInfo, PixelPoint, PixelRect};
 use crate::pixels::PixelBuffer;
+use crate::settings::AppSettings;
 use chrono::{NaiveDate, NaiveDateTime};
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -95,6 +99,143 @@ pub struct FakeCursor(pub PixelPoint);
 impl CursorLocator for FakeCursor {
     fn position(&self) -> PixelPoint {
         self.0
+    }
+}
+
+pub struct FakeSelection {
+    pub result: Option<PixelRect>,
+    pub log: EventLog,
+}
+
+impl SelectionUi for FakeSelection {
+    fn select_region(&mut self, req: SelectionRequest) -> Option<PixelRect> {
+        log_event(
+            &Some(self.log.clone()),
+            format!(
+                "select:{:?}:frozen={}:windows={}",
+                req.mode,
+                req.frozen.is_some(),
+                req.windows.len()
+            ),
+        );
+        self.result
+    }
+}
+
+pub struct FakeClipboard {
+    pub log: EventLog,
+}
+
+impl ClipboardService for FakeClipboard {
+    fn set_image(&self, img: &PixelBuffer) -> bool {
+        log_event(&Some(self.log.clone()), format!("clip:image:{}", rect_label(&img.bounds)));
+        true
+    }
+
+    fn set_file(&self, path: &Path) -> bool {
+        log_event(&Some(self.log.clone()), format!("clip:file:{}", path.display()));
+        true
+    }
+}
+
+pub struct FakeSound {
+    pub log: EventLog,
+}
+
+impl SoundPlayer for FakeSound {
+    fn play_capture(&self) {
+        log_event(&Some(self.log.clone()), "sound");
+    }
+}
+
+pub struct FakeToolbar {
+    pub log: EventLog,
+}
+
+impl ToolbarVisibility for FakeToolbar {
+    fn hide(&mut self) {
+        log_event(&Some(self.log.clone()), "hide");
+    }
+
+    fn show(&mut self) {
+        log_event(&Some(self.log.clone()), "show");
+    }
+}
+
+/// A coordinator wired to fakes, a fake clock and a temporary capture folder.
+pub struct CoordinatorHarness {
+    pub coordinator: CaptureCoordinator,
+    pub clock: FakeClock,
+    pub log: EventLog,
+    pub temp: tempfile::TempDir,
+}
+
+impl CoordinatorHarness {
+    fn build(
+        selection: Option<PixelRect>,
+        monitors: FakeMonitors,
+        cursor: PixelPoint,
+        windows: Vec<WindowCandidate>,
+    ) -> Self {
+        let log: EventLog = Arc::default();
+        let clock = FakeClock::default();
+        let coordinator = CaptureCoordinator {
+            monitors: Box::new(monitors),
+            grabber: Arc::new(FakeGrabber::with_log(log.clone())),
+            cursor: Box::new(FakeCursor(cursor)),
+            windows: Box::new(FakeWindows(windows)),
+            selection: Box::new(FakeSelection { result: selection, log: log.clone() }),
+            clipboard: Box::new(FakeClipboard { log: log.clone() }),
+            sound: Box::new(FakeSound { log: log.clone() }),
+            toolbar: Box::new(FakeToolbar { log: log.clone() }),
+            clock: Arc::new(clock.clone()),
+        };
+        Self { coordinator, clock, log, temp: tempfile::tempdir().unwrap() }
+    }
+
+    /// One 1920×1080 monitor at the origin.
+    pub fn rect(selection: Option<PixelRect>) -> Self {
+        Self::with_windows(selection, Vec::new())
+    }
+
+    pub fn with_windows(selection: Option<PixelRect>, windows: Vec<WindowCandidate>) -> Self {
+        let monitors = FakeMonitors::single(PixelRect::new(0, 0, 1920, 1080));
+        Self::build(selection, monitors, PixelPoint::default(), windows)
+    }
+
+    /// A (0,0,1920,1080) at scale 1.0 and B (-1920,0,1920,1080) at scale 1.5.
+    pub fn two_monitors_cursor_at(cursor: PixelPoint) -> Self {
+        let a = MonitorInfo {
+            device_name: "A".into(),
+            bounds: PixelRect::new(0, 0, 1920, 1080),
+            scale: 1.0,
+        };
+        let b = MonitorInfo {
+            device_name: "B".into(),
+            bounds: PixelRect::new(-1920, 0, 1920, 1080),
+            scale: 1.5,
+        };
+        let monitors = FakeMonitors {
+            monitors: vec![a, b],
+            virtual_screen: PixelRect::new(-1920, 0, 3840, 1080),
+        };
+        Self::build(None, monitors, cursor, Vec::new())
+    }
+
+    pub fn run(&mut self, settings: AppSettings) -> CaptureOutcome {
+        self.coordinator.capture(&settings)
+    }
+
+    pub fn settings(&self) -> AppSettings {
+        AppSettings::defaults(self.temp.path())
+    }
+
+    pub fn dir(&self) -> &Path {
+        self.temp.path()
+    }
+
+    pub fn events(&self) -> Vec<String> {
+        self.log.lock().unwrap().clone()
     }
 }
 

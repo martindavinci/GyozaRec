@@ -15,18 +15,18 @@ jobs:
         include:
           # WiX 3 (MSI) needs .NET Framework 3.5, available on this image.
           - os: windows-2022
-          # fase 2: macos-latest · fase 3: ubuntu-22.04
+          # phase 2: macos-latest · phase 3: ubuntu-22.04
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Tag e versione coincidono
+      - name: Tag matches version
         run: cargo xtask check-tag ${{ github.ref_name }}
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-packager
-      - name: Installer e zip portable
+      - name: Installer and portable zip
         run: cargo xtask dist
       - uses: actions/upload-artifact@v4
         with:
@@ -44,7 +44,7 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Bozza di release
+      - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

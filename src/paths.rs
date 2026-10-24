@@ -18,7 +18,7 @@ impl AppPaths {
         if exe_dir.join(PORTABLE_MARKER).is_file() {
             return AppPaths {
                 settings_file: exe_dir.join("data").join("settings.json"),
-                capture_dir: exe_dir.join("Catture"),
+                capture_dir: exe_dir.join("Captures"),
                 portable: true,
             };
         }
@@ -56,7 +56,7 @@ mod tests {
         let p = AppPaths::detect(d.path());
         assert!(p.portable);
         assert_eq!(p.settings_file, d.path().join("data").join("settings.json"));
-        assert_eq!(p.capture_dir, d.path().join("Catture"));
+        assert_eq!(p.capture_dir, d.path().join("Captures"));
     }
 
     #[test]

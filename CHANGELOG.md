@@ -2,7 +2,20 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] - 2026-10-25
+## [0.3.0] - 2026-10-25
+
+### Added
+- System audio in MP4 recordings (on by default), captured from the default output device and encoded as AAC.
+- Recording sounds for start, pause, resume and stop, timed so they stay out of the video.
+- JPG screenshots, with a quality setting.
+- With several monitors, full-screen captures ask which monitor to take.
+- Start with Windows (off by default), hidden in the notification area; also for the portable version.
+- Configurable global shortcuts: new keys, switch each one off, reset to the defaults.
+
+### Changed
+- "Sound on capture" is now "In-app sounds".
+
+
 
 ### Added
 - Notification area icon (on by default): closing the toolbar hides it; the icon's menu offers every capture, Options and Exit.
@@ -33,5 +46,6 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.3.0]: https://github.com/martindavinci/GyozaRec/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/martindavinci/GyozaRec/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/martindavinci/GyozaRec/releases/tag/v0.1.0

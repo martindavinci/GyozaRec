@@ -35,9 +35,24 @@ pub fn ensure_folder(folder: &Path) -> crate::Result<()> {
 }
 
 pub fn save_png(img: &PixelBuffer, folder: &Path, namer: &FileNamer) -> crate::Result<PathBuf> {
+    save_image(img, folder, namer, crate::geometry::OutputFormat::Png, 0)
+}
+
+/// Saves `img` as JPG for `OutputFormat::Jpg`, as PNG otherwise.
+pub fn save_image(
+    img: &PixelBuffer,
+    folder: &Path,
+    namer: &FileNamer,
+    format: crate::geometry::OutputFormat,
+    jpeg_quality: u8,
+) -> crate::Result<PathBuf> {
     ensure_folder(folder)?;
-    let path = namer.next_path(folder, "png");
-    fs::write(&path, img.encode_png()?)?;
+    let (ext, bytes) = match format {
+        crate::geometry::OutputFormat::Jpg => ("jpg", img.encode_jpeg(jpeg_quality)?),
+        _ => ("png", img.encode_png()?),
+    };
+    let path = namer.next_path(folder, ext);
+    fs::write(&path, bytes)?;
     Ok(path)
 }
 

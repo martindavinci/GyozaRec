@@ -12,7 +12,8 @@ pub const AREAS: [CaptureArea; 3] =
     [CaptureArea::Rectangle, CaptureArea::Window, CaptureArea::FullScreen];
 
 /// Formats in menu order; `Texts::formats` uses the same order.
-pub const FORMATS: [OutputFormat; 3] = [OutputFormat::Png, OutputFormat::Mp4, OutputFormat::Gif];
+pub const FORMATS: [OutputFormat; 4] =
+    [OutputFormat::Png, OutputFormat::Jpg, OutputFormat::Mp4, OutputFormat::Gif];
 
 /// Delay choices in seconds; `Texts::delays` uses the same order.
 pub const DELAYS: [u32; 6] = [0, 1, 2, 3, 4, 5];
@@ -190,7 +191,7 @@ mod tests {
         let areas: Vec<_> = AREAS.iter().map(|a| area_label(*a, it)).collect();
         assert_eq!(areas, ["Rettangolo", "Finestra", "Schermo intero"]);
         let formats: Vec<_> = FORMATS.iter().map(|f| format_label(*f, it)).collect();
-        assert_eq!(formats, ["Immagine PNG", "Video MP4", "GIF animata"]);
+        assert_eq!(formats, ["Immagine PNG", "Immagine JPG", "Video MP4", "GIF animata"]);
         assert_eq!(format_label(OutputFormat::Gif, Language::En.texts()), "Animated GIF");
         assert_eq!(format_label(OutputFormat::Mp4, Language::Ja.texts()), "MP4 動画");
         assert_eq!(area_label(CaptureArea::Window, Language::Ja.texts()), "ウィンドウ");

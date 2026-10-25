@@ -124,7 +124,7 @@ pub struct Texts {
     /// In `AREAS` order.
     pub areas: [&'static str; 3],
     /// In `FORMATS` order.
-    pub formats: [&'static str; 3],
+    pub formats: [&'static str; 4],
     /// Replaces `capture` on the button when the format is a recording.
     pub record: &'static str,
     /// No delay, then 1 to 5 seconds.
@@ -154,6 +154,7 @@ pub struct Texts {
     /// full-screen recording.
     pub quick_actions: [&'static str; 4],
     pub discard_question: &'static str,
+    pub jpeg_quality: &'static str,
     pub gif_fps: &'static str,
     pub gif_max_seconds: &'static str,
     pub gif_max_long_side: &'static str,
@@ -239,6 +240,7 @@ mod tests {
                 t.open_folder_after_recording,
                 t.open_file_after_capture,
                 t.discard_question,
+                t.jpeg_quality,
                 t.gif_fps,
                 t.gif_max_seconds,
                 t.gif_max_long_side,

@@ -3,6 +3,7 @@
 use crate::settings::AppSettings;
 use std::path::{Path, PathBuf};
 
+pub const JPEG_QUALITY_CHOICES: [u32; 5] = [70, 80, 90, 95, 100];
 pub const GIF_FPS_CHOICES: [u32; 4] = [5, 10, 15, 20];
 pub const GIF_MAX_SECONDS_CHOICES: [u32; 5] = [5, 10, 15, 30, 60];
 pub const GIF_LONG_SIDE_CHOICES: [u32; 6] = [480, 640, 800, 1024, 1280, 1920];
@@ -45,6 +46,7 @@ pub struct OptionsForm {
     pub keep_in_tray: bool,
     pub shortcuts_enabled: bool,
     pub print_screen_captures: bool,
+    pub jpeg_quality: u8,
     pub gif_fps: u32,
     pub gif_max_seconds: u32,
     pub gif_max_long_side: u32,
@@ -66,6 +68,7 @@ impl OptionsForm {
             keep_in_tray: s.keep_in_tray,
             shortcuts_enabled: s.shortcuts_enabled,
             print_screen_captures: s.print_screen_captures,
+            jpeg_quality: s.jpeg_quality,
             gif_fps: s.gif_fps,
             gif_max_seconds: s.gif_max_seconds,
             gif_max_long_side: s.gif_max_long_side,
@@ -87,6 +90,7 @@ impl OptionsForm {
             keep_in_tray: self.keep_in_tray,
             shortcuts_enabled: self.shortcuts_enabled,
             print_screen_captures: self.print_screen_captures,
+            jpeg_quality: self.jpeg_quality,
             gif_fps: self.gif_fps,
             gif_max_seconds: self.gif_max_seconds,
             gif_max_long_side: self.gif_max_long_side,

@@ -112,19 +112,20 @@ pub enum CaptureArea {
 pub enum OutputFormat {
     #[default]
     Png,
+    Jpg,
     Mp4,
     Gif,
 }
 
 impl OutputFormat {
     pub fn is_recording(self) -> bool {
-        self != OutputFormat::Png
+        matches!(self, OutputFormat::Mp4 | OutputFormat::Gif)
     }
 }
 
 pub fn minimum_size(format: OutputFormat) -> PixelSize {
     let (width, height) = match format {
-        OutputFormat::Png => (2, 2),
+        OutputFormat::Png | OutputFormat::Jpg => (2, 2),
         OutputFormat::Mp4 => (64, 64),
         OutputFormat::Gif => (16, 16),
     };

@@ -24,6 +24,8 @@ pub struct AppSettings {
     pub keep_in_tray: bool,
     pub shortcuts_enabled: bool,
     pub print_screen_captures: bool,
+    /// 50–100.
+    pub jpeg_quality: u8,
     pub gif_fps: u32,
     pub gif_max_seconds: u32,
     pub gif_max_long_side: u32,
@@ -51,6 +53,7 @@ impl Default for AppSettings {
             keep_in_tray: true,
             shortcuts_enabled: false,
             print_screen_captures: false,
+            jpeg_quality: 90,
             gif_fps: 10,
             gif_max_seconds: 15,
             gif_max_long_side: 800,
@@ -83,6 +86,7 @@ impl AppSettings {
         AppSettings {
             delay_seconds: self.delay_seconds.min(5),
             save_folder,
+            jpeg_quality: self.jpeg_quality.clamp(50, 100),
             gif_fps: self.gif_fps.clamp(5, 20),
             gif_max_seconds: self.gif_max_seconds.clamp(1, 60),
             gif_max_long_side: self.gif_max_long_side.clamp(240, 1920),
@@ -180,6 +184,18 @@ mod tests {
             SettingsStore::new(d.path().join("s.json"), cap()).load(),
             AppSettings::defaults(&cap())
         );
+    }
+
+    #[test]
+    fn jpeg_quality_is_clamped() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "jpeg_quality": 10 }"#).unwrap();
+        assert_eq!(SettingsStore::new(p.clone(), cap()).load().jpeg_quality, 50);
+        fs::write(&p, r#"{ "jpeg_quality": 200 }"#).unwrap();
+        assert_eq!(SettingsStore::new(p.clone(), cap()).load().jpeg_quality, 100);
+        fs::write(&p, r#"{ }"#).unwrap();
+        assert_eq!(SettingsStore::new(p, cap()).load().jpeg_quality, 90);
     }
 
     #[test]

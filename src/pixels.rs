@@ -92,6 +92,20 @@ impl PixelBuffer {
         out
     }
 
+    /// JPEG has no transparency: the image is flattened to RGB first.
+    pub fn encode_jpeg(&self, quality: u8) -> crate::Result<Vec<u8>> {
+        let rgb: Vec<u8> =
+            self.bgra.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0]]).collect();
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, quality).encode(
+            &rgb,
+            self.width() as u32,
+            self.height() as u32,
+            image::ExtendedColorType::Rgb8,
+        )?;
+        Ok(jpeg)
+    }
+
     pub fn encode_png(&self) -> crate::Result<Vec<u8>> {
         let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
             ImageBuffer::from_raw(self.width() as u32, self.height() as u32, self.to_rgba())

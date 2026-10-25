@@ -42,10 +42,11 @@ impl QuickAction {
 /// The settings for one capture; the saved settings stay untouched.
 pub fn apply(action: QuickAction, s: &AppSettings) -> AppSettings {
     let recording = if s.format.is_recording() { s.format } else { OutputFormat::Mp4 };
+    let image = if s.format == OutputFormat::Jpg { OutputFormat::Jpg } else { OutputFormat::Png };
     let (area, format) = match action {
         QuickAction::Current => (s.area, s.format),
-        QuickAction::Image => (s.area, OutputFormat::Png),
-        QuickAction::ImageFullScreen => (CaptureArea::FullScreen, OutputFormat::Png),
+        QuickAction::Image => (s.area, image),
+        QuickAction::ImageFullScreen => (CaptureArea::FullScreen, image),
         QuickAction::Record => (s.area, recording),
         QuickAction::RecordFullScreen => (CaptureArea::FullScreen, recording),
     };
@@ -85,6 +86,15 @@ mod tests {
             assert_eq!((out.area, out.format), expected, "{action:?}");
             assert_eq!(out.delay_seconds, 3, "other settings are kept");
         }
+    }
+
+    #[test]
+    fn image_quick_action_keeps_jpg() {
+        use CaptureArea::*;
+        use OutputFormat::*;
+        assert_eq!(apply(QuickAction::Image, &s(Window, Jpg)).format, Jpg);
+        assert_eq!(apply(QuickAction::ImageFullScreen, &s(Window, Jpg)).format, Jpg);
+        assert_eq!(apply(QuickAction::Image, &s(Window, Mp4)).format, Png);
     }
 
     #[test]

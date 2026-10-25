@@ -7,7 +7,7 @@ use super::{
 };
 use crate::clock::Clock;
 use crate::geometry::{CaptureArea, OutputFormat, PixelRect, meets_minimum};
-use crate::output::{FileNamer, ensure_folder, save_png};
+use crate::output::{FileNamer, ensure_folder, save_image};
 use crate::pixels::PixelBuffer;
 use crate::recording::{LoopConfig, RecordingOutcome};
 use crate::settings::AppSettings;
@@ -46,8 +46,10 @@ impl CaptureCoordinator {
 
     fn capture_hidden(&mut self, settings: &AppSettings) -> CaptureOutcome {
         match (settings.format, settings.area) {
-            (OutputFormat::Png, CaptureArea::FullScreen) => self.capture_fullscreen(settings),
-            (OutputFormat::Png, _) => self.capture_region(settings),
+            (OutputFormat::Png | OutputFormat::Jpg, CaptureArea::FullScreen) => {
+                self.capture_fullscreen(settings)
+            }
+            (OutputFormat::Png | OutputFormat::Jpg, _) => self.capture_region(settings),
             (OutputFormat::Mp4 | OutputFormat::Gif, _) => self.capture_recording(settings),
         }
     }
@@ -165,7 +167,8 @@ impl CaptureCoordinator {
     /// Saves the PNG and copies it; the copy happens even if saving fails.
     fn finish_image(&mut self, img: &PixelBuffer, settings: &AppSettings) -> CaptureOutcome {
         let namer = FileNamer::new(self.clock.clone());
-        let saved = save_png(img, &settings.save_folder, &namer);
+        let saved =
+            save_image(img, &settings.save_folder, &namer, settings.format, settings.jpeg_quality);
         let copied = settings.copy_to_clipboard && self.clipboard.set_image(img);
         match saved {
             Ok(path) => {
@@ -330,6 +333,18 @@ mod tests {
                 "show"
             ]
         );
+    }
+
+    #[test]
+    fn jpg_capture_saves_a_jpeg() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(10, 20, 30, 40)));
+        let o = h.run(AppSettings { format: OutputFormat::Jpg, jpeg_quality: 80, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let path = o.path.unwrap();
+        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("jpg"));
+        let img = image::open(&path).unwrap();
+        assert_eq!((img.width(), img.height()), (30, 40));
+        assert!(h.events().contains(&"clip:image:10,20,30,40".to_string()));
     }
 
     #[test]

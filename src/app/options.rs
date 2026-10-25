@@ -3,8 +3,8 @@
 use super::surface::WindowSurface;
 use gyozarec::i18n::{Language, Texts};
 use gyozarec::presentation::{
-    GIF_FPS_CHOICES, GIF_LONG_SIDE_CHOICES, GIF_MAX_SECONDS_CHOICES, OptionsForm,
-    VIDEO_FPS_CHOICES, VIDEO_MAX_SECONDS_CHOICES, choices_with, shorten_middle,
+    GIF_FPS_CHOICES, GIF_LONG_SIDE_CHOICES, GIF_MAX_SECONDS_CHOICES, JPEG_QUALITY_CHOICES,
+    OptionsForm, VIDEO_FPS_CHOICES, VIDEO_MAX_SECONDS_CHOICES, choices_with, shorten_middle,
 };
 use gyozarec::uikit::painter::{Fonts, Painter, measure_text};
 use gyozarec::uikit::theme::GYOZA;
@@ -41,7 +41,8 @@ pub const MENU_PREFIX: &str = "opt:";
 const LANGUAGE_PREFIX: &str = "opt:lang:";
 
 /// The numeric dropdowns: id, base choices.
-const COMBOS: [(u32, &[u32]); 5] = [
+const COMBOS: [(u32, &[u32]); 6] = [
+    (16, &JPEG_QUALITY_CHOICES),
     (10, &GIF_FPS_CHOICES),
     (11, &GIF_MAX_SECONDS_CHOICES),
     (12, &GIF_LONG_SIDE_CHOICES),
@@ -51,6 +52,7 @@ const COMBOS: [(u32, &[u32]); 5] = [
 
 fn combo_label(id: u32, texts: &Texts) -> &'static str {
     match id {
+        16 => texts.jpeg_quality,
         10 => texts.gif_fps,
         11 => texts.gif_max_seconds,
         12 => texts.gif_max_long_side,
@@ -61,6 +63,7 @@ fn combo_label(id: u32, texts: &Texts) -> &'static str {
 
 fn combo_value(form: &OptionsForm, id: u32) -> u32 {
     match id {
+        16 => u32::from(form.jpeg_quality),
         10 => form.gif_fps,
         11 => form.gif_max_seconds,
         12 => form.gif_max_long_side,
@@ -71,6 +74,7 @@ fn combo_value(form: &OptionsForm, id: u32) -> u32 {
 
 fn set_combo_value(form: &mut OptionsForm, id: u32, value: u32) {
     match id {
+        16 => form.jpeg_quality = value.clamp(50, 100) as u8,
         10 => form.gif_fps = value,
         11 => form.gif_max_seconds = value,
         12 => form.gif_max_long_side = value,

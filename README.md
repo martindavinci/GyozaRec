@@ -6,6 +6,14 @@
 
 <p align="center">Fast, cute screen capture: PNG, GIF and MP4, entirely local.</p>
 
+<p align="center">
+  <a href="https://github.com/martindavinci/GyozaRec/actions/workflows/ci.yml"><img src="https://github.com/martindavinci/GyozaRec/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/martindavinci/GyozaRec/releases/latest"><img src="https://img.shields.io/github/v/release/martindavinci/GyozaRec" alt="Latest release"></a>
+  <a href="https://github.com/martindavinci/GyozaRec/releases"><img src="https://img.shields.io/github/downloads/martindavinci/GyozaRec/total" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/martindavinci/GyozaRec" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6" alt="Platform: Windows 10 | 11">
+</p>
+
 ## Features
 
 A small toolbar with four buttons:

@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.93"
 license = "MIT"
 description = "Screen capture to PNG, GIF and MP4, entirely local"
+repository = "https://github.com/martindavinci/GyozaRec"
 
 [workspace]
 members = [".", "xtask", "tools/make-ico"]

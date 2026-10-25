@@ -88,7 +88,7 @@ impl RecordingSession {
             width: ((b.right() + PAD) * scale).ceil() as i32,
             height: ((b.bottom() + PAD) * scale).ceil() as i32,
         };
-        let at = place_panel(region, size, monitor.bounds);
+        let at = place_panel(region, size, monitor.work_area);
         let panel = popup(event_loop, PixelRect::new(at.x, at.y, size.width, size.height))?;
         let mut session = RecordingSession {
             frame,

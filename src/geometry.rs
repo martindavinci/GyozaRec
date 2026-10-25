@@ -87,6 +87,8 @@ impl PixelRect {
 pub struct MonitorInfo {
     pub device_name: String,
     pub bounds: PixelRect,
+    /// `bounds` without the taskbar and docked toolbars.
+    pub work_area: PixelRect,
     /// DPI / 96.
     pub scale: f64,
 }

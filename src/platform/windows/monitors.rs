@@ -37,6 +37,7 @@ unsafe extern "system" fn collect_monitor(
         out.push(MonitorInfo {
             device_name: String::from_utf16_lossy(&info.szDevice[..name_len]),
             bounds: rect_from(info.monitorInfo.rcMonitor),
+            work_area: rect_from(info.monitorInfo.rcWork),
             scale: f64::from(dpi) / 96.0,
         });
     }

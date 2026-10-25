@@ -16,7 +16,8 @@ pub fn place_panel(region: PixelRect, panel: PixelSize, monitor: PixelRect) -> P
     } else if above >= monitor.y {
         above
     } else {
-        region.bottom() - GAP - panel.height
+        // Inside the region, but never over the taskbar.
+        region.bottom().min(monitor.bottom()) - GAP - panel.height
     };
     PixelPoint { x, y }
 }
@@ -65,6 +66,12 @@ mod tests {
     #[test]
     fn inside_bottom_when_region_fills_monitor() {
         assert_eq!(place_panel(MON, PANEL, MON), PixelPoint { x: 1700, y: 1032 });
+    }
+
+    #[test]
+    fn full_screen_region_keeps_the_panel_above_the_taskbar() {
+        let work = PixelRect::new(0, 0, 1920, 1040);
+        assert_eq!(place_panel(MON, PANEL, work), PixelPoint { x: 1700, y: 992 });
     }
 
     #[test]

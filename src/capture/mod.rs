@@ -180,11 +180,13 @@ mod tests {
             MonitorInfo {
                 device_name: "A".into(),
                 bounds: PixelRect::new(0, 0, 1920, 1080),
+                work_area: PixelRect::new(0, 0, 1920, 1080),
                 scale: 1.0,
             },
             MonitorInfo {
                 device_name: "B".into(),
                 bounds: PixelRect::new(-1920, 0, 1920, 1080),
+                work_area: PixelRect::new(-1920, 0, 1920, 1080),
                 scale: 1.5,
             },
         ];

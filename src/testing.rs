@@ -195,7 +195,8 @@ pub struct FakeMonitors {
 
 impl FakeMonitors {
     pub fn single(bounds: PixelRect) -> Self {
-        let monitor = MonitorInfo { device_name: "A".into(), bounds, scale: 1.0 };
+        let monitor =
+            MonitorInfo { device_name: "A".into(), bounds, work_area: bounds, scale: 1.0 };
         Self { monitors: vec![monitor], virtual_screen: bounds }
     }
 }
@@ -371,11 +372,13 @@ impl CoordinatorHarness {
         let a = MonitorInfo {
             device_name: "A".into(),
             bounds: PixelRect::new(0, 0, 1920, 1080),
+            work_area: PixelRect::new(0, 0, 1920, 1080),
             scale: 1.0,
         };
         let b = MonitorInfo {
             device_name: "B".into(),
             bounds: PixelRect::new(-1920, 0, 1920, 1080),
+            work_area: PixelRect::new(-1920, 0, 1920, 1080),
             scale: 1.5,
         };
         let monitors = FakeMonitors {

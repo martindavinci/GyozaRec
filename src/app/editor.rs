@@ -279,8 +279,49 @@ struct TextBox {
     preedit: String,
 }
 
-struct Saving {
-    close_after: bool,
+/// What a finished save leads to.
+#[derive(Debug, PartialEq)]
+pub enum SaveEnd {
+    Close,
+    /// Edits made during the save still need saving before closing.
+    SaveAgain(PathBuf),
+    /// Stay open; on success the window now works on `adopt`.
+    Stay {
+        adopt: Option<PathBuf>,
+    },
+}
+
+/// The save running on its own thread, if any.
+#[derive(Default)]
+pub struct SaveTracker {
+    /// Target and whether to close once it is written.
+    running: Option<(PathBuf, bool)>,
+}
+
+impl SaveTracker {
+    pub fn busy(&self) -> bool {
+        self.running.is_some()
+    }
+
+    /// Starts a save unless one runs; a running save only learns to close after.
+    pub fn begin(&mut self, path: PathBuf, close_after: bool) -> bool {
+        if let Some((_, close)) = &mut self.running {
+            *close |= close_after;
+            return false;
+        }
+        self.running = Some((path, close_after));
+        true
+    }
+
+    /// The save ended; `still_dirty` tells whether edits came in meanwhile.
+    pub fn finish(&mut self, ok: bool, still_dirty: bool) -> SaveEnd {
+        match self.running.take() {
+            Some((path, true)) if ok && still_dirty => SaveEnd::SaveAgain(path),
+            Some((_, true)) if ok => SaveEnd::Close,
+            Some((path, false)) if ok => SaveEnd::Stay { adopt: Some(path) },
+            _ => SaveEnd::Stay { adopt: None },
+        }
+    }
 }
 
 /// Paints the editor: bar, canvas, the shape being drawn and the text box.
@@ -343,7 +384,7 @@ pub struct EditorWindow {
     view: View,
     cursor: (f32, f32),
     modifiers: ModifiersState,
-    saving: Option<Saving>,
+    saves: SaveTracker,
     proxy: EventLoopProxy<AppEvent>,
 }
 
@@ -390,7 +431,7 @@ impl EditorWindow {
             view: View::IDENTITY,
             cursor: (-1.0, -1.0),
             modifiers: ModifiersState::empty(),
-            saving: None,
+            saves: SaveTracker::default(),
             proxy,
         };
         editor.rebuild();
@@ -427,7 +468,7 @@ impl EditorWindow {
             size: self.size,
             can_undo: self.doc.can_undo(),
             can_redo: self.doc.can_redo(),
-            saving: self.saving.is_some(),
+            saving: self.saves.busy(),
         }
     }
 
@@ -578,15 +619,13 @@ impl EditorWindow {
 
     fn start_save(&mut self, path: PathBuf, close_after: bool) {
         self.commit_text();
-        if let Some(s) = &mut self.saving {
-            s.close_after |= close_after;
+        if !self.saves.begin(path.clone(), close_after) {
             return;
         }
         let snapshot = self.doc.snapshot();
         let version = self.doc.version();
         let (fonts, settings, proxy, window) =
             (self.fonts.clone(), self.settings, self.proxy.clone(), self.id());
-        self.saving = Some(Saving { close_after });
         std::thread::spawn(move || {
             let img = snapshot.flatten(&fonts);
             let result = gyozarec::editor::save(&img, &path, settings.jpeg_quality)
@@ -601,15 +640,24 @@ impl EditorWindow {
 
     /// The save thread finished.
     pub fn saved(&mut self, version: u64, result: Result<(), String>) -> EditorResult {
-        let Some(saving) = self.saving.take() else { return EditorResult::Open };
-        match result {
-            Ok(()) => {
-                self.doc.mark_saved_at(version);
-                if saving.close_after {
-                    return EditorResult::Closed;
-                }
+        if !self.saves.busy() {
+            return EditorResult::Open;
+        }
+        if result.is_ok() {
+            self.doc.mark_saved_at(version);
+        }
+        let still_dirty = self.doc.is_dirty() || self.text.is_some();
+        match self.saves.finish(result.is_ok(), still_dirty) {
+            SaveEnd::Close => return EditorResult::Closed,
+            SaveEnd::SaveAgain(path) => self.start_save(path, true),
+            SaveEnd::Stay { adopt: Some(path) } if path != self.path => {
+                self.surface.window.set_title(&title(&path));
+                self.path = path;
             }
-            Err(error) => show_error_box(&self.texts.editor_save_failed.replace("{error}", &error)),
+            SaveEnd::Stay { .. } => {}
+        }
+        if let Err(error) = result {
+            show_error_box(&self.texts.editor_save_failed.replace("{error}", &error));
         }
         self.rebuild();
         EditorResult::Open
@@ -617,6 +665,9 @@ impl EditorWindow {
 
     fn save_as(&mut self) {
         self.commit_text();
+        if self.saves.busy() {
+            return; // the window would name a file that is not written yet
+        }
         let folder = self.path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
         let picked = rfd::FileDialog::new()
             .set_directory(folder)
@@ -625,8 +676,7 @@ impl EditorWindow {
             .add_filter("JPG", &["jpg", "jpeg"])
             .save_file();
         if let Some(path) = picked {
-            self.path = path.clone();
-            self.surface.window.set_title(&title(&path));
+            // The window takes the new name once the file is written.
             self.start_save(path, false);
         }
     }
@@ -643,8 +693,8 @@ impl EditorWindow {
     /// window closes once saving has finished).
     pub fn confirm_close(&mut self) -> bool {
         self.commit_text();
-        if let Some(s) = &mut self.saving {
-            s.close_after = true;
+        if self.saves.busy() {
+            self.saves.begin(self.path.clone(), true);
             return false;
         }
         if !self.doc.is_dirty() {
@@ -844,6 +894,38 @@ mod tests {
 
     fn key(c: &str) -> Key {
         Key::Character(SmolStr::new(c))
+    }
+
+    #[test]
+    fn closing_during_a_save_with_newer_edits_saves_again() {
+        let mut t = SaveTracker::default();
+        assert!(t.begin(PathBuf::from("a.png"), false));
+        assert!(!t.begin(PathBuf::from("a.png"), true), "joins the running save");
+        assert_eq!(t.finish(true, true), SaveEnd::SaveAgain(PathBuf::from("a.png")));
+        assert!(t.begin(PathBuf::from("a.png"), true));
+        assert_eq!(t.finish(true, false), SaveEnd::Close);
+        assert!(!t.busy());
+    }
+
+    #[test]
+    fn a_failed_save_keeps_the_window_and_its_file() {
+        let mut t = SaveTracker::default();
+        t.begin(PathBuf::from("b.jpg"), true);
+        assert_eq!(t.finish(false, true), SaveEnd::Stay { adopt: None });
+    }
+
+    #[test]
+    fn save_as_is_refused_while_saving_and_adopted_only_once_written() {
+        let mut t = SaveTracker::default();
+        assert!(t.begin(PathBuf::from("a.png"), false));
+        assert!(t.busy());
+        assert!(!t.begin(PathBuf::from("elsewhere.png"), false));
+        assert_eq!(t.finish(true, false), SaveEnd::Stay { adopt: Some(PathBuf::from("a.png")) });
+        assert!(t.begin(PathBuf::from("elsewhere.png"), false));
+        assert_eq!(
+            t.finish(true, false),
+            SaveEnd::Stay { adopt: Some(PathBuf::from("elsewhere.png")) }
+        );
     }
 
     #[test]

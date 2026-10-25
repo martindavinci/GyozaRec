@@ -292,7 +292,7 @@ impl App {
 
     /// Asks for a video and turns it into a GIF next to it, with the GIF options.
     fn start_conversion(&mut self) {
-        if !self.state.can_convert() || self.options.is_some() {
+        if !self.state.can_convert() || self.options.is_some() || self.exit_pending {
             return;
         }
         let texts = self.state.texts();
@@ -437,6 +437,14 @@ impl App {
         }
     }
 
+    /// Cancels a running conversion and waits for it; its partial GIF is deleted.
+    fn stop_conversion(&mut self) {
+        if let Some(c) = self.conversion.take() {
+            c.cancel.store(true, Ordering::SeqCst);
+            let _ = c.handle.join();
+        }
+    }
+
     /// Quits now, or as soon as the running capture has been cancelled.
     fn request_exit(&mut self, event_loop: &ActiveEventLoop) {
         // Unsaved edits are asked about first; Cancel keeps GyozaRec running.
@@ -445,11 +453,7 @@ impl App {
                 return;
             }
         }
-        // A half-written GIF is deleted by the conversion itself.
-        if let Some(c) = self.conversion.take() {
-            c.cancel.store(true, Ordering::SeqCst);
-            let _ = c.handle.join();
-        }
+        self.stop_conversion();
         let selecting = self.overlay.as_ref().is_some_and(|o| !o.is_finished());
         let stage = stage(self.state.busy, selecting, self.recording.is_some());
         match exit_plan(stage) {
@@ -706,6 +710,7 @@ impl App {
             UiRequest::CaptureFinished(outcome) => {
                 self.state.busy = false;
                 if self.exit_pending {
+                    self.stop_conversion();
                     event_loop.exit();
                     return;
                 }

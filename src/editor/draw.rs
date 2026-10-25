@@ -75,13 +75,27 @@ pub fn save(img: &PixelBuffer, path: &Path, jpeg_quality: u8) -> crate::Result<(
     } else {
         img.encode_png()?
     };
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let temp = path.with_file_name(format!(".{name}.gyozarec-tmp"));
-    std::fs::write(&temp, bytes)?;
+    let temp = temp_path_for(path);
+    {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+        file.write_all(&bytes).inspect_err(|_| {
+            let _ = std::fs::remove_file(&temp);
+        })?;
+    }
     std::fs::rename(&temp, path).inspect_err(|_| {
         let _ = std::fs::remove_file(&temp);
     })?;
     Ok(())
+}
+
+/// A temporary file next to `path`, unique to this save.
+fn temp_path_for(path: &Path) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    path.with_file_name(format!(".{name}.{}-{n}.gyozarec-tmp", std::process::id()))
 }
 
 /// Reads a PNG or JPEG back into an opaque buffer at (0, 0).
@@ -219,6 +233,13 @@ mod tests {
         let path = d.path().join("a.png");
         save(&img, &path, 90).unwrap();
         assert_eq!(load(&path).unwrap(), img);
+    }
+
+    #[test]
+    fn every_save_writes_its_own_temporary_file() {
+        let path = Path::new("C:/x/a.png");
+        assert_ne!(temp_path_for(path), temp_path_for(path));
+        assert_eq!(temp_path_for(path).parent(), path.parent());
     }
 
     #[test]

@@ -143,10 +143,16 @@ fn restore_default(
     Ok(())
 }
 
-/// Lines sharing keys with another line: OK waits until they differ.
+/// Lines that would be registered sharing keys with another: OK waits
+/// until they differ. Switched-off shortcuts never clash.
 fn clashing_lines(form: &OptionsForm, lines: &[ShortcutLine]) -> Vec<&'static str> {
+    let on = |l: &ShortcutLine| {
+        let group =
+            if l.print_screen { form.print_screen_captures } else { form.shortcuts_enabled };
+        group && !form.shortcuts_disabled.contains(l.id)
+    };
     let keys: Vec<(&'static str, String)> =
-        lines.iter().map(|l| (l.id, form_keys(form, l.id))).collect();
+        lines.iter().filter(|l| on(l)).map(|l| (l.id, form_keys(form, l.id))).collect();
     gyozarec::shortcuts::conflicts(&keys)
 }
 
@@ -761,10 +767,27 @@ mod layout_tests {
 
     #[test]
     fn ok_waits_while_two_lines_share_keys() {
-        let mut form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        let mut form = OptionsForm {
+            shortcuts_enabled: true,
+            ..OptionsForm::from_settings(&gyozarec::settings::AppSettings::default())
+        };
         assert!(clashing_lines(&form, &lines()).is_empty());
         form.shortcut_keys.insert("record-full".into(), "Ctrl+Shift+F8".into());
         assert_eq!(clashing_lines(&form, &lines()), ["image-full", "record-full"]);
+    }
+
+    #[test]
+    fn ok_ignores_shortcuts_that_are_switched_off() {
+        let mut form = OptionsForm {
+            shortcuts_enabled: true,
+            ..OptionsForm::from_settings(&gyozarec::settings::AppSettings::default())
+        };
+        form.shortcut_keys.insert("record-full".into(), "Ctrl+Shift+F8".into());
+        form.shortcuts_disabled.insert("image-full".into());
+        assert!(clashing_lines(&form, &lines()).is_empty(), "one of the two is off");
+        form.shortcuts_disabled.clear();
+        form.shortcuts_enabled = false;
+        assert!(clashing_lines(&form, &lines()).is_empty(), "all shortcuts are off");
     }
 
     #[test]

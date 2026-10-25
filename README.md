@@ -20,9 +20,9 @@ A small toolbar:
 
 - **Capture** (**Record** for videos and GIFs) — starts a capture with the selected area, format and delay.
 - **Area** — Rectangle, Window or Full screen. With several monitors, Full screen asks which one: click it, or press Esc to cancel.
-- **Format** — PNG image, JPG image, MP4 video or Animated GIF. Any area works with any format.
+- **Format** — PNG image, JPG image, MP4 video or Animated GIF. Any area works with any format. The same menu has **Convert a video to GIF…**.
 - **Delay** — from no delay up to 5 seconds.
-- **Options** — save folder, copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder or the file after a capture, notification area, start with Windows, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
+- **Options** — save folder, copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, the editor after an image capture, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
 
 <p align="center">
   <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">
@@ -33,6 +33,23 @@ A small toolbar:
 Images are copied to the clipboard; videos and GIFs are copied as files. A window recording keeps the area the window covered when recording started. While recording, a small panel shows the elapsed time with **Pause**/**Resume**, **Stop** and **Discard** buttons; paused time is left out of the file, and discarding asks for confirmation first. Nothing leaves your computer: no uploads, no accounts. The only network request is a once-a-day question to GitHub about the latest release (**Check for updates** in **Options**); when there is a newer one, the status line offers to download it.
 
 MP4 recordings include the **system audio** (what the computer plays) by default; turn it off in **Options**. With **In-app sounds** on, short tones mark the start, pause, resume and end of a recording, and they are timed so they never end up in the video.
+
+GIFs store only what changes from one frame to the next, so recordings of mostly still screens stay small. **Convert a video to GIF…** (in the **Format** menu and the notification area menu) turns an MP4 into a GIF next to it, with the GIF options for frame rate, size and maximum length; the status line shows the progress and can cancel it.
+
+After each saved capture a small notification shows its thumbnail in the corner of the screen: click it to open the file (images open in the editor). Turn it off in **Options**.
+
+### Editor
+
+Every image capture opens in the editor (turn this off in **Options**; it then replaces "Open the file after a capture" for images). The file is already saved and copied, so closing the editor without changes loses nothing.
+
+<p align="center">
+  <img src="docs/screenshots/editor.png" alt="The editor with an arrow, a rectangle, highlighted text and a pixelated area">
+</p>
+
+- Tools: **arrow**, **rectangle**, **pen**, **highlighter**, **text** (click, type, Enter), **pixelate** and **crop**; six colors and three sizes.
+- **Undo** and **Redo** (Ctrl+Z, Ctrl+Y).
+- **Save** (Ctrl+S) overwrites the capture and copies it again when **Copy to clipboard** is on; **Save as…** (Ctrl+Shift+S) writes a PNG or JPG elsewhere; **Copy** (Ctrl+C) copies the edited image.
+- Closing with unsaved changes asks whether to save them.
 
 ### Notification area and shortcuts
 

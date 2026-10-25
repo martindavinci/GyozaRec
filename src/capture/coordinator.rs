@@ -6,7 +6,7 @@ use super::{
     ToolbarVisibility, WindowSnapshotter, monitor_from_point,
 };
 use crate::clock::Clock;
-use crate::geometry::{CaptureMode, PixelRect, meets_minimum};
+use crate::geometry::{CaptureArea, OutputFormat, PixelRect, meets_minimum};
 use crate::output::{FileNamer, ensure_folder, save_png};
 use crate::pixels::PixelBuffer;
 use crate::recording::{LoopConfig, RecordingOutcome};
@@ -44,10 +44,10 @@ impl CaptureCoordinator {
     }
 
     fn capture_hidden(&mut self, settings: &AppSettings) -> CaptureOutcome {
-        match settings.mode {
-            CaptureMode::Rectangle | CaptureMode::Window => self.capture_region(settings),
-            CaptureMode::FullScreen => self.capture_fullscreen(settings),
-            CaptureMode::Video | CaptureMode::Gif => self.capture_recording(settings),
+        match (settings.format, settings.area) {
+            (OutputFormat::Png, CaptureArea::FullScreen) => self.capture_fullscreen(settings),
+            (OutputFormat::Png, _) => self.capture_region(settings),
+            (OutputFormat::Mp4 | OutputFormat::Gif, _) => self.capture_recording(settings),
         }
     }
 
@@ -61,9 +61,9 @@ impl CaptureCoordinator {
             Err(err) => return Err(CaptureOutcome::failed(err, false)),
         };
         let windows =
-            if settings.mode == CaptureMode::Window { self.windows.snapshot() } else { Vec::new() };
+            if settings.area == CaptureArea::Window { self.windows.snapshot() } else { Vec::new() };
         let request = SelectionRequest {
-            mode: settings.mode,
+            area: settings.area,
             frozen: Some(frozen.clone()),
             windows,
             monitors: self.monitors.monitors(),
@@ -76,7 +76,7 @@ impl CaptureCoordinator {
 
     fn capture_region(&mut self, settings: &AppSettings) -> CaptureOutcome {
         match self.select_on_frozen(settings) {
-            Ok((frozen, region)) if meets_minimum(settings.mode, &region) => {
+            Ok((frozen, region)) if meets_minimum(settings.format, &region) => {
                 self.finish_image(&frozen.crop(&region), settings)
             }
             Ok(_) => CaptureOutcome::canceled(),
@@ -85,21 +85,27 @@ impl CaptureCoordinator {
     }
 
     fn capture_recording(&mut self, settings: &AppSettings) -> CaptureOutcome {
-        let video = settings.mode == CaptureMode::Video;
-        let region = match self.select_on_frozen(settings) {
-            Ok((_, region)) if video => region.even_floor(),
-            Ok((_, region)) => region,
-            Err(outcome) => return outcome,
+        let video = settings.format == OutputFormat::Mp4;
+        let monitors = self.monitors.monitors();
+        if monitors.is_empty() {
+            return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
+        }
+        let picked = if settings.area == CaptureArea::FullScreen {
+            monitor_from_point(&monitors, self.cursor.position()).bounds
+        } else {
+            match self.select_on_frozen(settings) {
+                Ok((_, region)) => region,
+                Err(outcome) => return outcome,
+            }
         };
-        if !meets_minimum(settings.mode, &region) {
+        // A maximized window reaches past the screen edges; record only what is visible.
+        let region = picked.clamp_to(&self.monitors.virtual_screen());
+        let region = if video { region.even_floor() } else { region };
+        if !meets_minimum(settings.format, &region) {
             return CaptureOutcome::canceled();
         }
         if let Err(err) = ensure_folder(&settings.save_folder) {
             return CaptureOutcome::failed(err, false);
-        }
-        let monitors = self.monitors.monitors();
-        if monitors.is_empty() {
-            return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
         }
         let monitor = monitor_from_point(&monitors, region.center()).clone();
         let (ext, fps, max_seconds, kind) = if video {
@@ -169,7 +175,7 @@ impl CaptureCoordinator {
 #[cfg(test)]
 mod tests {
     use crate::capture::{CaptureOutcomeKind, WindowCandidate};
-    use crate::geometry::{CaptureMode, PixelPoint, PixelRect};
+    use crate::geometry::{CaptureArea, OutputFormat, PixelPoint, PixelRect};
     use crate::recording::RecordingOutcome;
     use crate::settings::AppSettings;
     use crate::testing::CoordinatorHarness;
@@ -180,10 +186,10 @@ mod tests {
     fn video_region_is_floored_to_even_and_saved_as_mp4() {
         let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 101, 65)))
             .recording(RecordingOutcome::Saved);
-        let o = h.run(AppSettings { mode: CaptureMode::Video, ..h.settings() });
+        let o = h.run(AppSettings { format: OutputFormat::Mp4, ..h.settings() });
         assert_eq!(o.kind, CaptureOutcomeKind::Saved);
         let ev = h.events();
-        assert!(ev.contains(&"select:Video:frozen=true:windows=0".to_string()));
+        assert!(ev.contains(&"select:Rectangle:frozen=true:windows=0".to_string()));
         assert!(ev.contains(&"sink:Mp4:100x64".to_string()));
         assert!(ev.contains(&"record:0,0,100,64:mp4:fps=30:max=300".to_string()));
         assert!(ev.iter().any(|e| e.starts_with("clip:file:") && e.ends_with(".mp4")));
@@ -194,7 +200,7 @@ mod tests {
     fn gif_below_minimum_cancels_without_sink() {
         let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 10, 10)))
             .recording(RecordingOutcome::Saved);
-        let o = h.run(AppSettings { mode: CaptureMode::Gif, ..h.settings() });
+        let o = h.run(AppSettings { format: OutputFormat::Gif, ..h.settings() });
         assert_eq!(o.kind, CaptureOutcomeKind::Canceled);
         assert!(!h.events().iter().any(|e| e.starts_with("sink")));
     }
@@ -204,7 +210,7 @@ mod tests {
         let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
             .recording(RecordingOutcome::Saved);
         h.run(AppSettings {
-            mode: CaptureMode::Gif,
+            format: OutputFormat::Gif,
             gif_fps: 15,
             gif_max_seconds: 7,
             gif_max_long_side: 640,
@@ -218,7 +224,7 @@ mod tests {
     fn canceled_recording_leaves_clipboard_untouched() {
         let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
             .recording(RecordingOutcome::Canceled);
-        let o = h.run(AppSettings { mode: CaptureMode::Gif, ..h.settings() });
+        let o = h.run(AppSettings { format: OutputFormat::Gif, ..h.settings() });
         assert_eq!(o.kind, CaptureOutcomeKind::Canceled);
         assert!(!h.events().iter().any(|e| e.starts_with("clip:")));
     }
@@ -276,14 +282,61 @@ mod tests {
         };
         let mut h =
             CoordinatorHarness::with_windows(Some(PixelRect::new(0, 0, 50, 50)), vec![cand]);
-        h.run(AppSettings { mode: CaptureMode::Window, ..h.settings() });
+        h.run(AppSettings { area: CaptureArea::Window, ..h.settings() });
         assert!(h.events().contains(&"select:Window:frozen=true:windows=1".to_string()));
+    }
+
+    #[test]
+    fn window_recording_selects_a_window() {
+        let cand = WindowCandidate {
+            id: 1,
+            pid: 2,
+            title: "x".into(),
+            bounds: PixelRect::new(0, 0, 200, 100),
+        };
+        let mut h =
+            CoordinatorHarness::with_windows(Some(PixelRect::new(0, 0, 200, 100)), vec![cand])
+                .recording(RecordingOutcome::Saved);
+        let o = h.run(AppSettings {
+            area: CaptureArea::Window,
+            format: OutputFormat::Gif,
+            ..h.settings()
+        });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let ev = h.events();
+        assert!(ev.contains(&"select:Window:frozen=true:windows=1".to_string()), "{ev:?}");
+        assert!(ev.contains(&"record:0,0,200,100:gif:fps=10:max=15".to_string()), "{ev:?}");
+    }
+
+    #[test]
+    fn fullscreen_recording_uses_monitor_under_cursor() {
+        let mut h = CoordinatorHarness::two_monitors_cursor_at(PixelPoint { x: -100, y: 100 })
+            .recording(RecordingOutcome::Saved);
+        let o = h.run(AppSettings {
+            area: CaptureArea::FullScreen,
+            format: OutputFormat::Mp4,
+            ..h.settings()
+        });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let ev = h.events();
+        assert!(ev.contains(&"sink:Mp4:1920x1080".to_string()), "{ev:?}");
+        assert!(ev.contains(&"record:-1920,0,1920,1080:mp4:fps=30:max=300".to_string()), "{ev:?}");
+        assert!(!ev.iter().any(|e| e.starts_with("select") || e.starts_with("grab")), "{ev:?}");
+    }
+
+    #[test]
+    fn window_recording_is_clamped_to_screen() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(-8, -8, 1937, 1097)))
+            .recording(RecordingOutcome::Saved);
+        h.run(AppSettings { area: CaptureArea::Window, format: OutputFormat::Mp4, ..h.settings() });
+        let ev = h.events();
+        assert!(ev.contains(&"record:0,0,1920,1080:mp4:fps=30:max=300".to_string()), "{ev:?}");
     }
 
     #[test]
     fn fullscreen_grabs_monitor_under_cursor() {
         let mut h = CoordinatorHarness::two_monitors_cursor_at(PixelPoint { x: -100, y: 100 });
-        h.run(AppSettings { mode: CaptureMode::FullScreen, ..h.settings() });
+        h.run(AppSettings { area: CaptureArea::FullScreen, ..h.settings() });
         assert!(h.events().contains(&"grab:-1920,0,1920,1080".to_string()));
         assert!(!h.events().iter().any(|e| e.starts_with("select")));
     }

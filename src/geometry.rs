@@ -91,28 +91,41 @@ pub struct MonitorInfo {
     pub scale: f64,
 }
 
+/// What part of the screen a capture takes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CaptureMode {
+pub enum CaptureArea {
     #[default]
     Rectangle,
     Window,
     FullScreen,
-    Video,
+}
+
+/// What a capture produces.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OutputFormat {
+    #[default]
+    Png,
+    Mp4,
     Gif,
 }
 
-pub fn minimum_size(mode: CaptureMode) -> PixelSize {
-    let (width, height) = match mode {
-        CaptureMode::Rectangle | CaptureMode::Window => (2, 2),
-        CaptureMode::FullScreen => (1, 1),
-        CaptureMode::Video => (64, 64),
-        CaptureMode::Gif => (16, 16),
+impl OutputFormat {
+    pub fn is_recording(self) -> bool {
+        self != OutputFormat::Png
+    }
+}
+
+pub fn minimum_size(format: OutputFormat) -> PixelSize {
+    let (width, height) = match format {
+        OutputFormat::Png => (2, 2),
+        OutputFormat::Mp4 => (64, 64),
+        OutputFormat::Gif => (16, 16),
     };
     PixelSize { width, height }
 }
 
-pub fn meets_minimum(mode: CaptureMode, rect: &PixelRect) -> bool {
-    let min = minimum_size(mode);
+pub fn meets_minimum(format: OutputFormat, rect: &PixelRect) -> bool {
+    let min = minimum_size(format);
     rect.width >= min.width && rect.height >= min.height
 }
 
@@ -168,18 +181,17 @@ mod tests {
     }
 
     #[test]
-    fn meets_minimum_per_mode() {
+    fn meets_minimum_per_format() {
         let cases = [
-            (CaptureMode::Rectangle, 1, 1, false),
-            (CaptureMode::Rectangle, 2, 2, true),
-            (CaptureMode::Window, 2, 2, true),
-            (CaptureMode::Video, 63, 200, false),
-            (CaptureMode::Video, 64, 64, true),
-            (CaptureMode::Gif, 16, 15, false),
-            (CaptureMode::Gif, 16, 16, true),
+            (OutputFormat::Png, 1, 1, false),
+            (OutputFormat::Png, 2, 2, true),
+            (OutputFormat::Mp4, 63, 200, false),
+            (OutputFormat::Mp4, 64, 64, true),
+            (OutputFormat::Gif, 16, 15, false),
+            (OutputFormat::Gif, 16, 16, true),
         ];
-        for (mode, w, h, ok) in cases {
-            assert_eq!(meets_minimum(mode, &r(0, 0, w, h)), ok, "{mode:?} {w}x{h}");
+        for (format, w, h, ok) in cases {
+            assert_eq!(meets_minimum(format, &r(0, 0, w, h)), ok, "{format:?} {w}x{h}");
         }
     }
 

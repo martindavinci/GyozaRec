@@ -147,7 +147,7 @@ impl App {
         let texts = self.state.texts();
         if action == ToolbarAction::ModeMenu {
             for (i, mode) in MODES.iter().enumerate() {
-                let checked = *mode == self.state.settings.mode;
+                let checked = *mode == (self.state.settings.area, self.state.settings.format);
                 let label = mode_label(*mode, texts);
                 let _ = menu.append(&CheckMenuItem::with_id(
                     format!("mode:{i}"),
@@ -222,7 +222,7 @@ impl App {
         }
         if let Some(i) = id.strip_prefix("mode:").and_then(|v| v.parse::<usize>().ok()) {
             if let Some(mode) = MODES.get(i) {
-                self.state.settings.mode = *mode;
+                (self.state.settings.area, self.state.settings.format) = *mode;
             }
         } else if let Some(s) = id.strip_prefix("delay:").and_then(|v| v.parse::<u32>().ok()) {
             self.state.settings.delay_seconds = s;

@@ -87,7 +87,7 @@ impl OptionsForm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::CaptureMode;
+    use crate::geometry::CaptureArea;
     use crate::settings::AppSettings;
     use std::path::PathBuf;
 
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn to_settings_applies_edits_and_keeps_mode_and_delay() {
         let base = AppSettings {
-            mode: CaptureMode::Window,
+            area: CaptureArea::Window,
             delay_seconds: 2,
             ..AppSettings::defaults(&cap())
         };
@@ -126,8 +126,8 @@ mod tests {
         f.save_folder = PathBuf::from(r"D:\Shots");
         let s = f.to_settings(&base, &cap());
         assert_eq!(
-            (s.gif_fps, s.copy_to_clipboard, s.save_folder.clone(), s.mode, s.delay_seconds),
-            (20, false, PathBuf::from(r"D:\Shots"), CaptureMode::Window, 2)
+            (s.gif_fps, s.copy_to_clipboard, s.save_folder.clone(), s.area, s.delay_seconds),
+            (20, false, PathBuf::from(r"D:\Shots"), CaptureArea::Window, 2)
         );
     }
 

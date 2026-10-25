@@ -44,7 +44,10 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let mut widgets = layout_row(
         vec![
             (ID_CAPTURE, button(texts.capture, false)),
-            (ID_MODE, button(mode_label(state.settings.mode, texts), true)),
+            (
+                ID_MODE,
+                button(mode_label((state.settings.area, state.settings.format), texts), true),
+            ),
             (ID_DELAY, button(texts.delay, true)),
             (ID_OPTIONS, button(texts.options, false)),
         ],

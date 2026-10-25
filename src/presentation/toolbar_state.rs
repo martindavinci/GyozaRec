@@ -2,24 +2,24 @@
 
 use crate::capture::{CaptureOutcome, CaptureOutcomeKind};
 use crate::error::{Failure, UserError};
-use crate::geometry::CaptureMode;
+use crate::geometry::{CaptureArea, OutputFormat};
 use crate::i18n::{Language, Texts};
 use crate::settings::AppSettings;
 use std::path::PathBuf;
 
 /// Modes in menu order; `Texts::modes` uses the same order.
-pub const MODES: [CaptureMode; 5] = [
-    CaptureMode::Rectangle,
-    CaptureMode::Window,
-    CaptureMode::FullScreen,
-    CaptureMode::Video,
-    CaptureMode::Gif,
+pub const MODES: [(CaptureArea, OutputFormat); 5] = [
+    (CaptureArea::Rectangle, OutputFormat::Png),
+    (CaptureArea::Window, OutputFormat::Png),
+    (CaptureArea::FullScreen, OutputFormat::Png),
+    (CaptureArea::Rectangle, OutputFormat::Mp4),
+    (CaptureArea::Rectangle, OutputFormat::Gif),
 ];
 
 /// Delay choices in seconds; `Texts::delays` uses the same order.
 pub const DELAYS: [u32; 6] = [0, 1, 2, 3, 4, 5];
 
-pub fn mode_label(mode: CaptureMode, texts: &Texts) -> &'static str {
+pub fn mode_label(mode: (CaptureArea, OutputFormat), texts: &Texts) -> &'static str {
     let index = MODES.iter().position(|m| *m == mode).unwrap_or(0);
     texts.modes[index]
 }
@@ -150,8 +150,8 @@ mod tests {
             labels,
             ["Rettangolo", "Finestra", "Schermo intero", "Video MP4", "GIF animata"]
         );
-        assert_eq!(mode_label(CaptureMode::Gif, Language::En.texts()), "Animated GIF");
-        assert_eq!(mode_label(CaptureMode::Window, Language::Ja.texts()), "ウィンドウ");
+        assert_eq!(mode_label(MODES[4], Language::En.texts()), "Animated GIF");
+        assert_eq!(mode_label(MODES[1], Language::Ja.texts()), "ウィンドウ");
         assert_eq!(DELAYS, [0, 1, 2, 3, 4, 5]);
         assert_eq!(delay_label(5, Language::En.texts()), "5 seconds");
         assert_eq!(delay_label(0, it), "Nessun ritardo");

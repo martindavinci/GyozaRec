@@ -1,6 +1,6 @@
 //! User settings persisted as JSON.
 
-use crate::geometry::CaptureMode;
+use crate::geometry::{CaptureArea, OutputFormat};
 use crate::paths::AppPaths;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
-    pub mode: CaptureMode,
+    pub area: CaptureArea,
+    pub format: OutputFormat,
     pub delay_seconds: u32,
     pub save_folder: PathBuf,
     pub copy_to_clipboard: bool,
@@ -30,7 +31,8 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            mode: CaptureMode::Rectangle,
+            area: CaptureArea::Rectangle,
+            format: OutputFormat::Png,
             delay_seconds: 0,
             save_folder: PathBuf::new(),
             copy_to_clipboard: true,
@@ -104,7 +106,11 @@ impl SettingsStore {
     pub fn load(&self) -> AppSettings {
         fs::read_to_string(&self.path)
             .ok()
-            .and_then(|text| serde_json::from_str::<AppSettings>(&text).ok())
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .and_then(|mut value| {
+                migrate_legacy_mode(&mut value);
+                serde_json::from_value::<AppSettings>(value).ok()
+            })
             .unwrap_or_default()
             .normalized(&self.capture_dir)
     }
@@ -120,10 +126,29 @@ impl SettingsStore {
     }
 }
 
+/// Files written before area and format were separate have a single `mode`
+/// (`Rectangle`, `Window`, `FullScreen`, `Video` or `Gif`).
+fn migrate_legacy_mode(value: &mut serde_json::Value) {
+    let Some(object) = value.as_object_mut() else { return };
+    let Some(mode) = object.remove("mode") else { return };
+    if object.contains_key("area") || object.contains_key("format") {
+        return;
+    }
+    let (area, format) = match mode.as_str() {
+        Some("Window") => ("Window", "Png"),
+        Some("FullScreen") => ("FullScreen", "Png"),
+        Some("Video") => ("Rectangle", "Mp4"),
+        Some("Gif") => ("Rectangle", "Gif"),
+        _ => ("Rectangle", "Png"),
+    };
+    object.insert("area".into(), area.into());
+    object.insert("format".into(), format.into());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::CaptureMode;
+    use crate::geometry::{CaptureArea, OutputFormat};
     use std::fs;
     use std::path::PathBuf;
     use tempfile::tempdir;
@@ -154,7 +179,8 @@ mod tests {
         let d = tempdir().unwrap();
         let st = SettingsStore::new(d.path().join("sub/s.json"), cap());
         let s = AppSettings {
-            mode: CaptureMode::Gif,
+            area: CaptureArea::Window,
+            format: OutputFormat::Gif,
             delay_seconds: 3,
             gif_fps: 15,
             ..AppSettings::defaults(&cap())
@@ -167,11 +193,11 @@ mod tests {
     fn load_partial_json_fills_missing_with_defaults() {
         let d = tempdir().unwrap();
         let p = d.path().join("s.json");
-        fs::write(&p, r#"{ "mode": "Window" }"#).unwrap();
+        fs::write(&p, r#"{ "area": "Window" }"#).unwrap();
         let s = SettingsStore::new(p, cap()).load();
         assert_eq!(
-            (s.mode, s.copy_to_clipboard, s.gif_fps, s.save_folder),
-            (CaptureMode::Window, true, 10, cap())
+            (s.area, s.format, s.copy_to_clipboard, s.gif_fps, s.save_folder),
+            (CaptureArea::Window, OutputFormat::Png, true, 10, cap())
         );
     }
 
@@ -193,13 +219,45 @@ mod tests {
     }
 
     #[test]
-    fn mode_is_serialized_as_string() {
+    fn area_and_format_are_serialized_as_strings_without_mode() {
         let d = tempdir().unwrap();
         let p = d.path().join("s.json");
-        SettingsStore::new(p.clone(), cap())
-            .save(&AppSettings { mode: CaptureMode::Gif, ..AppSettings::defaults(&cap()) })
-            .unwrap();
-        assert!(fs::read_to_string(p).unwrap().contains(r#""mode": "Gif""#));
+        let s = AppSettings {
+            area: CaptureArea::FullScreen,
+            format: OutputFormat::Gif,
+            ..AppSettings::defaults(&cap())
+        };
+        SettingsStore::new(p.clone(), cap()).save(&s).unwrap();
+        let text = fs::read_to_string(p).unwrap();
+        assert!(text.contains(r#""area": "FullScreen""#) && text.contains(r#""format": "Gif""#));
+        assert!(!text.contains(r#""mode""#), "{text}");
+    }
+
+    #[test]
+    fn legacy_mode_is_migrated_to_area_and_format() {
+        let cases = [
+            ("Rectangle", CaptureArea::Rectangle, OutputFormat::Png),
+            ("Window", CaptureArea::Window, OutputFormat::Png),
+            ("FullScreen", CaptureArea::FullScreen, OutputFormat::Png),
+            ("Video", CaptureArea::Rectangle, OutputFormat::Mp4),
+            ("Gif", CaptureArea::Rectangle, OutputFormat::Gif),
+        ];
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        for (mode, area, format) in cases {
+            fs::write(&p, format!(r#"{{ "mode": "{mode}", "gif_fps": 15 }}"#)).unwrap();
+            let s = SettingsStore::new(p.clone(), cap()).load();
+            assert_eq!((s.area, s.format, s.gif_fps), (area, format, 15), "{mode}");
+        }
+    }
+
+    #[test]
+    fn new_fields_win_over_a_leftover_mode() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "mode": "Video", "area": "Window", "format": "Png" }"#).unwrap();
+        let s = SettingsStore::new(p, cap()).load();
+        assert_eq!((s.area, s.format), (CaptureArea::Window, OutputFormat::Png));
     }
 
     #[test]

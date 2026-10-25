@@ -4,7 +4,7 @@ mod coordinator;
 
 pub use coordinator::{CaptureCoordinator, HIDE_SETTLE_DELAY, OVERLAY_CLOSE_SETTLE};
 
-use crate::geometry::{CaptureMode, MonitorInfo, PixelPoint, PixelRect, PixelSize};
+use crate::geometry::{CaptureArea, MonitorInfo, PixelPoint, PixelRect, PixelSize};
 use crate::pixels::PixelBuffer;
 use crate::recording::{FrameSink, LoopConfig, RecordingResult};
 use std::path::{Path, PathBuf};
@@ -43,7 +43,7 @@ pub trait RecordingUi: Send {
 /// What the selection UI needs; owned so it can cross to the UI thread.
 #[derive(Clone, Debug)]
 pub struct SelectionRequest {
-    pub mode: CaptureMode,
+    pub area: CaptureArea,
     pub frozen: Option<Arc<PixelBuffer>>,
     pub windows: Vec<WindowCandidate>,
     pub monitors: Vec<MonitorInfo>,

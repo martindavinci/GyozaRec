@@ -151,13 +151,13 @@ impl CaptureThread {
 mod tests {
     use super::*;
     use crate::capture::{CaptureOutcomeKind, SelectionRequest, SelectionUi};
-    use crate::geometry::{CaptureMode, PixelRect};
+    use crate::geometry::{CaptureArea, PixelRect};
     use crate::testing::{CoordinatorHarness, FakeUiSender};
     use std::time::Duration;
 
     fn req() -> SelectionRequest {
         SelectionRequest {
-            mode: CaptureMode::Rectangle,
+            area: CaptureArea::Rectangle,
             frozen: None,
             windows: Vec::new(),
             monitors: Vec::new(),

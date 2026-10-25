@@ -30,6 +30,7 @@ pub(super) const TEXTS: Texts = Texts {
     tray_exit: "終了",
     quick_actions: ["画像をキャプチャ", "全画面をキャプチャ", "録画", "全画面を録画"],
     discard_question: "この録画を破棄しますか？",
+    pick_monitor_hint: "キャプチャする画面をクリック · Esc でキャンセル",
     jpeg_quality: "JPG の画質",
     gif_fps: "GIF: フレーム/秒",
     gif_max_seconds: "GIF: 最大の長さ (秒)",

@@ -30,6 +30,7 @@ pub(super) const TEXTS: Texts = Texts {
     tray_exit: "Sair",
     quick_actions: ["Capturar imagem", "Capturar tela inteira", "Gravar", "Gravar tela inteira"],
     discard_question: "Descartar esta gravação?",
+    pick_monitor_hint: "Clique na tela que deseja capturar · Esc para cancelar",
     jpeg_quality: "Qualidade JPG",
     gif_fps: "GIF: quadros por segundo",
     gif_max_seconds: "GIF: duração máxima (s)",

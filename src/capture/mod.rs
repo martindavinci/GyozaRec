@@ -163,6 +163,11 @@ pub fn window_at(z_ordered: &[WindowCandidate], p: PixelPoint) -> Option<&Window
     z_ordered.iter().find(|w| w.bounds.contains(p))
 }
 
+/// The monitor containing `p`, if any (monitors may leave gaps).
+pub fn monitor_at(monitors: &[PixelRect], p: PixelPoint) -> Option<PixelRect> {
+    monitors.iter().find(|m| m.contains(p)).copied()
+}
+
 /// Click-through (`WS_EX_TRANSPARENT`) and cloaked windows are invisible to
 /// the user, so they are never offered as a pick.
 pub fn is_capturable(ex_style: u32, cloaked: bool) -> bool {
@@ -253,6 +258,14 @@ mod tests {
         assert!(is_capturable(WS_EX_LAYERED, false));
         assert!(!is_capturable(WS_EX_TRANSPARENT | WS_EX_LAYERED, false));
         assert!(!is_capturable(0, true));
+    }
+
+    #[test]
+    fn monitor_at_handles_negative_origins_and_gaps() {
+        let monitors = [PixelRect::new(-1920, 0, 1920, 1080), PixelRect::new(0, 200, 2560, 1440)];
+        assert_eq!(monitor_at(&monitors, PixelPoint { x: -1, y: 5 }), Some(monitors[0]));
+        assert_eq!(monitor_at(&monitors, PixelPoint { x: 10, y: 300 }), Some(monitors[1]));
+        assert_eq!(monitor_at(&monitors, PixelPoint { x: 10, y: 100 }), None, "gap above B");
     }
 
     #[test]

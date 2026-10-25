@@ -384,6 +384,11 @@ impl CoordinatorHarness {
 
     /// A (0,0,1920,1080) at scale 1.0 and B (-1920,0,1920,1080) at scale 1.5.
     pub fn two_monitors_cursor_at(cursor: PixelPoint) -> Self {
+        Self::two_monitors_with_selection(cursor, None)
+    }
+
+    /// Monitor A at the origin, B to its left; the selection answers `selection`.
+    pub fn two_monitors_with_selection(cursor: PixelPoint, selection: Option<PixelRect>) -> Self {
         let a = MonitorInfo {
             device_name: "A".into(),
             bounds: PixelRect::new(0, 0, 1920, 1080),
@@ -400,7 +405,7 @@ impl CoordinatorHarness {
             monitors: vec![a, b],
             virtual_screen: PixelRect::new(-1920, 0, 3840, 1080),
         };
-        Self::build(None, monitors, cursor, Vec::new())
+        Self::build(selection, monitors, cursor, Vec::new())
     }
 
     /// Makes the fake recording UI answer with `outcome`.

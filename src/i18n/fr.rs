@@ -35,6 +35,7 @@ pub(super) const TEXTS: Texts = Texts {
         "Enregistrer tout l'écran",
     ],
     discard_question: "Supprimer cet enregistrement ?",
+    pick_monitor_hint: "Cliquez sur l'écran à capturer · Échap pour annuler",
     jpeg_quality: "Qualité JPG",
     gif_fps: "GIF : images par seconde",
     gif_max_seconds: "GIF : durée maximale (s)",

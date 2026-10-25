@@ -37,6 +37,7 @@ pub(super) const TEXTS: Texts = Texts {
     tray_exit: "Beenden",
     quick_actions: ["Bild aufnehmen", "Vollbild aufnehmen", "Aufzeichnen", "Vollbild aufzeichnen"],
     discard_question: "Diese Aufzeichnung verwerfen?",
+    pick_monitor_hint: "Klicke auf den Bildschirm, der aufgenommen werden soll · Esc zum Abbrechen",
     jpeg_quality: "JPG-Qualität",
     gif_fps: "GIF: Bilder pro Sekunde",
     gif_max_seconds: "GIF: maximale Länge (s)",

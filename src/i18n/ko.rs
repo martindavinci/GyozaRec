@@ -30,6 +30,7 @@ pub(super) const TEXTS: Texts = Texts {
     tray_exit: "종료",
     quick_actions: ["이미지 캡처", "전체 화면 캡처", "녹화", "전체 화면 녹화"],
     discard_question: "이 녹화를 삭제할까요?",
+    pick_monitor_hint: "캡처할 화면을 클릭하세요 · Esc로 취소",
     jpeg_quality: "JPG 품질",
     gif_fps: "GIF: 초당 프레임 수",
     gif_max_seconds: "GIF: 최대 길이 (초)",

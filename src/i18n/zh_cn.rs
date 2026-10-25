@@ -30,6 +30,7 @@ pub(super) const TEXTS: Texts = Texts {
     tray_exit: "退出",
     quick_actions: ["捕获图片", "捕获全屏", "录制", "录制全屏"],
     discard_question: "放弃这段录制？",
+    pick_monitor_hint: "点击要捕获的屏幕 · 按 Esc 取消",
     jpeg_quality: "JPG 质量",
     gif_fps: "GIF：每秒帧数",
     gif_max_seconds: "GIF：最长时长（秒）",

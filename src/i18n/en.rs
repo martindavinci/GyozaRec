@@ -30,6 +30,7 @@ pub(super) const TEXTS: Texts = Texts {
     tray_exit: "Exit",
     quick_actions: ["Capture image", "Capture full screen", "Record", "Record full screen"],
     discard_question: "Discard this recording?",
+    pick_monitor_hint: "Click the screen to capture · Esc to cancel",
     jpeg_quality: "JPG quality",
     gif_fps: "GIF: frames per second",
     gif_max_seconds: "GIF: maximum length (s)",

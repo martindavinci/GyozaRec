@@ -35,6 +35,7 @@ pub(super) const TEXTS: Texts = Texts {
         "Grabar pantalla completa",
     ],
     discard_question: "¿Descartar esta grabación?",
+    pick_monitor_hint: "Haz clic en la pantalla que quieres capturar · Esc para cancelar",
     jpeg_quality: "Calidad JPG",
     gif_fps: "GIF: fotogramas por segundo",
     gif_max_seconds: "GIF: duración máxima (s)",

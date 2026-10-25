@@ -1,7 +1,7 @@
 //! Full-screen selection overlays, one borderless window per monitor.
 
 use super::surface::WindowSurface;
-use gyozarec::capture::{SelectionRequest, WindowCandidate, hovered_window};
+use gyozarec::capture::{SelectionRequest, WindowCandidate, hovered_window, monitor_at};
 use gyozarec::geometry::{CaptureArea, MonitorInfo, PixelPoint, PixelRect, PixelSize, local_point};
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::render::OverlayCache;
@@ -27,6 +27,8 @@ struct OverlayWindow {
     /// Shown selection, local pixels.
     selection: Option<PixelRect>,
     shown: bool,
+    /// Instruction drawn at the top (monitor pick).
+    hint: Option<String>,
 }
 
 impl OverlayWindow {
@@ -47,6 +49,9 @@ impl OverlayWindow {
         if let Some(sel) = self.selection.filter(|s| !s.is_empty()) {
             self.draw_label(sel, size, fonts);
         }
+        if let Some(hint) = self.hint.clone() {
+            self.draw_hint(&hint, size, fonts);
+        }
         self.surface.present(&self.buffer);
         if !self.shown {
             // Hidden windows get no WM_PAINT: show now, then paint again.
@@ -54,6 +59,23 @@ impl OverlayWindow {
             self.surface.window.set_visible(true);
             self.surface.window.request_redraw();
         }
+    }
+
+    /// A short instruction centred at the top of the monitor.
+    fn draw_hint(&mut self, text: &str, size: PixelSize, fonts: &Fonts) {
+        let scale = self.monitor.scale as f32;
+        let (tw, th) = measure_text(fonts, text, LABEL_PX, false);
+        let (pad_x, pad_y) = (10.0, 6.0);
+        let label = PixelSize {
+            width: ((tw + 2.0 * pad_x) * scale).ceil() as i32,
+            height: ((th + 2.0 * pad_y) * scale).ceil() as i32,
+        };
+        let mut painter = Painter::new(label, scale);
+        painter.clear(Color(0x202020));
+        painter.text(fonts, text, pad_x, pad_y, LABEL_PX, Color(0xFFFFFF), false);
+        let x = ((size.width - label.width) / 2).max(0);
+        let y = (24.0 * scale) as i32;
+        painter.blit_into(&mut self.buffer, size.width, PixelPoint { x, y });
     }
 
     fn draw_label(&mut self, sel: PixelRect, size: PixelSize, fonts: &Fonts) {
@@ -78,6 +100,21 @@ impl OverlayWindow {
     }
 }
 
+/// What a hover highlights: the window under the point (Window mode) or the
+/// whole monitor (full-screen monitor pick); nothing while dragging a rectangle.
+fn initial_hover(
+    area: CaptureArea,
+    candidates: &[WindowCandidate],
+    monitors: &[PixelRect],
+    at: PixelPoint,
+) -> Option<PixelRect> {
+    match area {
+        CaptureArea::Window => hovered_window(candidates, monitors, at),
+        CaptureArea::FullScreen => monitor_at(monitors, at),
+        CaptureArea::Rectangle => None,
+    }
+}
+
 pub struct OverlaySession {
     windows: Vec<OverlayWindow>,
     area: CaptureArea,
@@ -93,6 +130,7 @@ impl OverlaySession {
         request: SelectionRequest,
         reply: Sender<Option<PixelRect>>,
         cursor: PixelPoint,
+        hint: Option<&str>,
         fonts: &Fonts,
     ) -> OverlaySession {
         let empty = PixelBuffer::solid(PixelRect::default(), 0, 0, 0);
@@ -130,6 +168,7 @@ impl OverlaySession {
                 drag_start: None,
                 selection: None,
                 shown: false,
+                hint: hint.map(str::to_string),
             });
         }
         let mut session =
@@ -159,7 +198,7 @@ impl OverlaySession {
             OverlaySession { windows, area, candidates, reply: Some(reply), hovered: None };
         if session.windows.is_empty() {
             session.finish(None);
-        } else if area == CaptureArea::Window {
+        } else if area != CaptureArea::Rectangle {
             session.update_hover(cursor);
         }
         session
@@ -168,7 +207,7 @@ impl OverlaySession {
     /// Window mode: highlights the window under `screen` on every monitor.
     fn update_hover(&mut self, screen: PixelPoint) {
         let monitors: Vec<PixelRect> = self.windows.iter().map(|o| o.monitor.bounds).collect();
-        let hovered = hovered_window(&self.candidates, &monitors, screen);
+        let hovered = initial_hover(self.area, &self.candidates, &monitors, screen);
         if hovered == self.hovered {
             return;
         }
@@ -241,7 +280,7 @@ impl OverlaySession {
     fn pointer_moved(&mut self, index: usize, p: PixelPoint) {
         let w = &mut self.windows[index];
         w.cursor = p;
-        if self.area == CaptureArea::Window {
+        if self.area != CaptureArea::Rectangle {
             let screen = w.to_screen(p);
             self.update_hover(screen);
         } else if let Some(start) = w.drag_start {
@@ -254,7 +293,7 @@ impl OverlaySession {
     }
 
     fn left_button(&mut self, index: usize, pressed: bool) {
-        if self.area == CaptureArea::Window {
+        if self.area != CaptureArea::Rectangle {
             if !pressed {
                 let pick = self.hovered.unwrap_or_default();
                 self.finish(Some(pick));
@@ -277,6 +316,28 @@ impl OverlaySession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initial_hover_follows_the_cursor() {
+        let monitors = [PixelRect::new(-1920, 0, 1920, 1080), PixelRect::new(0, 0, 1920, 1080)];
+        let at = PixelPoint { x: -5, y: 5 };
+        assert_eq!(initial_hover(CaptureArea::FullScreen, &[], &monitors, at), Some(monitors[0]));
+        assert_eq!(initial_hover(CaptureArea::Rectangle, &[], &monitors, at), None);
+    }
+
+    #[test]
+    fn monitor_pick_without_windows_replies_none() {
+        let (reply, answer) = std::sync::mpsc::channel();
+        let session = OverlaySession::new(
+            Vec::new(),
+            CaptureArea::FullScreen,
+            Vec::new(),
+            reply,
+            PixelPoint::default(),
+        );
+        assert!(session.is_finished());
+        assert_eq!(answer.try_recv(), Ok(None));
+    }
 
     #[test]
     fn overlay_session_without_windows_replies_none() {

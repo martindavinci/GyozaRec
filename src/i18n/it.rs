@@ -35,6 +35,7 @@ pub(super) const TEXTS: Texts = Texts {
         "Registra schermo intero",
     ],
     discard_question: "Scartare questa registrazione?",
+    pick_monitor_hint: "Fai clic sullo schermo da catturare · Esc per annullare",
     jpeg_quality: "Qualità JPG",
     gif_fps: "GIF: fotogrammi al secondo",
     gif_max_seconds: "GIF: durata massima (s)",

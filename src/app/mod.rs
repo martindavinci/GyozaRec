@@ -413,7 +413,10 @@ impl App {
                     return;
                 }
                 let cursor = Win32Cursor.position();
-                let session = OverlaySession::open(event_loop, request, reply, cursor, &self.fonts);
+                let hint = (request.area == gyozarec::geometry::CaptureArea::FullScreen)
+                    .then_some(self.state.texts().pick_monitor_hint);
+                let session =
+                    OverlaySession::open(event_loop, request, reply, cursor, hint, &self.fonts);
                 // A session that could not open any window has already replied.
                 self.overlay = (!session.is_finished()).then_some(session);
             }

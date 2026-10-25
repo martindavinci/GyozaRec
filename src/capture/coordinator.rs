@@ -93,8 +93,8 @@ impl CaptureCoordinator {
         if monitors.is_empty() {
             return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
         }
-        let picked = if settings.area == CaptureArea::FullScreen {
-            monitor_from_point(&monitors, self.cursor.position()).bounds
+        let picked = if settings.area == CaptureArea::FullScreen && monitors.len() == 1 {
+            monitors[0].bounds
         } else {
             match self.select_on_frozen(settings) {
                 Ok((_, region)) => region,
@@ -156,6 +156,13 @@ impl CaptureCoordinator {
         let monitors = self.monitors.monitors();
         if monitors.is_empty() {
             return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
+        }
+        if monitors.len() > 1 {
+            // Several screens: the user clicks the one to capture.
+            return match self.select_on_frozen(settings) {
+                Ok((frozen, region)) => self.finish_image(&frozen.crop(&region), settings),
+                Err(outcome) => outcome,
+            };
         }
         let monitor = monitor_from_point(&monitors, self.cursor.position());
         match self.grabber.grab(monitor.bounds, false) {
@@ -393,9 +400,13 @@ mod tests {
     }
 
     #[test]
-    fn fullscreen_recording_uses_monitor_under_cursor() {
-        let mut h = CoordinatorHarness::two_monitors_cursor_at(PixelPoint { x: -100, y: 100 })
-            .recording(RecordingOutcome::Saved);
+    fn fullscreen_recording_with_two_monitors_asks_which() {
+        let left = PixelRect::new(-1920, 0, 1920, 1080);
+        let mut h = CoordinatorHarness::two_monitors_with_selection(
+            PixelPoint { x: 10, y: 10 },
+            Some(left),
+        )
+        .recording(RecordingOutcome::Saved);
         let o = h.run(AppSettings {
             area: CaptureArea::FullScreen,
             format: OutputFormat::Mp4,
@@ -403,8 +414,20 @@ mod tests {
         });
         assert_eq!(o.kind, CaptureOutcomeKind::Saved);
         let ev = h.events();
-        assert!(ev.contains(&"sink:Mp4:1920x1080".to_string()), "{ev:?}");
+        assert!(ev.contains(&"select:FullScreen:frozen=true:windows=0".to_string()), "{ev:?}");
         assert!(ev.contains(&"record:-1920,0,1920,1080:mp4:fps=30:max=300".to_string()), "{ev:?}");
+    }
+
+    #[test]
+    fn fullscreen_recording_with_one_monitor_uses_it() {
+        let mut h = CoordinatorHarness::rect(None).recording(RecordingOutcome::Saved);
+        h.run(AppSettings {
+            area: CaptureArea::FullScreen,
+            format: OutputFormat::Mp4,
+            ..h.settings()
+        });
+        let ev = h.events();
+        assert!(ev.contains(&"record:0,0,1920,1080:mp4:fps=30:max=300".to_string()), "{ev:?}");
         assert!(!ev.iter().any(|e| e.starts_with("select") || e.starts_with("grab")), "{ev:?}");
     }
 
@@ -418,11 +441,36 @@ mod tests {
     }
 
     #[test]
-    fn fullscreen_grabs_monitor_under_cursor() {
-        let mut h = CoordinatorHarness::two_monitors_cursor_at(PixelPoint { x: -100, y: 100 });
-        h.run(AppSettings { area: CaptureArea::FullScreen, ..h.settings() });
-        assert!(h.events().contains(&"grab:-1920,0,1920,1080".to_string()));
+    fn fullscreen_with_one_monitor_does_not_ask() {
+        let mut h = CoordinatorHarness::rect(None);
+        let o = h.run(AppSettings { area: CaptureArea::FullScreen, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        assert!(h.events().contains(&"grab:0,0,1920,1080".to_string()));
         assert!(!h.events().iter().any(|e| e.starts_with("select")));
+    }
+
+    #[test]
+    fn fullscreen_with_two_monitors_asks_which() {
+        let left = PixelRect::new(-1920, 0, 1920, 1080);
+        let mut h = CoordinatorHarness::two_monitors_with_selection(
+            PixelPoint { x: 10, y: 10 },
+            Some(left),
+        );
+        let o = h.run(AppSettings { area: CaptureArea::FullScreen, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let img = image::open(o.path.as_ref().unwrap()).unwrap();
+        assert_eq!((img.width(), img.height()), (1920, 1080));
+        let ev = h.events();
+        assert!(ev.contains(&"grab:-1920,0,3840,1080".to_string()), "{ev:?}");
+        assert!(ev.contains(&"select:FullScreen:frozen=true:windows=0".to_string()), "{ev:?}");
+        assert!(ev.contains(&"clip:image:-1920,0,1920,1080".to_string()), "{ev:?}");
+    }
+
+    #[test]
+    fn cancelled_monitor_pick_saves_nothing() {
+        let mut h = CoordinatorHarness::two_monitors_with_selection(PixelPoint::default(), None);
+        let o = h.run(AppSettings { area: CaptureArea::FullScreen, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Canceled);
     }
 
     #[test]

@@ -122,6 +122,30 @@ fn form_keys(form: &OptionsForm, id: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The keys of every line but `id`, as the form has them now.
+fn other_keys(form: &OptionsForm, lines: &[ShortcutLine], id: &str) -> Vec<(&'static str, String)> {
+    lines.iter().filter(|l| l.id != id).map(|l| (l.id, form_keys(form, l.id))).collect()
+}
+
+/// Backspace: the default keys come back, unless another line uses them.
+fn restore_default(
+    form: &mut OptionsForm,
+    lines: &[ShortcutLine],
+    id: &str,
+) -> Result<(), gyozarec::shortcuts::KeyError> {
+    let default = gyozarec::shortcuts::default_keys(id).unwrap_or_default();
+    gyozarec::shortcuts::validate(default, &other_keys(form, lines, id), |_| true)?;
+    form.shortcut_keys.remove(id);
+    Ok(())
+}
+
+/// Lines sharing keys with another line: OK waits until they differ.
+fn clashing_lines(form: &OptionsForm, lines: &[ShortcutLine]) -> Vec<&'static str> {
+    let keys: Vec<(&'static str, String)> =
+        lines.iter().map(|l| (l.id, form_keys(form, l.id))).collect();
+    gyozarec::shortcuts::conflicts(&keys)
+}
+
 fn key_error_text(e: gyozarec::shortcuts::KeyError, texts: &Texts) -> &'static str {
     use gyozarec::shortcuts::KeyError;
     match e {
@@ -482,15 +506,8 @@ impl OptionsWindow {
         match &event.logical_key {
             Key::Named(NamedKey::Escape) => {}
             Key::Named(NamedKey::Backspace) => {
-                // Back to the default, unless another line took those keys.
-                let default = gyozarec::shortcuts::default_keys(id).unwrap_or_default();
-                match gyozarec::shortcuts::validate(default, &self.others(id), |_| true) {
-                    Ok(_) => {
-                        self.form.shortcut_keys.remove(id);
-                    }
-                    Err(e) => {
-                        self.edit.errors.insert(id, key_error_text(e, self.texts));
-                    }
+                if let Err(e) = restore_default(&mut self.form, &self.shortcuts, id) {
+                    self.edit.errors.insert(id, key_error_text(e, self.texts));
                 }
             }
             _ => {
@@ -511,7 +528,7 @@ impl OptionsWindow {
                 parts.push(name);
                 match gyozarec::shortcuts::validate(
                     &parts.join("+"),
-                    &self.others(id),
+                    &other_keys(&self.form, &self.shortcuts, id),
                     super::hotkeys::parses,
                 ) {
                     Ok(keys) => {
@@ -533,20 +550,9 @@ impl OptionsWindow {
         self.rebuild();
     }
 
-    /// The keys of every other line, as the form has them now.
-    fn others(&self, id: &str) -> Vec<(&'static str, String)> {
-        self.shortcuts
-            .iter()
-            .filter(|l| l.id != id)
-            .map(|l| (l.id, form_keys(&self.form, l.id)))
-            .collect()
-    }
-
     /// OK: refused while two lines share keys.
     fn accept(&mut self) -> OptionsResult {
-        let keys: Vec<(&'static str, String)> =
-            self.shortcuts.iter().map(|l| (l.id, form_keys(&self.form, l.id))).collect();
-        let clashing = gyozarec::shortcuts::conflicts(&keys);
+        let clashing = clashing_lines(&self.form, &self.shortcuts);
         if clashing.is_empty() {
             return OptionsResult::Accepted(self.form.clone());
         }
@@ -680,6 +686,39 @@ impl OptionsWindow {
 #[cfg(test)]
 mod layout_tests {
     use super::*;
+
+    fn lines() -> Vec<ShortcutLine> {
+        let ids = ["image", "image-full", "record", "record-full", "print-screen"];
+        ids.iter()
+            .map(|id| ShortcutLine {
+                id,
+                label: "",
+                print_screen: *id == "print-screen",
+                available: true,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn backspace_restores_the_default_unless_another_line_took_it() {
+        let mut form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        form.shortcut_keys.insert("image".into(), "Ctrl+Alt+I".into());
+        form.shortcut_keys.insert("record".into(), "Ctrl+Shift+F7".into());
+        let refused = restore_default(&mut form, &lines(), "image");
+        assert_eq!(refused, Err(gyozarec::shortcuts::KeyError::Duplicate));
+        assert_eq!(form_keys(&form, "image"), "Ctrl+Alt+I", "unchanged");
+        form.shortcut_keys.remove("record");
+        assert_eq!(restore_default(&mut form, &lines(), "image"), Ok(()));
+        assert_eq!(form_keys(&form, "image"), "Ctrl+Shift+F7");
+    }
+
+    #[test]
+    fn ok_waits_while_two_lines_share_keys() {
+        let mut form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        assert!(clashing_lines(&form, &lines()).is_empty());
+        form.shortcut_keys.insert("record-full".into(), "Ctrl+Shift+F8".into());
+        assert_eq!(clashing_lines(&form, &lines()), ["image-full", "record-full"]);
+    }
 
     #[test]
     fn options_show_the_version() {

@@ -2,6 +2,21 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-10-25
+
+### Added
+- An editor that opens after every image capture (on by default): arrow, rectangle, pen, highlighter, text, pixelate and crop, with undo, redo, Save, Save as and Copy.
+- A notification with a thumbnail after each saved capture (on by default); clicking it opens the file, images in the editor.
+- "Convert a video to GIF…" in the Format menu and the notification area menu, with progress and cancel.
+- Once a day, a check for a newer release on GitHub (on by default), shown on the status line with a Download link.
+
+### Changed
+- GIFs store only what changes between frames, so mostly still recordings are much smaller.
+
+### Fixed
+- Shortcut keys refused by Windows are reported in Options instead of vanishing silently.
+- Restoring a default shortcut with Backspace, and pressing OK, no longer allow two shortcuts with the same keys.
+
 ## [0.3.0] - 2026-10-25
 
 ### Added
@@ -46,6 +61,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.4.0]: https://github.com/martindavinci/GyozaRec/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/martindavinci/GyozaRec/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/martindavinci/GyozaRec/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/martindavinci/GyozaRec/releases/tag/v0.1.0

@@ -318,6 +318,22 @@ impl SoundPlayer for FakeSound {
     }
 }
 
+/// Logs each start; hands out a silent feed when a device is "present".
+pub struct FakeAudioStarter {
+    pub available: bool,
+    pub log: EventLog,
+}
+
+impl crate::capture::AudioStarter for FakeAudioStarter {
+    fn start(&self, _clock: Arc<dyn Clock>) -> Option<crate::audio::AudioFeed> {
+        log_event(&Some(self.log.clone()), "audio:start");
+        self.available.then(|| {
+            let (_tx, rx) = std::sync::mpsc::channel();
+            crate::audio::AudioFeed::new(rx, Box::new(|| {}), false)
+        })
+    }
+}
+
 pub struct FakeRevealer {
     pub log: EventLog,
 }
@@ -372,6 +388,7 @@ impl CoordinatorHarness {
             clipboard: Box::new(FakeClipboard { log: log.clone() }),
             sound: Box::new(FakeSound { log: log.clone() }),
             revealer: Box::new(FakeRevealer { log: log.clone() }),
+            audio: Box::new(FakeAudioStarter { available: false, log: log.clone() }),
             toolbar: Box::new(FakeToolbar { log: log.clone() }),
             recording_ui: Box::new(FakeRecordingUi {
                 outcome: RecordingOutcome::Saved,
@@ -417,6 +434,13 @@ impl CoordinatorHarness {
             virtual_screen: PixelRect::new(-1920, 0, 3840, 1080),
         };
         Self::build(selection, monitors, cursor, Vec::new())
+    }
+
+    /// An audio device is present.
+    pub fn with_audio(mut self) -> Self {
+        self.coordinator.audio =
+            Box::new(FakeAudioStarter { available: true, log: self.log.clone() });
+        self
     }
 
     /// Makes the fake recording UI answer with `outcome`.

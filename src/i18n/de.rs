@@ -24,6 +24,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "In die Zwischenablage kopieren",
     play_sound: "App-Töne",
     include_cursor: "Mauszeiger einbeziehen (Video/GIF)",
+    record_system_audio: "Systemton aufzeichnen (MP4)",
     open_folder_after_recording: "Ordner nach einer Aufzeichnung öffnen",
     open_file_after_capture: "Datei nach einer Aufnahme öffnen",
     keep_in_tray: "Im Infobereich weiterlaufen",

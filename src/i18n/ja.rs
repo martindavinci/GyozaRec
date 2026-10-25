@@ -17,6 +17,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "クリップボードにコピー",
     play_sound: "アプリのサウンド",
     include_cursor: "カーソルを含める (動画/GIF)",
+    record_system_audio: "システム音声を録音 (MP4)",
     open_folder_after_recording: "録画後にフォルダーを開く",
     open_file_after_capture: "キャプチャ後にファイルを開く",
     keep_in_tray: "通知領域で実行を続ける",

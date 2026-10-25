@@ -17,6 +17,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "Copier dans le presse-papiers",
     play_sound: "Sons de l'application",
     include_cursor: "Inclure le curseur (vidéo/GIF)",
+    record_system_audio: "Enregistrer le son du système (MP4)",
     open_folder_after_recording: "Ouvrir le dossier après un enregistrement",
     open_file_after_capture: "Ouvrir le fichier après une capture",
     keep_in_tray: "Rester dans la zone de notification",

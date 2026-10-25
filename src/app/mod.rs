@@ -126,6 +126,7 @@ impl App {
                 clock: clock.clone(),
             }),
             sinks: Box::new(DefaultSinkFactory),
+            audio: Box::new(gyozarec::platform::LoopbackStarter),
             clock,
         };
         let capture = CaptureThread::spawn(coordinator, sender);

@@ -41,6 +41,7 @@ pub struct OptionsForm {
     pub copy_to_clipboard: bool,
     pub play_sound: bool,
     pub include_cursor: bool,
+    pub record_system_audio: bool,
     pub open_folder_after_recording: bool,
     pub open_file_after_capture: bool,
     pub keep_in_tray: bool,
@@ -66,6 +67,7 @@ impl OptionsForm {
             copy_to_clipboard: s.copy_to_clipboard,
             play_sound: s.play_sound,
             include_cursor: s.include_cursor,
+            record_system_audio: s.record_system_audio,
             open_folder_after_recording: s.open_folder_after_recording,
             open_file_after_capture: s.open_file_after_capture,
             keep_in_tray: s.keep_in_tray,
@@ -91,6 +93,7 @@ impl OptionsForm {
             copy_to_clipboard: self.copy_to_clipboard,
             play_sound: self.play_sound,
             include_cursor: self.include_cursor,
+            record_system_audio: self.record_system_audio,
             open_folder_after_recording: self.open_folder_after_recording,
             open_file_after_capture: self.open_file_after_capture,
             keep_in_tray: self.keep_in_tray,
@@ -182,6 +185,15 @@ mod tests {
             (s.keep_in_tray, s.shortcuts_enabled, s.print_screen_captures),
             (false, true, true)
         );
+    }
+
+    #[test]
+    fn system_audio_defaults_on_and_roundtrips() {
+        let base = AppSettings::defaults(&cap());
+        let mut f = OptionsForm::from_settings(&base);
+        assert!(f.record_system_audio);
+        f.record_system_audio = false;
+        assert!(!f.to_settings(&base, &cap()).record_system_audio);
     }
 
     #[test]

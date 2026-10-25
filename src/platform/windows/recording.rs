@@ -183,7 +183,7 @@ impl SinkFactory for DefaultSinkFactory {
         fps: u32,
     ) -> crate::Result<Box<dyn FrameSink>> {
         Ok(match kind {
-            SinkKind::Mp4 => Box::new(Mp4Sink::new(path, size, fps)?),
+            SinkKind::Mp4 { audio } => Box::new(Mp4Sink::new(path, size, fps, *audio)?),
             SinkKind::Gif { max_long_side } => {
                 Box::new(GifSink::create(path, size, *max_long_side, fps)?)
             }

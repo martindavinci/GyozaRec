@@ -16,6 +16,8 @@ pub struct AppSettings {
     pub copy_to_clipboard: bool,
     pub play_sound: bool,
     pub include_cursor: bool,
+    /// MP4 recordings capture what the computer plays.
+    pub record_system_audio: bool,
     /// Show a saved video or GIF in Explorer.
     pub open_folder_after_recording: bool,
     /// Open each saved capture in its default app.
@@ -53,6 +55,7 @@ impl Default for AppSettings {
             copy_to_clipboard: true,
             play_sound: true,
             include_cursor: true,
+            record_system_audio: true,
             open_folder_after_recording: false,
             open_file_after_capture: false,
             keep_in_tray: true,

@@ -12,8 +12,21 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SinkKind {
-    Mp4,
-    Gif { max_long_side: u32 },
+    /// `audio`: the file gets an audio track.
+    Mp4 {
+        audio: bool,
+    },
+    Gif {
+        max_long_side: u32,
+    },
+}
+
+/// Starts the sound sources of a recording; `None` when no device works.
+pub trait AudioStarter: Send {
+    fn start(
+        &self,
+        clock: std::sync::Arc<dyn crate::clock::Clock>,
+    ) -> Option<crate::audio::AudioFeed>;
 }
 
 pub trait SinkFactory: Send {

@@ -17,6 +17,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "复制到剪贴板",
     play_sound: "应用提示音",
     include_cursor: "包含光标（视频/GIF）",
+    record_system_audio: "录制系统声音 (MP4)",
     open_folder_after_recording: "录制后打开文件夹",
     open_file_after_capture: "捕获后打开文件",
     keep_in_tray: "保持在通知区域运行",

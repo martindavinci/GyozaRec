@@ -17,6 +17,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "클립보드에 복사",
     play_sound: "앱 소리",
     include_cursor: "커서 포함 (동영상/GIF)",
+    record_system_audio: "시스템 오디오 녹음 (MP4)",
     open_folder_after_recording: "녹화 후 폴더 열기",
     open_file_after_capture: "캡처 후 파일 열기",
     keep_in_tray: "알림 영역에서 계속 실행",

@@ -6,12 +6,15 @@ use crate::recording::{FrameSink, bitrate};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use windows::Win32::Media::MediaFoundation::{
-    IMFMediaType, IMFSinkWriter, MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE,
-    MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_PIXEL_ASPECT_RATIO,
-    MF_MT_SUBTYPE, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-    MF_VERSION, MFCreateAttributes, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
-    MFCreateSinkWriterFromURL, MFCreateSourceReaderFromURL, MFMediaType_Video, MFSTARTUP_FULL,
-    MFShutdown, MFStartup, MFVideoFormat_H264, MFVideoFormat_RGB32, MFVideoInterlace_Progressive,
+    IMFMediaType, IMFSinkWriter, MF_MT_AUDIO_AVG_BYTES_PER_SECOND, MF_MT_AUDIO_BITS_PER_SAMPLE,
+    MF_MT_AUDIO_BLOCK_ALIGNMENT, MF_MT_AUDIO_NUM_CHANNELS, MF_MT_AUDIO_SAMPLES_PER_SECOND,
+    MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
+    MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE,
+    MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_VERSION,
+    MFAudioFormat_AAC, MFAudioFormat_PCM, MFCreateAttributes, MFCreateMediaType,
+    MFCreateMemoryBuffer, MFCreateSample, MFCreateSinkWriterFromURL, MFCreateSourceReaderFromURL,
+    MFMediaType_Audio, MFMediaType_Video, MFSTARTUP_FULL, MFShutdown, MFStartup,
+    MFVideoFormat_H264, MFVideoFormat_RGB32, MFVideoInterlace_Progressive,
 };
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 use windows::core::HSTRING;
@@ -55,6 +58,8 @@ impl Drop for MfSession {
 struct Writer {
     writer: Option<IMFSinkWriter>,
     stream: u32,
+    /// The AAC stream, when the recording has sound.
+    audio_stream: Option<u32>,
     /// The recording thread that opened it; every later call must come from there.
     thread: std::thread::ThreadId,
     // Declared last: dropped after the writer is released.
@@ -84,8 +89,26 @@ fn video_type(
     }
 }
 
+/// Recording audio: 48 kHz, stereo, 16-bit.
+const AUDIO_RATE: u32 = crate::audio::OUT_RATE;
+const AUDIO_CHANNELS: u32 = 2;
+
+fn audio_type(subtype: &windows::core::GUID, avg_bytes: u32) -> crate::Result<IMFMediaType> {
+    // SAFETY: setting attributes on a freshly created media type.
+    unsafe {
+        let t = MFCreateMediaType()?;
+        t.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+        t.SetGUID(&MF_MT_SUBTYPE, subtype)?;
+        t.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
+        t.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, AUDIO_RATE)?;
+        t.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, AUDIO_CHANNELS)?;
+        t.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, avg_bytes)?;
+        Ok(t)
+    }
+}
+
 impl Writer {
-    fn open(path: &Path, size: PixelSize, fps: u32) -> crate::Result<Writer> {
+    fn open(path: &Path, size: PixelSize, fps: u32, audio: bool) -> crate::Result<Writer> {
         let session = MfSession::start()?;
         // SAFETY: standard sink-writer setup; every call checks its HRESULT.
         unsafe {
@@ -105,10 +128,23 @@ impl Writer {
             let input = video_type(size, fps, &MFVideoFormat_RGB32)?;
             input.SetUINT32(&MF_MT_DEFAULT_STRIDE, size.width as u32 * 4)?; // top-down
             writer.SetInputMediaType(stream, &input, None)?;
+
+            // Both streams must exist before BeginWriting.
+            let audio_stream = if audio {
+                let output = audio_type(&MFAudioFormat_AAC, 24_000)?; // 192 kbit/s
+                let s = writer.AddStream(&output)?;
+                let input = audio_type(&MFAudioFormat_PCM, AUDIO_RATE * AUDIO_CHANNELS * 2)?;
+                input.SetUINT32(&MF_MT_AUDIO_BLOCK_ALIGNMENT, AUDIO_CHANNELS * 2)?;
+                writer.SetInputMediaType(s, &input, None)?;
+                Some(s)
+            } else {
+                None
+            };
             writer.BeginWriting()?;
             Ok(Writer {
                 writer: Some(writer),
                 stream,
+                audio_stream,
                 thread: std::thread::current().id(),
                 _session: session,
             })
@@ -143,6 +179,40 @@ impl Writer {
         Ok(())
     }
 
+    /// `samples`: interleaved stereo i16; times come from the frame count, so
+    /// the track stays exactly as long as the samples written.
+    fn write_audio(&self, samples: &[i16], start_frame: u64) -> crate::Result<()> {
+        debug_assert_eq!(
+            std::thread::current().id(),
+            self.thread,
+            "MP4 writer used off its thread"
+        );
+        let (Some(writer), Some(stream)) = (self.writer.as_ref(), self.audio_stream) else {
+            return Ok(());
+        };
+        let frames = samples.len() as u64 / u64::from(AUDIO_CHANNELS);
+        if frames == 0 {
+            return Ok(());
+        }
+        let bytes = (frames * u64::from(AUDIO_CHANNELS) * 2) as u32;
+        let hns = |frame: u64| (frame as i64 * HNS_PER_SECOND) / i64::from(AUDIO_RATE);
+        // SAFETY: the locked buffer holds `bytes` bytes; it is unlocked before use.
+        unsafe {
+            let buffer = MFCreateMemoryBuffer(bytes)?;
+            let mut data = std::ptr::null_mut();
+            buffer.Lock(&mut data, None, None)?;
+            std::ptr::copy_nonoverlapping(samples.as_ptr().cast::<u8>(), data, bytes as usize);
+            buffer.Unlock()?;
+            buffer.SetCurrentLength(bytes)?;
+            let sample = MFCreateSample()?;
+            sample.AddBuffer(&buffer)?;
+            sample.SetSampleTime(hns(start_frame))?;
+            sample.SetSampleDuration(hns(start_frame + frames) - hns(start_frame))?;
+            writer.WriteSample(stream, &sample)?;
+        }
+        Ok(())
+    }
+
     fn finalize(&mut self) -> crate::Result<()> {
         debug_assert_eq!(
             std::thread::current().id(),
@@ -163,11 +233,12 @@ pub struct Mp4Sink {
     path: PathBuf,
     size: PixelSize,
     fps: u32,
+    audio: bool,
     writer: Option<Writer>,
 }
 
 impl Mp4Sink {
-    pub fn new(path: &Path, size: PixelSize, fps: u32) -> crate::Result<Mp4Sink> {
+    pub fn new(path: &Path, size: PixelSize, fps: u32, audio: bool) -> crate::Result<Mp4Sink> {
         if size.width < 2 || size.height < 2 || size.width % 2 != 0 || size.height % 2 != 0 {
             return Err(crate::UserError::InvalidVideoSize {
                 width: size.width,
@@ -177,20 +248,35 @@ impl Mp4Sink {
         }
         // Regions past the encoder's limit are scaled down frame by frame in `push`.
         let size = crate::geometry::encoder_size(size);
-        Ok(Mp4Sink { path: path.to_path_buf(), size, fps, writer: None })
+        Ok(Mp4Sink { path: path.to_path_buf(), size, fps, audio, writer: None })
+    }
+}
+
+impl Mp4Sink {
+    fn writer(&mut self) -> crate::Result<&Writer> {
+        if self.writer.is_none() {
+            self.writer = Some(Writer::open(&self.path, self.size, self.fps, self.audio)?);
+        }
+        Ok(self.writer.as_ref().expect("opened above"))
     }
 }
 
 impl FrameSink for Mp4Sink {
-    fn push(&mut self, frame: &PixelBuffer, t: Duration) -> crate::Result<()> {
-        if self.writer.is_none() {
-            self.writer = Some(Writer::open(&self.path, self.size, self.fps)?);
+    fn push_audio(&mut self, samples: &[i16], start_frame: u64) -> crate::Result<()> {
+        if !self.audio {
+            return Ok(());
         }
-        let writer = self.writer.as_ref().expect("opened above");
-        if frame.bounds.size() == self.size {
-            writer.write(frame, t, self.fps)
+        self.writer()?.write_audio(samples, start_frame)
+    }
+
+    fn push(&mut self, frame: &PixelBuffer, t: Duration) -> crate::Result<()> {
+        let size = self.size;
+        let fps = self.fps;
+        let writer = self.writer()?;
+        if frame.bounds.size() == size {
+            writer.write(frame, t, fps)
         } else {
-            writer.write(&frame.resized(self.size), t, self.fps)
+            writer.write(&frame.resized(size), t, fps)
         }
     }
 
@@ -292,7 +378,8 @@ mod tests {
     #[test]
     fn odd_size_is_rejected() {
         assert!(
-            Mp4Sink::new(Path::new("x.mp4"), PixelSize { width: 101, height: 64 }, 30).is_err()
+            Mp4Sink::new(Path::new("x.mp4"), PixelSize { width: 101, height: 64 }, 30, false)
+                .is_err()
         );
     }
 
@@ -302,7 +389,7 @@ mod tests {
     fn writes_playable_mp4_of_requested_size() {
         let d = tempdir().unwrap();
         let p = d.path().join("a.mp4");
-        let mut s = Mp4Sink::new(&p, PixelSize { width: 320, height: 240 }, 30).unwrap();
+        let mut s = Mp4Sink::new(&p, PixelSize { width: 320, height: 240 }, 30, false).unwrap();
         for i in 0..30u64 {
             let frame = PixelBuffer::solid(PixelRect::new(0, 0, 320, 240), (i * 8) as u8, 0, 0);
             s.push(&frame, Duration::from_millis(i * 33)).unwrap();
@@ -325,7 +412,7 @@ mod tests {
                 frame.put_pixel(crate::geometry::PixelPoint { x, y }, [0, 0, 255, 255]); // red
             }
         }
-        let mut s = Mp4Sink::new(&p, PixelSize { width: 320, height: 240 }, 30).unwrap();
+        let mut s = Mp4Sink::new(&p, PixelSize { width: 320, height: 240 }, 30, false).unwrap();
         for i in 0..10u64 {
             s.push(&frame, Duration::from_millis(i * 33)).unwrap();
         }
@@ -351,7 +438,7 @@ mod tests {
                 frame.put_pixel(crate::geometry::PixelPoint { x, y }, [0, 0, 255, 255]); // red
             }
         }
-        let mut s = Mp4Sink::new(&p, region, 30).unwrap();
+        let mut s = Mp4Sink::new(&p, region, 30, false).unwrap();
         for i in 0..5u64 {
             s.push(&frame, Duration::from_millis(i * 33)).unwrap();
         }
@@ -363,5 +450,78 @@ mod tests {
         let bottom = decoded.pixel(crate::geometry::PixelPoint { x: 2048, y: 950 });
         assert!(top[2] > 200 && top[0] < 60, "top should be red, got BGRA {top:?}");
         assert!(bottom[0] > 200 && bottom[2] < 60, "bottom should be blue, got BGRA {bottom:?}");
+    }
+
+    /// Total duration and first timestamp of the audio stream.
+    fn probe_audio(path: &Path) -> crate::Result<(Duration, Duration)> {
+        use windows::Win32::Media::MediaFoundation::{
+            IMFSample, MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READERF_ENDOFSTREAM,
+        };
+        let _session = MfSession::start()?;
+        let stream = MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32;
+        // SAFETY: source reader calls with checked HRESULTs.
+        unsafe {
+            let reader = MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), None)?;
+            let wanted = MFCreateMediaType()?;
+            wanted.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+            wanted.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_PCM)?;
+            reader.SetCurrentMediaType(stream, None, &wanted)?;
+            let (mut total, mut first) = (0i64, None);
+            loop {
+                let mut sample: Option<IMFSample> = None;
+                let (mut flags, mut time) = (0u32, 0i64);
+                reader.ReadSample(
+                    stream,
+                    0,
+                    None,
+                    Some(&mut flags),
+                    Some(&mut time),
+                    Some(&mut sample),
+                )?;
+                if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
+                    break;
+                }
+                if let Some(sample) = sample {
+                    first.get_or_insert(time);
+                    total += sample.GetSampleDuration()?;
+                }
+            }
+            let hns = |v: i64| Duration::from_nanos(v.max(0) as u64 * 100);
+            Ok((hns(total), hns(first.unwrap_or(0))))
+        }
+    }
+
+    #[test]
+    #[ignore = "desktop"]
+    fn mp4_with_audio_decodes_both_streams() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("tone.mp4");
+        let frame = PixelBuffer::solid(PixelRect::new(0, 0, 320, 240), 40, 120, 200);
+        let mut s = Mp4Sink::new(&p, PixelSize { width: 320, height: 240 }, 30, true).unwrap();
+        // 2 s: a video frame every 33 ms and 10 ms of a 1 kHz tone at a time.
+        let tone: Vec<i16> = (0..480)
+            .flat_map(|i| {
+                let v = ((i as f32 / 48.0) * std::f32::consts::TAU).sin() * 8_000.0;
+                [v as i16, v as i16]
+            })
+            .collect();
+        let mut next_audio = 0u64;
+        for f in 0..60u64 {
+            s.push(&frame, Duration::from_millis(f * 33)).unwrap();
+            while next_audio * 10 < (f + 1) * 33 && next_audio < 200 {
+                s.push_audio(&tone, next_audio * 480).unwrap();
+                next_audio += 1;
+            }
+        }
+        while next_audio < 200 {
+            s.push_audio(&tone, next_audio * 480).unwrap();
+            next_audio += 1;
+        }
+        s.finish().unwrap();
+        drop(s);
+        assert_eq!(probe_mp4(&p).unwrap(), PixelSize { width: 320, height: 240 });
+        let (duration, first) = probe_audio(&p).unwrap();
+        assert!((duration.as_secs_f64() - 2.0).abs() <= 0.1, "audio lasts {duration:?}");
+        assert!(first <= Duration::from_millis(50), "audio starts at {first:?}");
     }
 }

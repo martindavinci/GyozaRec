@@ -1,9 +1,9 @@
 //! Runs one capture end to end: hide toolbar, wait, grab, select, save.
 
 use super::{
-    CaptureOutcome, ClipboardService, CursorLocator, FileRevealer, MonitorProvider, RecordingJob,
-    RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind, SoundPlayer,
-    ToolbarVisibility, WindowSnapshotter, monitor_from_point,
+    AudioStarter, CaptureOutcome, ClipboardService, CursorLocator, FileRevealer, MonitorProvider,
+    RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind,
+    SoundPlayer, ToolbarVisibility, WindowSnapshotter, monitor_from_point,
 };
 use crate::clock::Clock;
 use crate::geometry::{CaptureArea, OutputFormat, PixelRect, meets_minimum};
@@ -31,6 +31,7 @@ pub struct CaptureCoordinator {
     pub toolbar: Box<dyn ToolbarVisibility>,
     pub recording_ui: Box<dyn RecordingUi>,
     pub sinks: Box<dyn SinkFactory>,
+    pub audio: Box<dyn AudioStarter>,
     pub clock: Arc<dyn Clock>,
 }
 
@@ -112,10 +113,21 @@ impl CaptureCoordinator {
         }
         let monitor = monitor_from_point(&monitors, region.center()).clone();
         let (ext, fps, max_seconds, kind) = if video {
-            ("mp4", settings.video_fps, settings.video_max_seconds, SinkKind::Mp4)
+            ("mp4", settings.video_fps, settings.video_max_seconds, SinkKind::Mp4 { audio: false })
         } else {
             let kind = SinkKind::Gif { max_long_side: settings.gif_max_long_side };
             ("gif", settings.gif_fps, settings.gif_max_seconds, kind)
+        };
+        // Audio starts before the sink so the file knows whether it has a track;
+        // without a working device the recording is video-only.
+        let feed = if video && settings.record_system_audio {
+            self.audio.start(self.clock.clone())
+        } else {
+            None
+        };
+        let kind = match kind {
+            SinkKind::Mp4 { .. } => SinkKind::Mp4 { audio: feed.is_some() },
+            other => other,
         };
         let path = FileNamer::new(self.clock.clone()).next_path(&settings.save_folder, ext);
         let sink = match self.sinks.create(&kind, &path, region.size(), fps) {
@@ -129,7 +141,7 @@ impl CaptureCoordinator {
             max_duration: Duration::from_secs(u64::from(max_seconds)),
         };
         self.clock.sleep(OVERLAY_CLOSE_SETTLE);
-        let job = RecordingJob { region, monitor, path, config, sink, audio: None };
+        let job = RecordingJob { region, monitor, path, config, sink, audio: feed };
         let result = self.recording_ui.record(job);
         match (result.outcome, result.path) {
             (RecordingOutcome::Saved, Some(path)) => {
@@ -211,10 +223,47 @@ mod tests {
         assert_eq!(o.kind, CaptureOutcomeKind::Saved);
         let ev = h.events();
         assert!(ev.contains(&"select:Rectangle:frozen=true:windows=0".to_string()));
-        assert!(ev.contains(&"sink:Mp4:100x64".to_string()));
+        assert!(ev.contains(&"sink:Mp4 { audio: false }:100x64".to_string()));
         assert!(ev.contains(&"record:0,0,100,64:mp4:fps=30:max=300".to_string()));
         assert!(ev.iter().any(|e| e.starts_with("clip:file:") && e.ends_with(".mp4")));
         assert_eq!(h.clock.sleeps(), [Duration::from_millis(200), Duration::from_millis(150)]);
+    }
+
+    #[test]
+    fn coordinator_starts_audio_only_for_mp4_with_the_option() {
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut mp4 =
+            CoordinatorHarness::rect(rect).with_audio().recording(RecordingOutcome::Saved);
+        mp4.run(AppSettings { format: OutputFormat::Mp4, ..mp4.settings() });
+        let ev = mp4.events();
+        assert!(ev.contains(&"audio:start".to_string()), "{ev:?}");
+        assert!(ev.contains(&"sink:Mp4 { audio: true }:200x100".to_string()), "{ev:?}");
+
+        let mut gif =
+            CoordinatorHarness::rect(rect).with_audio().recording(RecordingOutcome::Saved);
+        gif.run(AppSettings { format: OutputFormat::Gif, ..gif.settings() });
+        assert!(!gif.events().contains(&"audio:start".to_string()));
+
+        let mut off =
+            CoordinatorHarness::rect(rect).with_audio().recording(RecordingOutcome::Saved);
+        off.run(AppSettings {
+            format: OutputFormat::Mp4,
+            record_system_audio: false,
+            ..off.settings()
+        });
+        assert!(!off.events().contains(&"audio:start".to_string()));
+        assert!(off.events().contains(&"sink:Mp4 { audio: false }:200x100".to_string()));
+    }
+
+    #[test]
+    fn missing_audio_device_records_video_only() {
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut h = CoordinatorHarness::rect(rect).recording(RecordingOutcome::Saved);
+        let o = h.run(AppSettings { format: OutputFormat::Mp4, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let ev = h.events();
+        assert!(ev.contains(&"audio:start".to_string()), "it was tried: {ev:?}");
+        assert!(ev.contains(&"sink:Mp4 { audio: false }:200x100".to_string()), "{ev:?}");
     }
 
     #[test]

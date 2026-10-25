@@ -7,7 +7,7 @@ pub(super) const TEXTS: Texts = Texts {
     formats: ["PNG image", "MP4 video", "Animated GIF"],
     record: "Record",
     delays: ["No delay", "1 second", "2 seconds", "3 seconds", "4 seconds", "5 seconds"],
-    initial_status: "Choose what to capture and the format, then press Capture.",
+    initial_status: "Choose what to capture and the format, then press {button}.",
     saved_prefix: "Saved: ",
     copied_suffix: " · copied to clipboard",
     error_prefix: "Error: ",

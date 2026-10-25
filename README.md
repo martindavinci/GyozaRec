@@ -16,10 +16,11 @@
 
 ## Features
 
-A small toolbar with four buttons:
+A small toolbar:
 
-- **Capture** — starts a capture with the selected mode and delay.
-- **Mode** — Rectangle, Window, Full screen, MP4 video, Animated GIF.
+- **Capture** (**Record** for videos and GIFs) — starts a capture with the selected area, format and delay.
+- **Area** — Rectangle, Window or Full screen.
+- **Format** — PNG image, MP4 video or Animated GIF. Any area works with any format.
 - **Delay** — from no delay up to 5 seconds.
 - **Options** — save folder, copy to clipboard, sound, cursor in recordings, frame rate and maximum length of GIFs and videos, language.
 
@@ -29,14 +30,14 @@ A small toolbar with four buttons:
   <img src="docs/screenshots/options.png" alt="The Options window" valign="top">
 </p>
 
-Images are saved as PNG and copied to the clipboard. Videos and GIFs record an area you pick on screen; while recording, a small panel shows the elapsed time with **Stop** and **Cancel** buttons. Nothing leaves your computer: no uploads, no accounts.
+Images are copied to the clipboard; videos and GIFs are copied as files. A window recording keeps the area the window covered when recording started. While recording, a small panel shows the elapsed time with **Stop** and **Cancel** buttons. Nothing leaves your computer: no uploads, no accounts.
 
 Running `gyozarec --capture` starts the selection right away; if the app is already open, the capture starts in the running instance.
 
 The interface is available in English, Spanish, French, German, Italian, Brazilian Portuguese, Japanese, Korean and Simplified Chinese. The language follows Windows on first start and can be changed in **Options**.
 
 <p align="center">
-  <img src="docs/screenshots/languages.png" alt="The toolbar in Italian, Spanish, Japanese, Korean, Chinese and English">
+  <img src="docs/screenshots/languages.png" alt="The toolbar in Italian (window to MP4), Spanish (GIF with a 3-second delay), German, Japanese, Korean and Chinese">
 </p>
 
 ## Download

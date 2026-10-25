@@ -129,6 +129,7 @@ pub struct Texts {
     pub record: &'static str,
     /// No delay, then 1 to 5 seconds.
     pub delays: [&'static str; 6],
+    /// `{button}` is replaced with the capture button's current label.
     pub initial_status: &'static str,
     pub saved_prefix: &'static str,
     pub copied_suffix: &'static str,

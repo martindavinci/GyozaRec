@@ -16,7 +16,9 @@ use gyozarec::platform::{
     DefaultSinkFactory, GdiGrabber, SystemSound, Win32Clipboard, Win32Cursor, Win32Monitors,
     Win32WindowList, system_ui_languages,
 };
-use gyozarec::presentation::{DELAYS, MODES, OptionsForm, ToolbarState, delay_label, mode_label};
+use gyozarec::presentation::{
+    AREAS, DELAYS, FORMATS, OptionsForm, ToolbarState, area_label, delay_label, format_label,
+};
 use gyozarec::settings::SettingsStore;
 use gyozarec::uikit::painter::Fonts;
 use muda::{CheckMenuItem, ContextMenu, Menu, MenuEvent};
@@ -143,32 +145,28 @@ impl App {
 
     fn show_menu(&self, action: ToolbarAction) {
         let Some(t) = &self.toolbar else { return };
-        let menu = Menu::new();
         let texts = self.state.texts();
-        if action == ToolbarAction::ModeMenu {
-            for (i, mode) in MODES.iter().enumerate() {
-                let checked = *mode == (self.state.settings.area, self.state.settings.format);
-                let label = mode_label(*mode, texts);
-                let _ = menu.append(&CheckMenuItem::with_id(
-                    format!("mode:{i}"),
-                    label,
-                    true,
-                    checked,
-                    None,
-                ));
-            }
-        } else {
-            for seconds in DELAYS {
-                let checked = seconds == self.state.settings.delay_seconds;
-                let label = delay_label(seconds, texts);
-                let _ = menu.append(&CheckMenuItem::with_id(
-                    format!("delay:{seconds}"),
-                    label,
-                    true,
-                    checked,
-                    None,
-                ));
-            }
+        let s = &self.state.settings;
+        // (menu id, label, checked)
+        let items: Vec<(String, &str, bool)> = match action {
+            ToolbarAction::AreaMenu => AREAS
+                .iter()
+                .enumerate()
+                .map(|(i, a)| (format!("area:{i}"), area_label(*a, texts), *a == s.area))
+                .collect(),
+            ToolbarAction::FormatMenu => FORMATS
+                .iter()
+                .enumerate()
+                .map(|(i, f)| (format!("format:{i}"), format_label(*f, texts), *f == s.format))
+                .collect(),
+            _ => DELAYS
+                .iter()
+                .map(|d| (format!("delay:{d}"), delay_label(*d, texts), *d == s.delay_seconds))
+                .collect(),
+        };
+        let menu = Menu::new();
+        for (id, label, checked) in items {
+            let _ = menu.append(&CheckMenuItem::with_id(id, label, true, checked, None));
         }
         let anchor = t.menu_anchor(action);
         let position =
@@ -220,15 +218,17 @@ impl App {
             }
             return;
         }
-        if let Some(i) = id.strip_prefix("mode:").and_then(|v| v.parse::<usize>().ok()) {
-            if let Some(mode) = MODES.get(i) {
-                (self.state.settings.area, self.state.settings.format) = *mode;
-            }
+        let index = |prefix: &str| id.strip_prefix(prefix).and_then(|v| v.parse::<usize>().ok());
+        if let Some(area) = index("area:").and_then(|i| AREAS.get(i)) {
+            self.state.settings.area = *area;
+        } else if let Some(format) = index("format:").and_then(|i| FORMATS.get(i)) {
+            self.state.settings.format = *format;
         } else if let Some(s) = id.strip_prefix("delay:").and_then(|v| v.parse::<u32>().ok()) {
             self.state.settings.delay_seconds = s;
         } else {
             return;
         }
+        self.state.settings_changed();
         self.save_settings();
         self.refresh_toolbar();
     }
@@ -348,9 +348,11 @@ impl ApplicationHandler<AppEvent> for App {
         }
         match action {
             Some(ToolbarAction::Capture) => self.start_capture(),
-            Some(action @ (ToolbarAction::ModeMenu | ToolbarAction::DelayMenu)) => {
-                self.show_menu(action)
-            }
+            Some(
+                action @ (ToolbarAction::AreaMenu
+                | ToolbarAction::FormatMenu
+                | ToolbarAction::DelayMenu),
+            ) => self.show_menu(action),
             Some(ToolbarAction::OpenFolder) => self.open_folder(),
             Some(ToolbarAction::Options) => self.open_options(event_loop),
             None => {}

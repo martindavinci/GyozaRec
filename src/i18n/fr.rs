@@ -7,7 +7,7 @@ pub(super) const TEXTS: Texts = Texts {
     formats: ["Image PNG", "Vidéo MP4", "GIF animé"],
     record: "Enregistrer",
     delays: ["Aucun délai", "1 seconde", "2 secondes", "3 secondes", "4 secondes", "5 secondes"],
-    initial_status: "Choisissez quoi capturer et le format, puis cliquez sur Capturer.",
+    initial_status: "Choisissez quoi capturer et le format, puis cliquez sur {button}.",
     saved_prefix: "Enregistré : ",
     copied_suffix: " · copié dans le presse-papiers",
     error_prefix: "Erreur : ",

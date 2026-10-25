@@ -14,7 +14,7 @@ pub(super) const TEXTS: Texts = Texts {
         "4 Sekunden",
         "5 Sekunden",
     ],
-    initial_status: "Wähle Bereich und Format und klicke dann auf Aufnehmen.",
+    initial_status: "Wähle Bereich und Format und klicke dann auf {button}.",
     saved_prefix: "Gespeichert: ",
     copied_suffix: " · in die Zwischenablage kopiert",
     error_prefix: "Fehler: ",

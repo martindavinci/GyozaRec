@@ -30,22 +30,6 @@ pub fn capture_label(settings: &AppSettings, texts: &Texts) -> &'static str {
     if settings.format.is_recording() { texts.record } else { texts.capture }
 }
 
-// Transitional: the single menu of the previous toolbar, removed with it.
-pub const MODES: [(CaptureArea, OutputFormat); 5] = [
-    (CaptureArea::Rectangle, OutputFormat::Png),
-    (CaptureArea::Window, OutputFormat::Png),
-    (CaptureArea::FullScreen, OutputFormat::Png),
-    (CaptureArea::Rectangle, OutputFormat::Mp4),
-    (CaptureArea::Rectangle, OutputFormat::Gif),
-];
-
-pub fn mode_label(mode: (CaptureArea, OutputFormat), texts: &Texts) -> &'static str {
-    match mode {
-        (area, OutputFormat::Png) => area_label(area, texts),
-        (_, format) => format_label(format, texts),
-    }
-}
-
 pub fn delay_label(seconds: u32, texts: &Texts) -> &'static str {
     texts.delays[(seconds as usize).min(DELAYS.len() - 1)]
 }
@@ -105,30 +89,46 @@ pub struct ToolbarState {
     pub busy: bool,
     /// The outcome the status line shows, so it can be re-translated.
     shown_outcome: Option<CaptureOutcome>,
+    /// The status line still shows the starting hint.
+    showing_hint: bool,
 }
 
 impl ToolbarState {
     pub fn new(settings: AppSettings, language: Language) -> Self {
-        Self {
+        let mut state = Self {
             settings,
             language,
-            status: language.texts().initial_status.to_string(),
+            status: String::new(),
             status_is_error: false,
             last_saved: None,
             busy: false,
             shown_outcome: None,
+            showing_hint: true,
+        };
+        state.status = state.hint();
+        state
+    }
+
+    fn hint(&self) -> String {
+        let texts = self.texts();
+        texts.initial_status.replace("{button}", capture_label(&self.settings, texts))
+    }
+
+    /// Call after changing `settings`: the hint names the capture button.
+    pub fn settings_changed(&mut self) {
+        if self.showing_hint {
+            self.status = self.hint();
         }
     }
 
     /// Switches language; the status follows unless it is free text.
     pub fn set_language(&mut self, language: Language) {
-        let old_initial = self.texts().initial_status;
         self.language = language;
         if let Some(o) = &self.shown_outcome {
             let (text, _) = format_status(o, &self.status, self.texts());
             self.status = text;
-        } else if self.status == old_initial {
-            self.status = self.texts().initial_status.to_string();
+        } else if self.showing_hint {
+            self.status = self.hint();
         }
     }
 
@@ -145,6 +145,7 @@ impl ToolbarState {
         }
         if o.kind != CaptureOutcomeKind::Canceled {
             self.shown_outcome = Some(o.clone());
+            self.showing_hint = false;
         }
     }
 
@@ -152,6 +153,7 @@ impl ToolbarState {
         self.status = format!("{}{msg}", self.texts().error_prefix);
         self.status_is_error = true;
         self.shown_outcome = None;
+        self.showing_hint = false;
     }
 }
 
@@ -192,7 +194,7 @@ mod tests {
     fn initial_status_names_the_capture_button_and_no_mode_button() {
         for lang in Language::ALL {
             let t = lang.texts();
-            assert!(t.initial_status.contains(t.capture), "{lang:?}: {}", t.initial_status);
+            assert_eq!(t.initial_status.matches("{button}").count(), 1, "{lang:?}");
             for old in ["Mode", "Modus", "Modalità", "Modo", "モード", "모드", "模式"] {
                 assert!(!t.initial_status.contains(old), "{lang:?}: {}", t.initial_status);
             }
@@ -276,7 +278,7 @@ mod tests {
     fn language_switch_retranslates_the_status() {
         let mut s = ToolbarState::new(AppSettings::default(), Language::En);
         s.set_language(Language::It);
-        assert_eq!(s.status, Language::It.texts().initial_status);
+        assert_eq!(s.status, "Scegli cosa catturare e il formato, poi premi Cattura.");
         s.apply_outcome(&saved(true));
         s.set_language(Language::En);
         assert_eq!(s.status, "Saved: GyozaRec_1.png · copied to clipboard");
@@ -286,9 +288,21 @@ mod tests {
     }
 
     #[test]
+    fn hint_names_the_button_as_it_is_labelled() {
+        let mut s = ToolbarState::new(AppSettings::default(), Language::En);
+        assert_eq!(s.status, "Choose what to capture and the format, then press Capture.");
+        s.settings.format = OutputFormat::Gif;
+        s.settings_changed();
+        assert_eq!(s.status, "Choose what to capture and the format, then press Record.");
+        s.apply_outcome(&saved(false));
+        s.settings.format = OutputFormat::Png;
+        s.settings_changed();
+        assert_eq!(s.status, "Saved: GyozaRec_1.png", "a result stays until the next one");
+    }
+
+    #[test]
     fn apply_outcome_remembers_last_saved() {
         let mut s = ToolbarState::new(AppSettings::default(), Language::It);
-        assert_eq!(s.status, Language::It.texts().initial_status);
         s.apply_outcome(&CaptureOutcome {
             kind: CaptureOutcomeKind::Saved,
             path: Some(PathBuf::from(r"C:\x\a.png")),

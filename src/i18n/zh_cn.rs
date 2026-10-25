@@ -7,7 +7,7 @@ pub(super) const TEXTS: Texts = Texts {
     formats: ["PNG 图片", "MP4 视频", "GIF 动图"],
     record: "录制",
     delays: ["无延迟", "1 秒", "2 秒", "3 秒", "4 秒", "5 秒"],
-    initial_status: "选择捕获范围和格式，然后点击“捕获”。",
+    initial_status: "选择捕获范围和格式，然后点击“{button}”。",
     saved_prefix: "已保存：",
     copied_suffix: " · 已复制到剪贴板",
     error_prefix: "错误：",

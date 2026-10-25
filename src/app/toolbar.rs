@@ -1,8 +1,8 @@
-//! The main toolbar window: four buttons and a status line.
+//! The main toolbar window: capture button, three dropdowns, Options and a status line.
 
 use super::surface::WindowSurface;
 use gyozarec::geometry::PixelSize;
-use gyozarec::presentation::{ToolbarState, delay_label, mode_label};
+use gyozarec::presentation::{ToolbarState, area_label, capture_label, delay_label, format_label};
 use gyozarec::uikit::painter::{Fonts, Painter};
 use gyozarec::uikit::theme::GYOZA;
 use gyozarec::uikit::widgets::{Ui, WidgetKind, layout_row};
@@ -16,16 +16,18 @@ const PAD: f32 = 8.0;
 /// Keeps the title readable when the labels are short (e.g. Chinese).
 const MIN_WIDTH: f32 = 320.0;
 const ID_CAPTURE: u32 = 1;
-const ID_MODE: u32 = 2;
+const ID_AREA: u32 = 2;
 const ID_DELAY: u32 = 3;
 const ID_OPTIONS: u32 = 4;
 const ID_STATUS: u32 = 5;
 const ID_FOLDER: u32 = 6;
+const ID_FORMAT: u32 = 7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolbarAction {
     Capture,
-    ModeMenu,
+    AreaMenu,
+    FormatMenu,
     DelayMenu,
     Options,
     OpenFolder,
@@ -40,15 +42,14 @@ pub struct Toolbar {
 
 fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let texts = state.texts();
+    let s = &state.settings;
     let button = |label: &str, dropdown: bool| WidgetKind::Button { label: label.into(), dropdown };
     let mut widgets = layout_row(
         vec![
-            (ID_CAPTURE, button(texts.capture, false)),
-            (
-                ID_MODE,
-                button(mode_label((state.settings.area, state.settings.format), texts), true),
-            ),
-            (ID_DELAY, button(delay_label(state.settings.delay_seconds, texts), true)),
+            (ID_CAPTURE, button(capture_label(s, texts), false)),
+            (ID_AREA, button(area_label(s.area, texts), true)),
+            (ID_FORMAT, button(format_label(s.format, texts), true)),
+            (ID_DELAY, button(delay_label(s.delay_seconds, texts), true)),
             (ID_OPTIONS, button(texts.options, false)),
         ],
         PAD,
@@ -120,7 +121,11 @@ impl Toolbar {
 
     /// Bottom-left corner of a dropdown button, in client physical pixels.
     pub fn menu_anchor(&self, action: ToolbarAction) -> PhysicalPosition<i32> {
-        let id = if action == ToolbarAction::DelayMenu { ID_DELAY } else { ID_MODE };
+        let id = match action {
+            ToolbarAction::FormatMenu => ID_FORMAT,
+            ToolbarAction::DelayMenu => ID_DELAY,
+            _ => ID_AREA,
+        };
         let scale = self.scale();
         let rect = self.ui.widget(id).map(|w| w.rect).unwrap_or_default();
         PhysicalPosition::new((rect.x * scale) as i32, (rect.bottom() * scale) as i32)
@@ -149,7 +154,8 @@ impl Toolbar {
                 }
                 return match self.ui.pointer_up(self.cursor.0, self.cursor.1)? {
                     ID_CAPTURE => Some(ToolbarAction::Capture),
-                    ID_MODE => Some(ToolbarAction::ModeMenu),
+                    ID_AREA => Some(ToolbarAction::AreaMenu),
+                    ID_FORMAT => Some(ToolbarAction::FormatMenu),
                     ID_DELAY => Some(ToolbarAction::DelayMenu),
                     ID_OPTIONS => Some(ToolbarAction::Options),
                     ID_FOLDER => Some(ToolbarAction::OpenFolder),

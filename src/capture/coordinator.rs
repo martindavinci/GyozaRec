@@ -318,6 +318,7 @@ mod tests {
             id: 1,
             pid: 2,
             title: "x".into(),
+            maximized: false,
             bounds: PixelRect::new(0, 0, 50, 50),
         };
         let mut h =
@@ -332,6 +333,7 @@ mod tests {
             id: 1,
             pid: 2,
             title: "x".into(),
+            maximized: false,
             bounds: PixelRect::new(0, 0, 200, 100),
         };
         let mut h =

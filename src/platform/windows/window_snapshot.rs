@@ -6,7 +6,7 @@ use windows::Win32::Graphics::Dwm::{
     DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+    EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed,
 };
 use windows::core::BOOL;
 
@@ -65,6 +65,7 @@ unsafe extern "system" fn collect_window(hwnd: HWND, data: LPARAM) -> BOOL {
             pid,
             title: String::from_utf16_lossy(&title[..len]),
             bounds,
+            maximized: IsZoomed(hwnd).as_bool(),
         });
     }
     BOOL(1)

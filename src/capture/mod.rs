@@ -133,6 +133,8 @@ pub struct WindowCandidate {
     pub pid: u32,
     pub title: String,
     pub bounds: PixelRect,
+    /// Maximized windows can report a frame that spills onto the next monitor.
+    pub maximized: bool,
 }
 
 pub trait WindowSnapshotter: Send {
@@ -159,10 +161,26 @@ pub fn window_at(z_ordered: &[WindowCandidate], p: PixelPoint) -> Option<&Window
     z_ordered.iter().find(|w| w.bounds.contains(p))
 }
 
-/// The whole rectangle of the topmost window under `at`, even where it
-/// extends onto other monitors.
-pub fn hovered_window(z_ordered: &[WindowCandidate], at: PixelPoint) -> Option<PixelRect> {
-    window_at(z_ordered, at).map(|w| w.bounds).filter(|r| !r.is_empty())
+/// The topmost window under `at`, as much of it as the monitors show: the
+/// whole window when it spans several monitors, without the parts no monitor
+/// covers. A maximized window keeps to the monitor it is maximized on.
+pub fn hovered_window(
+    z_ordered: &[WindowCandidate],
+    monitors: &[PixelRect],
+    at: PixelPoint,
+) -> Option<PixelRect> {
+    let w = window_at(z_ordered, at)?;
+    let visible = monitors.iter().map(|m| w.bounds.intersect(m)).filter(|r| !r.is_empty());
+    let area = if w.maximized {
+        let center = w.bounds.center();
+        monitors.iter().find(|m| m.contains(center)).map(|m| w.bounds.intersect(m))?
+    } else {
+        visible.reduce(|a, b| {
+            let (x, y) = (a.x.min(b.x), a.y.min(b.y));
+            PixelRect::new(x, y, a.right().max(b.right()) - x, a.bottom().max(b.bottom()) - y)
+        })?
+    };
+    Some(area).filter(|r| !r.is_empty())
 }
 
 #[cfg(test)]
@@ -171,7 +189,13 @@ mod tests {
     use crate::geometry::{MonitorInfo, PixelPoint, PixelRect};
 
     fn w(id: u64, x: i32, y: i32, wd: i32, h: i32) -> WindowCandidate {
-        WindowCandidate { id, pid: 1, title: format!("w{id}"), bounds: PixelRect::new(x, y, wd, h) }
+        WindowCandidate {
+            id,
+            pid: 1,
+            title: format!("w{id}"),
+            bounds: PixelRect::new(x, y, wd, h),
+            maximized: false,
+        }
     }
 
     #[test]
@@ -182,12 +206,34 @@ mod tests {
 
     #[test]
     fn hovered_window_returns_the_whole_window_across_monitors() {
+        let monitors = [PixelRect::new(-1920, 0, 1920, 1080), PixelRect::new(0, 0, 1920, 1080)];
         let ws = [w(1, -200, 100, 600, 400)];
         assert_eq!(
-            hovered_window(&ws, PixelPoint { x: 50, y: 200 }),
+            hovered_window(&ws, &monitors, PixelPoint { x: 50, y: 200 }),
             Some(PixelRect::new(-200, 100, 600, 400))
         );
-        assert_eq!(hovered_window(&ws, PixelPoint { x: 900, y: 900 }), None);
+        assert_eq!(hovered_window(&ws, &monitors, PixelPoint { x: 900, y: 900 }), None);
+    }
+
+    #[test]
+    fn hovered_window_leaves_out_areas_no_monitor_shows() {
+        // 1080p laptop left of a taller 1440p monitor: below the laptop there is no screen.
+        let monitors = [PixelRect::new(0, 0, 1920, 1080), PixelRect::new(1920, 0, 2560, 1440)];
+        let ws = [w(1, 100, 900, 600, 400)];
+        assert_eq!(
+            hovered_window(&ws, &monitors, PixelPoint { x: 300, y: 1000 }),
+            Some(PixelRect::new(100, 900, 600, 180))
+        );
+    }
+
+    #[test]
+    fn maximized_window_stays_on_its_own_monitor() {
+        let monitors = [PixelRect::new(0, 0, 1920, 1080), PixelRect::new(1920, 0, 1920, 1080)];
+        let ws = [WindowCandidate { maximized: true, ..w(1, -8, -8, 1936, 1096) }];
+        assert_eq!(
+            hovered_window(&ws, &monitors, PixelPoint { x: 500, y: 500 }),
+            Some(PixelRect::new(0, 0, 1920, 1080))
+        );
     }
 
     #[test]

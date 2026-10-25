@@ -205,7 +205,8 @@ impl OverlaySession {
         w.cursor = p;
         if self.area == CaptureArea::Window {
             let screen = w.to_screen(p);
-            let hovered = hovered_window(&self.candidates, screen);
+            let monitors: Vec<PixelRect> = self.windows.iter().map(|o| o.monitor.bounds).collect();
+            let hovered = hovered_window(&self.candidates, &monitors, screen);
             if hovered != self.hovered {
                 self.hovered = hovered;
                 for other in &mut self.windows {

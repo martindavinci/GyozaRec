@@ -1,15 +1,14 @@
-//! Red frame around the recorded area and the Stop/Cancel panel.
+//! Red frame around the recorded area and the Pause/Stop/Cancel panel.
 
 use super::surface::WindowSurface;
 use gyozarec::bridge::RecordingCommand;
 use gyozarec::geometry::{MonitorInfo, PixelRect, PixelSize};
-use gyozarec::i18n::Texts;
 use gyozarec::platform::{exclude_from_capture, make_color_keyed};
 use gyozarec::presentation::format_elapsed;
 use gyozarec::recording::{frame_bounds, place_panel, render_frame};
 use gyozarec::uikit::painter::{Fonts, Painter};
 use gyozarec::uikit::theme::GYOZA;
-use gyozarec::uikit::widgets::{Ui, WidgetKind, layout_row};
+use gyozarec::uikit::widgets::{Icon, Ui, WidgetKind, layout_row};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -27,6 +26,7 @@ const DOT: f32 = 14.0;
 const ID_TIME: u32 = 1;
 const ID_STOP: u32 = 2;
 const ID_CANCEL: u32 = 3;
+const ID_PAUSE: u32 = 4;
 
 fn popup(event_loop: &ActiveEventLoop, rect: PixelRect) -> Option<WindowSurface> {
     let attrs = Window::default_attributes()
@@ -43,13 +43,15 @@ fn popup(event_loop: &ActiveEventLoop, rect: PixelRect) -> Option<WindowSurface>
     Some(surface)
 }
 
-fn build_panel_ui(elapsed: Duration, max: Duration, texts: &Texts, fonts: &Fonts) -> Ui {
-    let button = |label: &str| WidgetKind::Button { label: label.into(), dropdown: false };
+fn build_panel_ui(elapsed: Duration, max: Duration, paused: bool, fonts: &Fonts) -> Ui {
+    let button = |icon| WidgetKind::IconButton { icon };
+    let pause = if paused { Icon::Resume } else { Icon::Pause };
     Ui::new(layout_row(
         vec![
             (ID_TIME, WidgetKind::Label { text: format_elapsed(elapsed, max), color: GYOZA.text }),
-            (ID_STOP, button(texts.stop)),
-            (ID_CANCEL, button(texts.cancel)),
+            (ID_PAUSE, button(pause)),
+            (ID_STOP, button(Icon::Stop)),
+            (ID_CANCEL, button(Icon::Cancel)),
         ],
         PAD + DOT + 6.0,
         PAD,
@@ -59,6 +61,14 @@ fn build_panel_ui(elapsed: Duration, max: Duration, texts: &Texts, fonts: &Fonts
     ))
 }
 
+fn paint_panel(painter: &mut Painter, ui: &Ui, paused: bool, fonts: &Fonts) {
+    painter.clear(GYOZA.bg);
+    let time = ui.widget(ID_TIME).map(|w| w.rect).unwrap_or_default();
+    let dot = if paused { GYOZA.disabled_text } else { GYOZA.accent };
+    painter.fill_circle(PAD + DOT / 2.0, time.y + time.h / 2.0, DOT / 2.0 - 1.0, dot);
+    ui.paint(painter, fonts, &GYOZA);
+}
+
 pub struct RecordingSession {
     frame: Option<WindowSurface>,
     panel: WindowSurface,
@@ -66,7 +76,8 @@ pub struct RecordingSession {
     scale: f32,
     cursor: (f32, f32),
     max: Duration,
-    texts: &'static Texts,
+    elapsed: Duration,
+    paused: bool,
     commands: Sender<RecordingCommand>,
 }
 
@@ -77,12 +88,11 @@ impl RecordingSession {
         monitor: &MonitorInfo,
         max: Duration,
         commands: Sender<RecordingCommand>,
-        texts: &'static Texts,
         fonts: &Fonts,
     ) -> Option<RecordingSession> {
         let frame = open_frame(event_loop, region);
         let scale = monitor.scale as f32;
-        let ui = build_panel_ui(Duration::ZERO, max, texts, fonts);
+        let ui = build_panel_ui(Duration::ZERO, max, false, fonts);
         let b = ui.bounds();
         let size = PixelSize {
             width: ((b.right() + PAD) * scale).ceil() as i32,
@@ -97,7 +107,8 @@ impl RecordingSession {
             scale,
             cursor: (-1.0, -1.0),
             max,
-            texts,
+            elapsed: Duration::ZERO,
+            paused: false,
             commands,
         };
         session.redraw(fonts);
@@ -115,8 +126,20 @@ impl RecordingSession {
     }
 
     pub fn tick(&mut self, elapsed: Duration, fonts: &Fonts) {
-        self.ui = build_panel_ui(elapsed, self.max, self.texts, fonts);
+        self.elapsed = elapsed;
+        self.rebuild(fonts);
+    }
+
+    fn rebuild(&mut self, fonts: &Fonts) {
+        self.ui = build_panel_ui(self.elapsed, self.max, self.paused, fonts);
         self.panel.window.request_redraw();
+    }
+
+    fn toggle_pause(&mut self, fonts: &Fonts) {
+        self.paused = !self.paused;
+        let command = if self.paused { RecordingCommand::Pause } else { RecordingCommand::Resume };
+        let _ = self.commands.send(command);
+        self.rebuild(fonts);
     }
 
     fn redraw(&mut self, fonts: &Fonts) {
@@ -125,10 +148,7 @@ impl RecordingSession {
             return;
         }
         let mut painter = Painter::new(size, self.scale);
-        painter.clear(GYOZA.bg);
-        let time = self.ui.widget(ID_TIME).map(|w| w.rect).unwrap_or_default();
-        painter.fill_circle(PAD + DOT / 2.0, time.y + time.h / 2.0, DOT / 2.0 - 1.0, GYOZA.accent);
-        self.ui.paint(&mut painter, fonts, &GYOZA);
+        paint_panel(&mut painter, &self.ui, self.paused, fonts);
         let mut pixels = vec![0u32; (size.width * size.height) as usize];
         painter.to_softbuffer(&mut pixels);
         self.panel.present(&pixels);
@@ -155,6 +175,7 @@ impl RecordingSession {
                     self.ui.pointer_down(self.cursor.0, self.cursor.1);
                 } else {
                     match self.ui.pointer_up(self.cursor.0, self.cursor.1) {
+                        Some(ID_PAUSE) => self.toggle_pause(fonts),
                         Some(ID_STOP) => {
                             let _ = self.commands.send(RecordingCommand::Stop);
                         }
@@ -220,6 +241,41 @@ mod tests {
             if let Some(frame) = &self.frame {
                 frame.keep_on_target(&mut event);
             }
+        }
+    }
+
+    #[test]
+    fn panel_shows_pause_then_resume() {
+        let fonts = Fonts::embedded();
+        let icon = |paused| {
+            let ui = build_panel_ui(Duration::ZERO, Duration::from_secs(60), paused, &fonts);
+            ui.widget(ID_PAUSE).map(|w| w.kind.clone())
+        };
+        assert_eq!(icon(false), Some(WidgetKind::IconButton { icon: Icon::Pause }));
+        assert_eq!(icon(true), Some(WidgetKind::IconButton { icon: Icon::Resume }));
+    }
+
+    /// Draws the panel offscreen into `%TEMP%\\gyozarec-panel-<paused>.png`
+    /// for a visual check; no window is opened.
+    #[test]
+    #[ignore = "desktop"]
+    fn render_panel_preview() {
+        let fonts = Fonts::embedded();
+        for paused in [false, true] {
+            let ui =
+                build_panel_ui(Duration::from_secs(7), Duration::from_secs(300), paused, &fonts);
+            let (b, scale) = (ui.bounds(), 2.0);
+            let (w, h) = (((b.right() + PAD) * scale).ceil(), ((b.bottom() + PAD) * scale).ceil());
+            let size = PixelSize { width: w as i32, height: h as i32 };
+            let mut painter = Painter::new(size, scale);
+            paint_panel(&mut painter, &ui, paused, &fonts);
+            let mut pixels = vec![0u32; (size.width * size.height) as usize];
+            painter.to_softbuffer(&mut pixels);
+            let img = image::RgbImage::from_fn(w as u32, h as u32, |x, y| {
+                let c = pixels[(y * w as u32 + x) as usize];
+                image::Rgb([(c >> 16) as u8, (c >> 8) as u8, c as u8])
+            });
+            img.save(std::env::temp_dir().join(format!("gyozarec-panel-{paused}.png"))).unwrap();
         }
     }
 

@@ -26,7 +26,6 @@ pub(super) const TEXTS: Texts = Texts {
     automatic: "Automatique (système)",
     ok: "OK",
     cancel: "Annuler",
-    stop: "Arrêter",
     err_empty_area: "la zone de capture est vide",
     err_no_monitor: "aucun écran trouvé",
     err_no_frames: "aucune image enregistrée",

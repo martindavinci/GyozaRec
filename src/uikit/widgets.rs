@@ -7,12 +7,36 @@ const CHECK_BOX: f32 = 16.0;
 const CHECK_GAP: f32 = 6.0;
 const DROPDOWN_EXTRA: f32 = 16.0;
 
+/// Symbols drawn as vector shapes, so they stay sharp at any scale.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Icon {
+    Pause,
+    Resume,
+    Stop,
+    Cancel,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum WidgetKind {
-    Button { label: String, dropdown: bool },
-    Check { label: String, checked: bool },
-    Label { text: String, color: Color },
-    Link { text: String },
+    Button {
+        label: String,
+        dropdown: bool,
+    },
+    /// A square button showing only an icon.
+    IconButton {
+        icon: Icon,
+    },
+    Check {
+        label: String,
+        checked: bool,
+    },
+    Label {
+        text: String,
+        color: Color,
+    },
+    Link {
+        text: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +55,7 @@ fn natural_size(kind: &WidgetKind, fonts: &Fonts, theme: &Theme) -> (f32, f32) {
             let extra = if *dropdown { DROPDOWN_EXTRA } else { 0.0 };
             (w + 2.0 * theme.padding + extra, theme.control_height)
         }
+        WidgetKind::IconButton { .. } => (theme.control_height, theme.control_height),
         WidgetKind::Check { label, .. } => {
             let (w, h) = measure_text(fonts, label, px, false);
             (CHECK_BOX + CHECK_GAP + w, h.max(CHECK_BOX))
@@ -136,17 +161,22 @@ impl Ui {
         for w in &self.widgets {
             let text_color = if w.enabled { theme.text } else { theme.disabled_text };
             let px = theme.font_px;
+            let fill = if !w.enabled {
+                theme.button
+            } else if self.pressed == Some(w.id) && self.hover == Some(w.id) {
+                theme.button_pressed
+            } else if self.hover == Some(w.id) {
+                theme.button_hover
+            } else {
+                theme.button
+            };
             match &w.kind {
+                WidgetKind::IconButton { icon } => {
+                    p.fill_rounded_rect(w.rect, theme.radius, fill);
+                    let accent = if w.enabled { theme.accent } else { text_color };
+                    paint_icon(p, *icon, w.rect, text_color, accent);
+                }
                 WidgetKind::Button { label, dropdown } => {
-                    let fill = if !w.enabled {
-                        theme.button
-                    } else if self.pressed == Some(w.id) && self.hover == Some(w.id) {
-                        theme.button_pressed
-                    } else if self.hover == Some(w.id) {
-                        theme.button_hover
-                    } else {
-                        theme.button
-                    };
                     p.fill_rounded_rect(w.rect, theme.radius, fill);
                     let (tw, th) = measure_text(fonts, label, px, false);
                     let extra = if *dropdown { DROPDOWN_EXTRA } else { 0.0 };
@@ -197,6 +227,28 @@ impl Ui {
     }
 }
 
+/// Draws `icon` in a 12-unit square centered in `rect`.
+fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Color) {
+    let (cx, cy) = (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
+    match icon {
+        Icon::Pause => {
+            for x in [cx - 4.5, cx + 1.5] {
+                p.fill_rounded_rect(RectF { x, y: cy - 6.0, w: 3.0, h: 12.0 }, 1.0, color);
+            }
+        }
+        Icon::Resume => {
+            p.fill_triangle([(cx - 4.0, cy - 6.0), (cx - 4.0, cy + 6.0), (cx + 6.0, cy)], color);
+        }
+        Icon::Stop => {
+            p.fill_rounded_rect(RectF { x: cx - 5.0, y: cy - 5.0, w: 10.0, h: 10.0 }, 2.0, accent);
+        }
+        Icon::Cancel => {
+            p.line((cx - 5.0, cy - 5.0), (cx + 5.0, cy + 5.0), 2.0, color);
+            p.line((cx + 5.0, cy - 5.0), (cx - 5.0, cy + 5.0), 2.0, color);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,6 +257,13 @@ mod tests {
 
     fn btn(l: &str) -> WidgetKind {
         WidgetKind::Button { label: l.into(), dropdown: false }
+    }
+
+    #[test]
+    fn icon_button_is_square() {
+        let f = Fonts::embedded();
+        let size = natural_size(&WidgetKind::IconButton { icon: Icon::Stop }, &f, &GYOZA);
+        assert_eq!(size, (GYOZA.control_height, GYOZA.control_height));
     }
 
     #[test]

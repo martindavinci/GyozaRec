@@ -26,7 +26,6 @@ pub(super) const TEXTS: Texts = Texts {
     automatic: "자동 (시스템)",
     ok: "확인",
     cancel: "취소",
-    stop: "중지",
     err_empty_area: "캡처 영역이 비어 있습니다",
     err_no_monitor: "모니터를 찾을 수 없습니다",
     err_no_frames: "녹화된 프레임이 없습니다",

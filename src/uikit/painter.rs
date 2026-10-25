@@ -3,7 +3,9 @@
 use super::theme::Color;
 use crate::geometry::{PixelPoint, PixelSize};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont, VariableFont, point};
-use tiny_skia::{FillRule, Paint, Path, PathBuilder, Pixmap, PremultipliedColorU8, Transform};
+use tiny_skia::{
+    FillRule, LineCap, Paint, Path, PathBuilder, Pixmap, PremultipliedColorU8, Stroke, Transform,
+};
 
 const NUNITO: &[u8] = include_bytes!("../../assets/fonts/Nunito-Variable.ttf");
 
@@ -188,6 +190,21 @@ impl Painter {
         self.fill_path(PathBuilder::from_circle(cx * s, cy * s, r * s), color);
     }
 
+    /// A straight line with round ends, `width` in logical units.
+    pub fn line(&mut self, from: (f32, f32), to: (f32, f32), width: f32, color: Color) {
+        let s = self.scale;
+        let mut pb = PathBuilder::new();
+        pb.move_to(from.0 * s, from.1 * s);
+        pb.line_to(to.0 * s, to.1 * s);
+        let Some(path) = pb.finish() else { return };
+        let (r, g, b) = color.rgb();
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(r, g, b, 255);
+        paint.anti_alias = true;
+        let stroke = Stroke { width: width * s, line_cap: LineCap::Round, ..Stroke::default() };
+        self.pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
     pub fn fill_triangle(&mut self, points: [(f32, f32); 3], color: Color) {
         let s = self.scale;
         let mut pb = PathBuilder::new();
@@ -331,6 +348,17 @@ mod tests {
         assert_eq!(dst[4 * 6 + 4], GYOZA.accent.0);
         assert_eq!(dst[5 * 6 + 5], GYOZA.accent.0);
         assert_eq!(dst[3 * 6 + 3], 0);
+    }
+
+    #[test]
+    fn line_draws_pixels_along_its_path() {
+        let mut p = Painter::new(PixelSize { width: 20, height: 20 }, 1.0);
+        p.clear(GYOZA.bg);
+        p.line((2.0, 10.0), (18.0, 10.0), 2.0, GYOZA.accent);
+        let mut out = vec![0; 400];
+        p.to_softbuffer(&mut out);
+        assert_eq!(out[10 * 20 + 10], GYOZA.accent.0);
+        assert_eq!(out[2 * 20 + 10], GYOZA.bg.0);
     }
 
     #[test]

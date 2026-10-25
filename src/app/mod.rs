@@ -268,7 +268,6 @@ impl App {
                     &monitor,
                     max,
                     commands,
-                    self.state.texts(),
                     &self.fonts,
                 );
             }

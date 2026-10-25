@@ -239,7 +239,7 @@ pub fn decode_first_frame(path: &Path) -> crate::Result<PixelBuffer> {
             copy_rows(first, stride);
             buffer.Unlock()?;
         }
-        for px in bgra.chunks_exact_mut(4) {
+        for px in bgra.as_chunks_mut::<4>().0 {
             px[3] = 255;
         }
         Ok(PixelBuffer::new(crate::geometry::PixelRect::new(0, 0, size.width, size.height), bgra))

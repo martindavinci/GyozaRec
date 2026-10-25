@@ -58,7 +58,7 @@ impl ScreenGrabber for GdiGrabber {
                     let pixels = copied.map(|_| {
                         let len = rect.width as usize * rect.height as usize * 4;
                         let mut data = std::slice::from_raw_parts(bits as *const u8, len).to_vec();
-                        for px in data.chunks_exact_mut(4) {
+                        for px in data.as_chunks_mut::<4>().0 {
                             px[3] = 255;
                         }
                         PixelBuffer::new(rect, data)

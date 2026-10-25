@@ -19,7 +19,9 @@ impl OverlayCache {
     pub fn new(frozen: &PixelBuffer) -> Self {
         let original: Vec<u32> = frozen
             .bgra
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|px| u32::from(px[2]) << 16 | u32::from(px[1]) << 8 | u32::from(px[0]))
             .collect();
         let dim = |c: u32| c * 153 / 255;

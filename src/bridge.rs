@@ -50,12 +50,15 @@ pub struct BridgeRecordingUi<S: UiSender> {
     pub sender: S,
     pub grabber: Arc<dyn ScreenGrabber>,
     pub clock: Arc<dyn Clock>,
+    /// Recording cues (pause, resume, stop).
+    pub sound: Box<dyn crate::capture::SoundPlayer>,
 }
 
 impl<S: UiSender> RecordingUi for BridgeRecordingUi<S> {
     fn record(&mut self, job: RecordingJob) -> RecordingResult {
         let (commands, inbox) = mpsc::channel();
         let max = job.config.max_duration;
+        let job_cues = job.cues;
         self.sender.send(UiRequest::RecordingStarted {
             region: job.region,
             monitor: job.monitor,
@@ -70,10 +73,29 @@ impl<S: UiSender> RecordingUi for BridgeRecordingUi<S> {
             job.path,
             job.audio,
         );
+        let cues = job_cues;
         let result = loop {
             match inbox.recv_timeout(TICK) {
-                Ok(RecordingCommand::Pause) => worker.pause(),
-                Ok(RecordingCommand::Resume) => worker.resume(),
+                // Paused audio is dropped, so the pause cue plays once it took effect…
+                Ok(RecordingCommand::Pause) => {
+                    worker.pause();
+                    if cues.play {
+                        if cues.guard {
+                            self.clock.sleep(crate::sounds::PAUSE_SETTLE);
+                        }
+                        self.sound.play(crate::sounds::Cue::Pause);
+                    }
+                }
+                // …and recording resumes only after the resume cue has played.
+                Ok(RecordingCommand::Resume) => {
+                    if cues.play {
+                        self.sound.play(crate::sounds::Cue::Resume);
+                        if cues.guard {
+                            self.clock.sleep(crate::sounds::CUE_GUARD);
+                        }
+                    }
+                    worker.resume();
+                }
                 Ok(RecordingCommand::Stop) => break worker.stop(),
                 Ok(RecordingCommand::Cancel) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                     break worker.cancel();
@@ -87,6 +109,10 @@ impl<S: UiSender> RecordingUi for BridgeRecordingUi<S> {
             }
         };
         self.sender.send(UiRequest::RecordingEnded);
+        // The recording (and its audio) is closed: the stop cue cannot leak in.
+        if cues.play && result.outcome == crate::recording::RecordingOutcome::Saved {
+            self.sound.play(crate::sounds::Cue::Stop);
+        }
         result
     }
 }
@@ -206,15 +232,63 @@ mod tests {
             },
             sink: Box::new(crate::testing::VecSink::default()),
             audio: None,
+            cues: crate::capture::Cues::default(),
         }
     }
 
     fn recording_ui(sender: FakeUiSender) -> BridgeRecordingUi<FakeUiSender> {
+        recording_ui_with(sender, crate::testing::FakeClock::default())
+    }
+
+    fn recording_ui_with(
+        sender: FakeUiSender,
+        clock: crate::testing::FakeClock,
+    ) -> BridgeRecordingUi<FakeUiSender> {
+        let log = sender.log.clone();
         BridgeRecordingUi {
             sender,
             grabber: std::sync::Arc::new(crate::testing::FakeGrabber::default()),
-            clock: std::sync::Arc::new(crate::testing::FakeClock::default()),
+            clock: std::sync::Arc::new(clock),
+            sound: Box::new(crate::testing::FakeSound { log }),
         }
+    }
+
+    fn cue_run(cues: crate::capture::Cues) -> (Vec<String>, Vec<Duration>) {
+        use crate::bridge::RecordingCommand::{Pause, Resume, Stop};
+        use crate::capture::RecordingUi;
+        let d = tempfile::tempdir().unwrap();
+        let sender = FakeUiSender::answering_all(vec![Pause, Resume, Stop]);
+        let log = sender.log.clone();
+        let clock = crate::testing::FakeClock::default();
+        let mut ui = recording_ui_with(sender, clock.clone());
+        let mut j = job(d.path(), 60);
+        j.cues = cues;
+        ui.record(j);
+        let sounds =
+            log.lock().unwrap().iter().filter(|e| e.starts_with("sound")).cloned().collect();
+        (sounds, clock.sleeps())
+    }
+
+    #[test]
+    fn cues_follow_pause_resume_stop_with_guards() {
+        use crate::sounds::{CUE_GUARD, PAUSE_SETTLE};
+        let (sounds, sleeps) = cue_run(crate::capture::Cues { play: true, guard: true });
+        assert_eq!(sounds, ["sound:pause", "sound:resume", "sound:stop"]);
+        assert!(sleeps.contains(&PAUSE_SETTLE) && sleeps.contains(&CUE_GUARD), "{sleeps:?}");
+    }
+
+    #[test]
+    fn no_waits_when_excluding_self() {
+        use crate::sounds::{CUE_GUARD, PAUSE_SETTLE};
+        let (sounds, sleeps) = cue_run(crate::capture::Cues { play: true, guard: false });
+        assert_eq!(sounds.len(), 3);
+        assert!(!sleeps.contains(&PAUSE_SETTLE) && !sleeps.contains(&CUE_GUARD), "{sleeps:?}");
+    }
+
+    #[test]
+    fn no_bridge_cues_when_in_app_sounds_off() {
+        let (sounds, _) = cue_run(crate::capture::Cues { play: false, guard: false });
+        assert!(sounds.is_empty());
     }
 
     #[test]

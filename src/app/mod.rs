@@ -124,6 +124,7 @@ impl App {
                 sender: sender.clone(),
                 grabber,
                 clock: clock.clone(),
+                sound: Box::new(SystemSound),
             }),
             sinks: Box::new(DefaultSinkFactory),
             audio: Box::new(gyozarec::platform::LoopbackStarter),

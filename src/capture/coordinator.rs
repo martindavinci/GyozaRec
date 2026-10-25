@@ -1,9 +1,9 @@
 //! Runs one capture end to end: hide toolbar, wait, grab, select, save.
 
 use super::{
-    AudioStarter, CaptureOutcome, ClipboardService, CursorLocator, FileRevealer, MonitorProvider,
-    RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind,
-    SoundPlayer, ToolbarVisibility, WindowSnapshotter, monitor_from_point,
+    AudioStarter, CaptureOutcome, ClipboardService, Cues, CursorLocator, FileRevealer,
+    MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi,
+    SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowSnapshotter, monitor_from_point,
 };
 use crate::clock::Clock;
 use crate::geometry::{CaptureArea, OutputFormat, PixelRect, meets_minimum};
@@ -129,6 +129,18 @@ impl CaptureCoordinator {
             SinkKind::Mp4 { .. } => SinkKind::Mp4 { audio: feed.is_some() },
             other => other,
         };
+        // The start sound plays once the audio runs, then the recording waits it
+        // out: anything captured before the recording loop starts is discarded.
+        let cues = Cues {
+            play: settings.play_sound,
+            guard: feed.as_ref().is_some_and(|f| !f.excludes_self),
+        };
+        if cues.play {
+            self.sound.play(crate::sounds::Cue::Start);
+            if cues.guard {
+                self.clock.sleep(crate::sounds::CUE_GUARD);
+            }
+        }
         let path = FileNamer::new(self.clock.clone()).next_path(&settings.save_folder, ext);
         let sink = match self.sinks.create(&kind, &path, region.size(), fps) {
             Ok(sink) => sink,
@@ -141,14 +153,12 @@ impl CaptureCoordinator {
             max_duration: Duration::from_secs(u64::from(max_seconds)),
         };
         self.clock.sleep(OVERLAY_CLOSE_SETTLE);
-        let job = RecordingJob { region, monitor, path, config, sink, audio: feed };
+        let job = RecordingJob { region, monitor, path, config, sink, audio: feed, cues };
         let result = self.recording_ui.record(job);
         match (result.outcome, result.path) {
             (RecordingOutcome::Saved, Some(path)) => {
+                // The recording panel already played the stop sound.
                 let copied = settings.copy_to_clipboard && self.clipboard.set_file(&path);
-                if settings.play_sound {
-                    self.sound.play_capture();
-                }
                 if settings.open_folder_after_recording {
                     self.revealer.reveal(&path);
                 }
@@ -193,7 +203,7 @@ impl CaptureCoordinator {
         match saved {
             Ok(path) => {
                 if settings.play_sound {
-                    self.sound.play_capture();
+                    self.sound.play(crate::sounds::Cue::Saved);
                 }
                 if settings.open_file_after_capture {
                     self.revealer.open(&path);
@@ -253,6 +263,39 @@ mod tests {
         });
         assert!(!off.events().contains(&"audio:start".to_string()));
         assert!(off.events().contains(&"sink:Mp4 { audio: false }:200x100".to_string()));
+    }
+
+    #[test]
+    fn start_cue_plays_before_the_recording_with_a_guard() {
+        use crate::sounds::CUE_GUARD;
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut h = CoordinatorHarness::rect(rect).with_audio().recording(RecordingOutcome::Saved);
+        h.run(AppSettings { format: OutputFormat::Mp4, ..h.settings() });
+        let ev = h.events();
+        let at = |name: &str| ev.iter().position(|e| e.starts_with(name)).unwrap();
+        assert!(
+            at("audio:start") < at("sound:start") && at("sound:start") < at("record:"),
+            "{ev:?}"
+        );
+        assert!(h.clock.sleeps().contains(&CUE_GUARD), "{:?}", h.clock.sleeps());
+    }
+
+    #[test]
+    fn start_cue_without_audio_does_not_wait() {
+        use crate::sounds::CUE_GUARD;
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut h = CoordinatorHarness::rect(rect).recording(RecordingOutcome::Saved);
+        h.run(AppSettings { format: OutputFormat::Gif, ..h.settings() });
+        assert!(h.events().contains(&"sound:start".to_string()));
+        assert!(!h.clock.sleeps().contains(&CUE_GUARD));
+    }
+
+    #[test]
+    fn no_cues_when_in_app_sounds_off() {
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut h = CoordinatorHarness::rect(rect).with_audio().recording(RecordingOutcome::Saved);
+        h.run(AppSettings { format: OutputFormat::Mp4, play_sound: false, ..h.settings() });
+        assert!(!h.events().iter().any(|e| e.starts_with("sound")), "{:?}", h.events());
     }
 
     #[test]

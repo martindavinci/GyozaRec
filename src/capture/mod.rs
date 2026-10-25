@@ -48,6 +48,7 @@ pub struct RecordingJob {
     pub sink: Box<dyn FrameSink>,
     /// Running audio sources, when the recording has sound.
     pub audio: Option<crate::audio::AudioFeed>,
+    pub cues: Cues,
 }
 
 pub trait RecordingUi: Send {
@@ -82,7 +83,15 @@ pub trait FileRevealer: Send {
 }
 
 pub trait SoundPlayer: Send {
-    fn play_capture(&self);
+    fn play(&self, cue: crate::sounds::Cue);
+}
+
+/// Recording sounds: whether to play them, and whether audio being recorded
+/// means waiting around them so they stay out of the file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Cues {
+    pub play: bool,
+    pub guard: bool,
 }
 
 pub trait ToolbarVisibility: Send {

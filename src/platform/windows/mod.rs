@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Windows backend.
 
+mod autostart;
 mod clipboard;
 mod dialog;
 mod grab;
@@ -11,6 +12,7 @@ mod recording;
 mod sound;
 mod window_snapshot;
 
+pub use autostart::RunKeyStore;
 pub use clipboard::Win32Clipboard;
 pub use dialog::show_error_box;
 pub use grab::GdiGrabber;

@@ -3,7 +3,7 @@
 
 mod app;
 
-use gyozarec::instance::{self, Instance, InstanceCommand};
+use gyozarec::instance::{self, Instance};
 use gyozarec::presentation::StartupOptions;
 use std::sync::Mutex;
 use winit::event_loop::EventLoop;
@@ -20,8 +20,9 @@ fn main() {
     let listener = match instance::acquire(&instance::socket_name(&user)) {
         Ok(Instance::Secondary(client)) => {
             gyozarec::platform::allow_foreground_for_others();
-            let cmd = options.action.map_or(InstanceCommand::Activate, InstanceCommand::Quick);
-            let _ = client.send(cmd);
+            if let Some(cmd) = options.secondary_command() {
+                let _ = client.send(cmd);
+            }
             return;
         }
         Ok(Instance::Primary(listener)) => Some(listener),
@@ -38,7 +39,7 @@ fn main() {
             let _ = proxy.lock().unwrap().send_event(app::AppEvent::Instance(cmd));
         });
     }
-    let mut app = app::App::new(event_loop.create_proxy(), options.action);
+    let mut app = app::App::new(event_loop.create_proxy(), options);
     if let Err(err) = event_loop.run_app(&mut app) {
         eprintln!("event loop error: {err}");
     }

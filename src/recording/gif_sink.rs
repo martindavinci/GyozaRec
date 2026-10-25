@@ -54,10 +54,32 @@ impl GifSink {
         let (w, h) = (size.width as u16, size.height as u16);
         let handle = std::thread::Builder::new().name("gyozarec-gif".into()).spawn(
             move || -> crate::Result<()> {
-                for (mut rgba, delay) in frames {
-                    let mut frame = gif::Frame::from_rgba_speed(w, h, &mut rgba, QUANTIZE_SPEED);
+                // The last distinct frame, and the GIF frame made from it, held
+                // back so a repeat of it only adds to its delay.
+                let mut previous: Option<Vec<u8>> = None;
+                let mut held: Option<gif::Frame<'static>> = None;
+                for (rgba, delay) in frames {
+                    if previous.as_ref() == Some(&rgba) {
+                        if let Some(frame) = held.as_mut() {
+                            frame.delay = frame.delay.saturating_add(delay);
+                        }
+                        continue;
+                    }
+                    let mut frame = match &previous {
+                        Some(prev) => changed_frame(prev, &rgba, w, h),
+                        None => {
+                            gif::Frame::from_rgba_speed(w, h, &mut rgba.clone(), QUANTIZE_SPEED)
+                        }
+                    };
                     frame.delay = delay;
-                    encoder.write_frame(&frame)?;
+                    frame.dispose = gif::DisposalMethod::Keep;
+                    if let Some(done) = held.replace(frame) {
+                        encoder.write_frame(&done)?;
+                    }
+                    previous = Some(rgba);
+                }
+                if let Some(done) = held {
+                    encoder.write_frame(&done)?;
                 }
                 // The queue closed: the recording ended (or was dropped).
                 encoder.into_inner()?.flush()?;
@@ -92,6 +114,43 @@ impl Drop for GifSink {
     fn drop(&mut self) {
         let _ = self.join();
     }
+}
+
+/// Bounds `(x, y, w, h)` of the pixels that differ between two RGBA frames of
+/// `width` pixels per row; `None` when they are identical.
+fn changed_bounds(prev: &[u8], cur: &[u8], width: usize) -> Option<(usize, usize, usize, usize)> {
+    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+    for (i, (a, b)) in prev.as_chunks::<4>().0.iter().zip(cur.as_chunks::<4>().0).enumerate() {
+        if a != b {
+            let (x, y) = (i % width, i / width);
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+    }
+    (x0 != usize::MAX).then(|| (x0, y0, x1 - x0 + 1, y1 - y0 + 1))
+}
+
+/// Only the changed area of `cur`, placed where it belongs; pixels that did
+/// not change are transparent so the previous frame shows through.
+fn changed_frame(prev: &[u8], cur: &[u8], w: u16, h: u16) -> gif::Frame<'static> {
+    let width = usize::from(w);
+    let Some((x, y, cw, ch)) = changed_bounds(prev, cur, width) else {
+        return gif::Frame::from_rgba_speed(w, h, &mut cur.to_vec(), QUANTIZE_SPEED);
+    };
+    let mut crop = Vec::with_capacity(cw * ch * 4);
+    for row in y..y + ch {
+        let start = (row * width + x) * 4;
+        let (before, after) = (&prev[start..start + cw * 4], &cur[start..start + cw * 4]);
+        for (a, b) in before.as_chunks::<4>().0.iter().zip(after.as_chunks::<4>().0) {
+            if a == b {
+                crop.extend_from_slice(&[0, 0, 0, 0]);
+            } else {
+                crop.extend_from_slice(b);
+            }
+        }
+    }
+    let mut frame = gif::Frame::from_rgba_speed(cw as u16, ch as u16, &mut crop, QUANTIZE_SPEED);
+    (frame.left, frame.top) = (x as u16, y as u16);
+    frame
 }
 
 fn closed() -> crate::Error {
@@ -151,13 +210,141 @@ mod tests {
         PixelBuffer::solid(PixelRect::new(0, 0, w, h), 10, 200, 30)
     }
 
+    /// A solid frame whose color depends on `i`, so consecutive ones differ.
+    fn shade(w: i32, h: i32, i: u64) -> PixelBuffer {
+        PixelBuffer::solid(PixelRect::new(0, 0, w, h), (i * 37 % 256) as u8, 200, 30)
+    }
+
+    /// `base` with an `size`×`size` square of another color at (`x`, `y`).
+    fn with_square(base: &PixelBuffer, x: i32, y: i32, size: i32) -> PixelBuffer {
+        let mut f = base.clone();
+        for dy in 0..size {
+            for dx in 0..size {
+                f.put_pixel(
+                    crate::geometry::PixelPoint { x: x + dx, y: y + dy },
+                    [200, 40, 90, 255],
+                );
+            }
+        }
+        f
+    }
+
+    /// Every decoded frame drawn over the previous ones, as a viewer shows them.
+    fn composited(path: &Path) -> Vec<Vec<u8>> {
+        let mut opts = gif::DecodeOptions::new();
+        opts.set_color_output(gif::ColorOutput::RGBA);
+        let mut dec = opts.read_info(fs::File::open(path).unwrap()).unwrap();
+        let (w, h) = (usize::from(dec.width()), usize::from(dec.height()));
+        let mut canvas = vec![0u8; w * h * 4];
+        let mut out = vec![];
+        while let Some(f) = dec.read_next_frame().unwrap() {
+            let (fl, ft, fw) = (usize::from(f.left), usize::from(f.top), usize::from(f.width));
+            for (i, px) in f.buffer.as_chunks::<4>().0.iter().enumerate() {
+                if px[3] == 0 {
+                    continue;
+                }
+                let (x, y) = (fl + i % fw, ft + i / fw);
+                canvas[(y * w + x) * 4..(y * w + x) * 4 + 4].copy_from_slice(px);
+            }
+            out.push(canvas.clone());
+        }
+        out
+    }
+
+    /// (left, top, width, height) of every frame.
+    fn placements(path: &Path) -> Vec<(u16, u16, u16, u16)> {
+        let mut dec = gif::DecodeOptions::new().read_info(fs::File::open(path).unwrap()).unwrap();
+        let mut out = vec![];
+        while let Some(f) = dec.read_next_frame().unwrap() {
+            out.push((f.left, f.top, f.width, f.height));
+        }
+        out
+    }
+
     #[test]
-    fn delays_follow_real_timestamps() {
+    fn identical_frames_merge_into_one_with_summed_delay() {
         let d = tempdir().unwrap();
         let p = d.path().join("a.gif");
         let mut s = GifSink::create(&p, PixelSize { width: 40, height: 30 }, 800, 10).unwrap();
         for t in [0, 100, 250] {
             s.push(&solid(40, 30), Duration::from_millis(t)).unwrap();
+        }
+        s.finish().unwrap();
+        assert_eq!(frames(&p).2, vec![35]);
+    }
+
+    #[test]
+    fn only_the_changed_area_is_written() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("a.gif");
+        let base = solid(200, 100);
+        let mut s = GifSink::create(&p, PixelSize { width: 200, height: 100 }, 800, 10).unwrap();
+        s.push(&base, Duration::ZERO).unwrap();
+        s.push(&with_square(&base, 50, 20, 10), Duration::from_millis(100)).unwrap();
+        s.finish().unwrap();
+        assert_eq!(placements(&p), vec![(0, 0, 200, 100), (50, 20, 10, 10)]);
+    }
+
+    #[test]
+    fn composited_frames_match_the_sources() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("a.gif");
+        let base = shade(64, 48, 3);
+        let sources: Vec<PixelBuffer> =
+            (0..4).map(|i| with_square(&base, 4 + i * 12, 6 + i * 8, 10)).collect();
+        let mut s = GifSink::create(&p, PixelSize { width: 64, height: 48 }, 800, 10).unwrap();
+        for (i, f) in sources.iter().enumerate() {
+            s.push(f, Duration::from_millis(i as u64 * 100)).unwrap();
+        }
+        s.finish().unwrap();
+        let shown = composited(&p);
+        assert_eq!(shown.len(), 4);
+        for (frame, source) in shown.iter().zip(&sources) {
+            let expected = source.to_rgba();
+            let worst = frame.iter().zip(&expected).map(|(a, b)| a.abs_diff(*b)).max().unwrap();
+            assert!(worst <= 48, "max channel error {worst}");
+        }
+    }
+
+    #[test]
+    fn mostly_static_recording_is_much_smaller() {
+        let d = tempdir().unwrap();
+        let (moving, changing) = (d.path().join("m.gif"), d.path().join("c.gif"));
+        let size = PixelSize { width: 320, height: 240 };
+        let noise = |seed: u64| {
+            let mut f = PixelBuffer::solid(PixelRect::new(0, 0, 320, 240), 0, 0, 0);
+            let mut v = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            for y in 0..240 {
+                for x in 0..320 {
+                    v = v.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    let c = (v >> 33) as u8;
+                    f.put_pixel(crate::geometry::PixelPoint { x, y }, [c, c / 2, 255 - c, 255]);
+                }
+            }
+            f
+        };
+        let background = noise(1);
+        let mut m = GifSink::create(&moving, size, 800, 10).unwrap();
+        let mut c = GifSink::create(&changing, size, 800, 10).unwrap();
+        for i in 0..30u64 {
+            let t = Duration::from_millis(i * 100);
+            m.push(&with_square(&background, (i * 9) as i32, 100, 16), t).unwrap();
+            c.push(&noise(i + 2), t).unwrap();
+        }
+        m.finish().unwrap();
+        c.finish().unwrap();
+        let (ms, cs) =
+            (fs::metadata(&moving).unwrap().len(), fs::metadata(&changing).unwrap().len());
+        assert!(ms * 10 < cs * 4, "{ms} bytes vs {cs} bytes");
+    }
+
+    #[test]
+    fn delays_follow_real_timestamps() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("a.gif");
+        let mut s = GifSink::create(&p, PixelSize { width: 40, height: 30 }, 800, 10).unwrap();
+        for (i, t) in [0, 100, 250].into_iter().enumerate() {
+            s.push(&shade(40, 30, i as u64), Duration::from_millis(t)).unwrap();
         }
         s.finish().unwrap();
         assert_eq!(frames(&p), (40, 30, vec![10, 15, 10], gif::Repeat::Infinite));
@@ -179,8 +366,8 @@ mod tests {
         let d = tempdir().unwrap();
         let p = d.path().join("a.gif");
         let mut s = GifSink::create(&p, PixelSize { width: 20, height: 20 }, 800, 10).unwrap();
-        s.push(&solid(20, 20), Duration::ZERO).unwrap();
-        s.push(&solid(20, 20), Duration::from_millis(5)).unwrap();
+        s.push(&shade(20, 20, 0), Duration::ZERO).unwrap();
+        s.push(&shade(20, 20, 1), Duration::from_millis(5)).unwrap();
         s.finish().unwrap();
         assert_eq!(frames(&p).2, vec![2, 10]);
     }
@@ -223,7 +410,7 @@ mod tests {
         let mut s = GifSink::with_writer(w, PixelSize { width: 40, height: 30 }, 800, 10).unwrap();
         let mut failed = false;
         for t in 0..6 {
-            failed |= s.push(&solid(40, 30), Duration::from_millis(t * 100)).is_err();
+            failed |= s.push(&shade(40, 30, t), Duration::from_millis(t * 100)).is_err();
         }
         failed |= s.finish().is_err();
         assert!(failed, "a failing writer must surface as an error");
@@ -235,7 +422,7 @@ mod tests {
         let w = Box::new(SlowWriter(bytes.clone()));
         let mut s = GifSink::with_writer(w, PixelSize { width: 24, height: 16 }, 800, 10).unwrap();
         for t in 0..20 {
-            s.push(&solid(24, 16), Duration::from_millis(t * 100)).unwrap();
+            s.push(&shade(24, 16, t), Duration::from_millis(t * 100)).unwrap();
         }
         s.finish().unwrap();
         let data = bytes.lock().unwrap().clone();

@@ -65,5 +65,11 @@ pub(super) const TEXTS: Texts = Texts {
     convert_video: "Video in GIF umwandeln…",
     converting: "Umwandlung in GIF… {percent} %",
     conversion_canceled: "Umwandlung abgebrochen",
+    editor_save: "Speichern",
+    editor_save_as: "Speichern unter…",
+    editor_copy: "Kopieren",
+    editor_sizes: ["Dünn", "Mittel", "Dick"],
+    editor_save_question: "Änderungen an {name} speichern?",
+    editor_save_failed: "Das Bild konnte nicht gespeichert werden: {error}",
     crash_message: "GyozaRec wurde wegen eines Fehlers beendet. Details wurden in {path} gespeichert",
 };

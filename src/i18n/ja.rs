@@ -58,5 +58,11 @@ pub(super) const TEXTS: Texts = Texts {
     convert_video: "動画を GIF に変換…",
     converting: "GIF に変換中… {percent}%",
     conversion_canceled: "変換を取り消しました",
+    editor_save: "保存",
+    editor_save_as: "名前を付けて保存…",
+    editor_copy: "コピー",
+    editor_sizes: ["細い", "中", "太い"],
+    editor_save_question: "{name} への変更を保存しますか?",
+    editor_save_failed: "画像を保存できませんでした: {error}",
     crash_message: "エラーのため GyozaRec が終了しました。詳細は {path} に保存されました",
 };

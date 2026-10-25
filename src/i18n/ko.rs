@@ -58,5 +58,11 @@ pub(super) const TEXTS: Texts = Texts {
     convert_video: "동영상을 GIF로 변환…",
     converting: "GIF로 변환 중… {percent}%",
     conversion_canceled: "변환이 취소되었습니다",
+    editor_save: "저장",
+    editor_save_as: "다른 이름으로 저장…",
+    editor_copy: "복사",
+    editor_sizes: ["가늘게", "보통", "굵게"],
+    editor_save_question: "{name}의 변경 내용을 저장할까요?",
+    editor_save_failed: "이미지를 저장할 수 없습니다: {error}",
     crash_message: "오류로 인해 GyozaRec이 종료되었습니다. 자세한 내용은 {path}에 저장되었습니다",
 };

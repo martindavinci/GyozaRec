@@ -18,6 +18,15 @@ pub enum Icon {
     Discard,
     /// A curved arrow: go back without doing anything.
     Back,
+    Arrow,
+    Rectangle,
+    Pen,
+    Highlighter,
+    Text,
+    Pixelate,
+    Crop,
+    Undo,
+    Redo,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,6 +38,16 @@ pub enum WidgetKind {
     /// A square button showing only an icon.
     IconButton {
         icon: Icon,
+    },
+    /// An icon button that stays highlighted while its tool is chosen.
+    ToolButton {
+        icon: Icon,
+        selected: bool,
+    },
+    /// A color to pick.
+    Swatch {
+        color: Color,
+        selected: bool,
     },
     Check {
         label: String,
@@ -59,7 +78,9 @@ fn natural_size(kind: &WidgetKind, fonts: &Fonts, theme: &Theme) -> (f32, f32) {
             let extra = if *dropdown { DROPDOWN_EXTRA } else { 0.0 };
             (w + 2.0 * theme.padding + extra, theme.control_height)
         }
-        WidgetKind::IconButton { .. } => (theme.control_height, theme.control_height),
+        WidgetKind::IconButton { .. }
+        | WidgetKind::ToolButton { .. }
+        | WidgetKind::Swatch { .. } => (theme.control_height, theme.control_height),
         WidgetKind::Check { label, .. } => {
             let (w, h) = measure_text(fonts, label, px, false);
             (CHECK_BOX + CHECK_GAP + w, h.max(CHECK_BOX))
@@ -187,6 +208,26 @@ impl Ui {
                     let accent = if w.enabled { theme.accent } else { text_color };
                     paint_icon(p, *icon, w.rect, text_color, accent);
                 }
+                WidgetKind::ToolButton { icon, selected } => {
+                    if *selected {
+                        p.fill_rounded_rect(w.rect, theme.radius, theme.accent);
+                        p.fill_rounded_rect(
+                            inset(w.rect, 2.0),
+                            theme.radius - 1.0,
+                            theme.button_pressed,
+                        );
+                    } else {
+                        p.fill_rounded_rect(w.rect, theme.radius, fill);
+                    }
+                    paint_icon(p, *icon, w.rect, text_color, theme.accent);
+                }
+                WidgetKind::Swatch { color, selected } => {
+                    let ring = if *selected { theme.accent } else { fill };
+                    p.fill_rounded_rect(w.rect, theme.radius, ring);
+                    let well = inset(w.rect, 5.0);
+                    p.fill_rounded_rect(well, 3.0, theme.text);
+                    p.fill_rounded_rect(inset(well, 1.0), 2.5, *color);
+                }
                 WidgetKind::Button { label, dropdown } => {
                     p.fill_rounded_rect(w.rect, theme.radius, fill);
                     let (tw, th) = measure_text(fonts, label, px, false);
@@ -238,6 +279,10 @@ impl Ui {
     }
 }
 
+fn inset(r: RectF, by: f32) -> RectF {
+    RectF { x: r.x + by, y: r.y + by, w: (r.w - 2.0 * by).max(0.0), h: (r.h - 2.0 * by).max(0.0) }
+}
+
 /// Draws `icon` in a 12-unit square centered in `rect`.
 fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Color) {
     let (cx, cy) = (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
@@ -265,13 +310,73 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
             p.line((cx - 3.5, cy + 6.0), (cx + 3.5, cy + 6.0), 2.0, color);
             p.line((cx, cy - 1.0), (cx, cy + 3.5), 1.5, color);
         }
-        Icon::Back => {
+        Icon::Back | Icon::Undo => {
             p.line((cx + 5.0, cy + 5.0), (cx + 5.0, cy - 1.0), 2.0, color);
             p.line((cx + 5.0, cy - 1.0), (cx - 2.0, cy - 1.0), 2.0, color);
             p.fill_triangle(
                 [(cx - 6.5, cy - 1.0), (cx - 2.0, cy - 5.5), (cx - 2.0, cy + 3.5)],
                 color,
             );
+        }
+        Icon::Redo => {
+            p.line((cx - 5.0, cy + 5.0), (cx - 5.0, cy - 1.0), 2.0, color);
+            p.line((cx - 5.0, cy - 1.0), (cx + 2.0, cy - 1.0), 2.0, color);
+            p.fill_triangle(
+                [(cx + 6.5, cy - 1.0), (cx + 2.0, cy - 5.5), (cx + 2.0, cy + 3.5)],
+                color,
+            );
+        }
+        Icon::Arrow => {
+            p.line((cx - 5.5, cy + 5.5), (cx + 2.0, cy - 2.0), 2.0, color);
+            p.fill_triangle(
+                [(cx + 6.0, cy - 6.0), (cx - 1.0, cy - 4.0), (cx + 4.0, cy + 1.0)],
+                color,
+            );
+        }
+        Icon::Rectangle => {
+            p.stroke_rect(RectF { x: cx - 6.0, y: cy - 4.5, w: 12.0, h: 9.0 }, 2.0, color);
+        }
+        Icon::Pen => {
+            p.line((cx - 5.0, cy + 5.0), (cx + 4.0, cy - 4.0), 3.0, color);
+            p.fill_triangle(
+                [(cx - 6.5, cy + 6.5), (cx - 6.0, cy + 3.0), (cx - 3.0, cy + 6.0)],
+                accent,
+            );
+        }
+        Icon::Highlighter => {
+            p.stroke_polyline(
+                &[(cx - 6.0, cy + 3.0), (cx + 6.0, cy + 3.0)],
+                5.0,
+                Color(0xFDD835),
+                220,
+            );
+            p.line((cx - 3.0, cy + 1.0), (cx + 4.0, cy - 6.0), 3.0, color);
+        }
+        Icon::Text => {
+            p.line((cx - 5.5, cy - 5.0), (cx + 5.5, cy - 5.0), 2.5, color);
+            p.line((cx, cy - 5.0), (cx, cy + 6.0), 2.5, color);
+        }
+        Icon::Pixelate => {
+            for (i, (dx, dy)) in
+                [(0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2)]
+                    .into_iter()
+                    .enumerate()
+            {
+                let tone = if i % 2 == 0 { color } else { accent };
+                let cell = RectF {
+                    x: cx - 6.0 + dx as f32 * 4.0,
+                    y: cy - 6.0 + dy as f32 * 4.0,
+                    w: 4.0,
+                    h: 4.0,
+                };
+                p.fill_rounded_rect(cell, 0.0, tone);
+            }
+        }
+        Icon::Crop => {
+            p.line((cx - 3.0, cy - 7.0), (cx - 3.0, cy + 3.0), 2.0, color);
+            p.line((cx - 3.0, cy + 3.0), (cx + 7.0, cy + 3.0), 2.0, color);
+            p.line((cx - 7.0, cy - 3.0), (cx + 3.0, cy - 3.0), 2.0, color);
+            p.line((cx + 3.0, cy - 3.0), (cx + 3.0, cy + 7.0), 2.0, color);
         }
     }
 }
@@ -298,6 +403,39 @@ mod tests {
         let mut new = Ui::new(row());
         new.carry_state_from(&old);
         assert_eq!(new.pointer_up(x, y), Some(1));
+    }
+
+    #[test]
+    fn tool_button_and_swatch_paint_selection() {
+        let f = Fonts::embedded();
+        let size =
+            natural_size(&WidgetKind::ToolButton { icon: Icon::Pen, selected: true }, &f, &GYOZA);
+        assert_eq!(size, (GYOZA.control_height, GYOZA.control_height));
+        let edge_color = |kind: WidgetKind| {
+            let ws = layout_row(vec![(1, kind)], 0.0, 0.0, 0.0, &f, &GYOZA);
+            let mut p = Painter::new(crate::geometry::PixelSize { width: 28, height: 28 }, 1.0);
+            p.clear(GYOZA.bg);
+            Ui::new(ws).paint(&mut p, &f, &GYOZA);
+            let mut out = vec![0; 28 * 28];
+            p.to_softbuffer(&mut out);
+            out[14 * 28 + 1]
+        };
+        assert_eq!(
+            edge_color(WidgetKind::ToolButton { icon: Icon::Pen, selected: true }),
+            GYOZA.accent.0
+        );
+        assert_ne!(
+            edge_color(WidgetKind::ToolButton { icon: Icon::Pen, selected: false }),
+            GYOZA.accent.0
+        );
+        assert_eq!(
+            edge_color(WidgetKind::Swatch { color: Color(0x1E88E5), selected: true }),
+            GYOZA.accent.0
+        );
+        assert_ne!(
+            edge_color(WidgetKind::Swatch { color: Color(0x1E88E5), selected: false }),
+            GYOZA.accent.0
+        );
     }
 
     #[test]

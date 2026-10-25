@@ -184,6 +184,15 @@ pub struct Texts {
     /// `{percent}` is the progress, 0 to 100.
     pub converting: &'static str,
     pub conversion_canceled: &'static str,
+    pub editor_save: &'static str,
+    pub editor_save_as: &'static str,
+    pub editor_copy: &'static str,
+    /// Line and text sizes of the editor, thinnest first.
+    pub editor_sizes: [&'static str; 3],
+    /// `{name}` is the file name.
+    pub editor_save_question: &'static str,
+    /// `{error}` is the reason.
+    pub editor_save_failed: &'static str,
     /// Shown when the app ends on an error; `{path}` is the crash log.
     pub crash_message: &'static str,
 }
@@ -273,6 +282,11 @@ mod tests {
                 t.err_capture_thread,
                 t.err_capture_failed,
                 t.crash_message,
+                t.editor_save,
+                t.editor_save_as,
+                t.editor_copy,
+                t.editor_save_question,
+                t.editor_save_failed,
                 t.err_video_unreadable,
                 t.convert_video,
                 t.converting,

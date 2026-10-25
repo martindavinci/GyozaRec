@@ -75,6 +75,14 @@ impl Document {
         self.version += 1;
     }
 
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+
     pub fn undo(&mut self) -> bool {
         let Some(step) = self.undo.pop() else { return false };
         match &step {
@@ -106,6 +114,24 @@ impl Document {
 
     pub fn mark_saved(&mut self) {
         self.saved_version = self.version;
+    }
+
+    /// The picture of `version` reached the disk (edits made meanwhile stay unsaved).
+    pub fn mark_saved_at(&mut self, version: u64) {
+        self.saved_version = version;
+    }
+
+    /// A copy sharing the capture, to draw the final picture elsewhere.
+    pub fn snapshot(&self) -> Document {
+        Document {
+            base: self.base.clone(),
+            annotations: self.annotations.clone(),
+            crop: self.crop,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            version: self.version,
+            saved_version: self.saved_version,
+        }
     }
 
     pub fn visible_rect(&self) -> PixelRect {
@@ -175,6 +201,17 @@ mod tests {
         assert!(!d.is_dirty());
         d.undo();
         assert!(d.is_dirty());
+    }
+
+    #[test]
+    fn edits_during_a_save_stay_unsaved() {
+        let mut d = doc(100, 80);
+        d.add(rect(1.0));
+        let saving = d.version();
+        d.add(rect(2.0));
+        d.mark_saved_at(saving);
+        assert!(d.is_dirty());
+        assert_eq!(d.snapshot().annotations(), d.annotations());
     }
 
     #[test]

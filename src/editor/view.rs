@@ -17,8 +17,14 @@ impl View {
 
     /// `visible` fitted and centered in `canvas`, never enlarged.
     pub fn fit(visible: PixelRect, canvas: RectF) -> View {
+        View::fit_at_most(visible, canvas, 1.0)
+    }
+
+    /// Like `fit`, with at most `max_scale` canvas units per image pixel
+    /// (`1 / DPI scale` keeps one image pixel per screen pixel).
+    pub fn fit_at_most(visible: PixelRect, canvas: RectF, max_scale: f32) -> View {
         let (w, h) = (visible.width.max(1) as f32, visible.height.max(1) as f32);
-        let scale = (canvas.w / w).min(canvas.h / h).clamp(f32::MIN_POSITIVE, 1.0);
+        let scale = (canvas.w / w).min(canvas.h / h).min(max_scale).max(f32::MIN_POSITIVE);
         let left = canvas.x + (canvas.w - w * scale) / 2.0;
         let top = canvas.y + (canvas.h - h * scale) / 2.0;
         View { scale, origin: (left - visible.x as f32 * scale, top - visible.y as f32 * scale) }
@@ -62,6 +68,13 @@ mod tests {
             RectF { x: 0.0, y: 0.0, w: 400.0, h: 300.0 },
         );
         assert_eq!(v.to_canvas((100.0, 50.0)), (0.0, 0.0));
+    }
+
+    #[test]
+    fn high_dpi_keeps_one_image_pixel_per_screen_pixel() {
+        let canvas = RectF { x: 0.0, y: 0.0, w: 1000.0, h: 1000.0 };
+        let v = View::fit_at_most(PixelRect::new(0, 0, 300, 200), canvas, 1.0 / 1.5);
+        assert!((v.scale - 1.0 / 1.5).abs() < 1e-6);
     }
 
     #[test]

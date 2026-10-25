@@ -58,5 +58,11 @@ pub(super) const TEXTS: Texts = Texts {
     convert_video: "将视频转换为 GIF…",
     converting: "正在转换为 GIF… {percent}%",
     conversion_canceled: "已取消转换",
+    editor_save: "保存",
+    editor_save_as: "另存为…",
+    editor_copy: "复制",
+    editor_sizes: ["细", "中", "粗"],
+    editor_save_question: "是否保存对 {name} 的更改？",
+    editor_save_failed: "无法保存图片：{error}",
     crash_message: "GyozaRec 因错误而退出。详细信息已保存到 {path}",
 };

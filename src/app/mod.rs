@@ -1,3 +1,4 @@
+mod editor;
 mod hotkeys;
 mod options;
 mod overlay;
@@ -68,6 +69,12 @@ pub enum AppEvent {
     /// Left click on the notification icon.
     TrayClick,
     Convert(ConvertEvent),
+    /// An editor's save thread finished the picture of `version`.
+    EditorSaved {
+        window: WindowId,
+        version: u64,
+        result: Result<(), String>,
+    },
 }
 
 /// News from the video conversion thread.
@@ -119,6 +126,9 @@ pub struct App {
     exit_pending: bool,
     proxy: EventLoopProxy<AppEvent>,
     conversion: Option<Conversion>,
+    editors: Vec<editor::EditorWindow>,
+    /// Fonts for typed annotations, with every script; loaded on first use.
+    editor_fonts: Option<Arc<Fonts>>,
 }
 
 impl App {
@@ -197,6 +207,8 @@ impl App {
             exit_pending: false,
             proxy,
             conversion: None,
+            editors: Vec::new(),
+            editor_fonts: None,
         }
     }
 
@@ -328,8 +340,46 @@ impl App {
         self.refresh_toolbar();
     }
 
+    /// Opens an editor on a saved image.
+    #[expect(dead_code, reason = "captures open it in the next commit")]
+    fn open_editor(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        image: Arc<gyozarec::pixels::PixelBuffer>,
+        path: PathBuf,
+        work_area: Option<gyozarec::geometry::PixelRect>,
+        scale: f64,
+    ) {
+        let fonts = self
+            .editor_fonts
+            .get_or_insert_with(|| Arc::new(Fonts::for_languages(&Language::ALL)))
+            .clone();
+        let settings = editor::EditorSettings {
+            copy_to_clipboard: self.state.settings.copy_to_clipboard,
+            jpeg_quality: self.state.settings.jpeg_quality,
+        };
+        let opened = editor::EditorWindow::open(
+            event_loop,
+            image,
+            path,
+            settings,
+            self.state.texts(),
+            fonts,
+            work_area,
+            scale,
+            self.proxy.clone(),
+        );
+        self.editors.extend(opened);
+    }
+
     /// Quits now, or as soon as the running capture has been cancelled.
     fn request_exit(&mut self, event_loop: &ActiveEventLoop) {
+        // Unsaved edits are asked about first; Cancel keeps GyozaRec running.
+        for e in &mut self.editors {
+            if !e.confirm_close() {
+                return;
+            }
+        }
         // A half-written GIF is deleted by the conversion itself.
         if let Some(c) = self.conversion.take() {
             c.cancel.store(true, Ordering::SeqCst);
@@ -494,6 +544,12 @@ impl App {
             }
             return;
         }
+        if id.starts_with(editor::MENU_PREFIX) {
+            for e in &mut self.editors {
+                e.on_menu(id);
+            }
+            return;
+        }
         if id.starts_with(options::MENU_PREFIX) {
             if let Some(o) = &mut self.options {
                 o.on_menu(id);
@@ -630,6 +686,13 @@ impl ApplicationHandler<AppEvent> for App {
             }
             AppEvent::TrayClick => self.activate(),
             AppEvent::Convert(event) => self.on_conversion(event),
+            AppEvent::EditorSaved { window, version, result } => {
+                if let Some(i) = self.editors.iter().position(|e| e.id() == window)
+                    && self.editors[i].saved(version, result) == editor::EditorResult::Closed
+                {
+                    self.editors.remove(i);
+                }
+            }
             AppEvent::Instance(InstanceCommand::Quick(action)) => self.start_quick(action),
             AppEvent::Instance(InstanceCommand::Activate) => self.activate(),
         }
@@ -649,6 +712,12 @@ impl ApplicationHandler<AppEvent> for App {
         }
         if let Some(session) = self.recording.as_mut().filter(|s| s.owns(id)) {
             session.handle(id, &event, &self.fonts);
+            return;
+        }
+        if let Some(i) = self.editors.iter().position(|e| e.id() == id) {
+            if self.editors[i].handle(&event) == editor::EditorResult::Closed {
+                self.editors.remove(i);
+            }
             return;
         }
         if let Some(options) = self.options.as_mut().filter(|o| o.id() == id) {

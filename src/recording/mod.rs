@@ -6,7 +6,7 @@ mod panel;
 mod placement;
 mod worker;
 
-pub use capture_loop::run_capture_loop;
+pub use capture_loop::{run_capture_loop, run_capture_loop_with_audio};
 pub use gif_sink::GifSink;
 pub use panel::{PanelAction, PanelInput, PanelMode, panel_step};
 pub use placement::{frame_bounds, place_panel, render_frame};
@@ -21,6 +21,11 @@ use std::time::Duration;
 pub trait FrameSink: Send {
     fn push(&mut self, frame: &PixelBuffer, t: Duration) -> crate::Result<()>;
     fn finish(&mut self) -> crate::Result<()>;
+    /// Interleaved stereo 48 kHz audio starting at `start_frame` of the
+    /// recording; never empty. Sinks without audio ignore it.
+    fn push_audio(&mut self, _samples: &[i16], _start_frame: u64) -> crate::Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

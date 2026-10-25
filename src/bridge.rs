@@ -62,12 +62,13 @@ impl<S: UiSender> RecordingUi for BridgeRecordingUi<S> {
             max,
             commands,
         });
-        let worker = RecordingWorker::spawn(
+        let worker = RecordingWorker::spawn_with_audio(
             self.grabber.clone(),
             self.clock.clone(),
             job.config,
             job.sink,
             job.path,
+            job.audio,
         );
         let result = loop {
             match inbox.recv_timeout(TICK) {
@@ -204,6 +205,7 @@ mod tests {
                 max_duration: Duration::from_secs(max_s),
             },
             sink: Box::new(crate::testing::VecSink::default()),
+            audio: None,
         }
     }
 

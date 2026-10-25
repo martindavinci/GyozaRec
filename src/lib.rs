@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod autostart;
 pub mod bridge;
 pub mod capture;

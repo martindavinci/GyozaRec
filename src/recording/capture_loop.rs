@@ -1,6 +1,8 @@
-//! Grabs frames at a fixed rate and feeds them to a sink.
+//! Grabs frames at a fixed rate and feeds them to a sink, with the audio
+//! of the recording when there is any.
 
-use super::{CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, PauseClock, STOP};
+use super::{CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, STOP};
+use crate::audio::{AudioFeed, LATENCY, PauseHistory, Timeline};
 use crate::capture::ScreenGrabber;
 use crate::clock::Clock;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -9,9 +11,7 @@ use std::time::Duration;
 /// Longest single wait, so STOP and CANCEL are noticed quickly.
 const MAX_WAIT: Duration = Duration::from_millis(50);
 
-/// Frame `k` is due at `k × period`. A slow grab skips the frames it made
-/// late instead of catching up in a burst. While paused nothing is grabbed,
-/// and the paused time counts neither in the timestamps nor in the limit.
+/// A video-only recording.
 pub fn run_capture_loop(
     grabber: &dyn ScreenGrabber,
     sink: &mut dyn FrameSink,
@@ -19,39 +19,109 @@ pub fn run_capture_loop(
     cfg: &LoopConfig,
     control: &AtomicU8,
 ) -> crate::Result<LoopEnd> {
+    run_capture_loop_with_audio(grabber, sink, clock, cfg, control, None)
+}
+
+/// Frame `k` is due at `k × period`. A slow grab skips the frames it made
+/// late instead of catching up in a burst. While paused nothing is grabbed,
+/// and the paused time counts neither in the timestamps nor in the limit.
+/// Audio chunks are taken every turn (also while paused, so the queue never
+/// grows) and committed after `LATENCY`; at the end the sources are stopped
+/// and everything left is written before the sink finishes.
+pub fn run_capture_loop_with_audio(
+    grabber: &dyn ScreenGrabber,
+    sink: &mut dyn FrameSink,
+    clock: &dyn Clock,
+    cfg: &LoopConfig,
+    control: &AtomicU8,
+    audio: Option<AudioFeed>,
+) -> crate::Result<LoopEnd> {
     let start = clock.elapsed();
     let period = Duration::from_secs(1) / cfg.fps.max(1);
     let mut next = Duration::ZERO;
-    let mut pauses = PauseClock::default();
+    let mut pauses = PauseHistory::new(start);
+    let mut audio = audio.map(|feed| (feed, Timeline::new(LATENCY)));
     loop {
-        match control.load(Ordering::SeqCst) {
-            CANCEL => return Ok(LoopEnd::Canceled),
+        let state = control.load(Ordering::SeqCst);
+        if let Some((feed, timeline)) = audio.as_mut() {
+            while let Ok(chunk) = feed.chunks.try_recv() {
+                timeline.push(chunk);
+            }
+        }
+        match state {
+            CANCEL => {
+                if let Some((mut feed, _)) = audio.take() {
+                    feed.stop();
+                }
+                return Ok(LoopEnd::Canceled);
+            }
             STOP => {
+                finish_audio(&mut audio, sink, &pauses, clock.elapsed())?;
                 sink.finish()?;
                 return Ok(LoopEnd::Stopped);
             }
             PAUSE => {
                 pauses.pause(clock.elapsed());
+                write_audio(&mut audio, sink, &pauses, clock.elapsed())?;
                 clock.sleep(MAX_WAIT);
                 continue;
             }
             _ => pauses.resume(clock.elapsed()),
         }
-        let t = pauses.active(start, clock.elapsed());
+        write_audio(&mut audio, sink, &pauses, clock.elapsed())?;
+        let t = pauses.active_elapsed(clock.elapsed());
         if t >= cfg.max_duration {
+            finish_audio(&mut audio, sink, &pauses, clock.elapsed())?;
             sink.finish()?;
             return Ok(LoopEnd::MaxDuration);
         }
         if t >= next {
             let frame = grabber.grab(cfg.region, cfg.include_cursor)?;
             sink.push(&frame, t)?;
-            let after = pauses.active(start, clock.elapsed());
+            let after = pauses.active_elapsed(clock.elapsed());
             let done = (after.as_nanos() / period.as_nanos()) as u32;
             next = period * (done + 1);
         } else {
             clock.sleep((next - t).min(MAX_WAIT));
         }
     }
+}
+
+type Audio = Option<(AudioFeed, Timeline)>;
+
+fn write_audio(
+    audio: &mut Audio,
+    sink: &mut dyn FrameSink,
+    pauses: &PauseHistory,
+    now: Duration,
+) -> crate::Result<()> {
+    if let Some((_, timeline)) = audio.as_mut()
+        && let Some(out) = timeline.drain(now, pauses, false)
+        && !out.samples.is_empty()
+    {
+        sink.push_audio(&out.samples, out.start_frame)?;
+    }
+    Ok(())
+}
+
+/// Stops the sources, takes their last chunks and writes the audio up to `end`.
+fn finish_audio(
+    audio: &mut Audio,
+    sink: &mut dyn FrameSink,
+    pauses: &PauseHistory,
+    end: Duration,
+) -> crate::Result<()> {
+    let Some((mut feed, mut timeline)) = audio.take() else { return Ok(()) };
+    feed.stop();
+    while let Ok(chunk) = feed.chunks.try_recv() {
+        timeline.push(chunk);
+    }
+    if let Some(out) = timeline.drain(end, pauses, true)
+        && !out.samples.is_empty()
+    {
+        sink.push_audio(&out.samples, out.start_frame)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -159,6 +229,69 @@ mod tests {
         let end = run_capture_loop(&grabber, &mut sink, &clock, &cfg(10, 10_000), &control);
         assert_eq!(end.unwrap(), LoopEnd::Stopped);
         assert_eq!((sink.times().len(), sink.is_finished()), (2, true));
+    }
+
+    fn feed(chunks: Vec<crate::audio::PcmChunk>) -> crate::audio::AudioFeed {
+        let (tx, rx) = std::sync::mpsc::channel();
+        for c in chunks {
+            tx.send(c).unwrap();
+        }
+        crate::audio::AudioFeed::new(rx, Box::new(|| {}), false)
+    }
+
+    fn second_of_audio() -> Vec<crate::audio::PcmChunk> {
+        (0..100u64)
+            .map(|i| crate::audio::PcmChunk {
+                source: 0,
+                rate: 48_000,
+                channels: 2,
+                channel_mask: 0,
+                samples: vec![0.1; 960],
+                at: Duration::from_millis(i * 10),
+                discontinuity: false,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn capture_loop_pushes_audio_and_never_empty() {
+        let mut sink = VecSink::default();
+        let end = run_capture_loop_with_audio(
+            &FakeGrabber::default(),
+            &mut sink,
+            &FakeClock::default(),
+            &cfg(10, 1000),
+            &AtomicU8::new(RUN),
+            Some(feed(second_of_audio())),
+        )
+        .unwrap();
+        assert_eq!(end, LoopEnd::MaxDuration);
+        let pushes = sink.audio();
+        assert!(!pushes.is_empty());
+        assert!(pushes.iter().all(|(_, len)| *len > 0 && len % 2 == 0), "{pushes:?}");
+        let mut next = 0;
+        for (start, len) in &pushes {
+            assert_eq!(*start, next, "contiguous");
+            next += (*len / 2) as u64;
+        }
+        assert!((next as i64 - 48_000).abs() <= 480, "{next} frames for one second");
+        assert!(sink.is_finished());
+    }
+
+    #[test]
+    fn cancel_discards_audio() {
+        let mut sink = VecSink::default();
+        let end = run_capture_loop_with_audio(
+            &FakeGrabber::default(),
+            &mut sink,
+            &FakeClock::default(),
+            &cfg(10, 1000),
+            &AtomicU8::new(CANCEL),
+            Some(feed(second_of_audio())),
+        )
+        .unwrap();
+        assert_eq!(end, LoopEnd::Canceled);
+        assert!(sink.audio().is_empty() && !sink.is_finished());
     }
 
     #[test]

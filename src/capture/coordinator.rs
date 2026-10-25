@@ -129,7 +129,8 @@ impl CaptureCoordinator {
             max_duration: Duration::from_secs(u64::from(max_seconds)),
         };
         self.clock.sleep(OVERLAY_CLOSE_SETTLE);
-        let result = self.recording_ui.record(RecordingJob { region, monitor, path, config, sink });
+        let job = RecordingJob { region, monitor, path, config, sink, audio: None };
+        let result = self.recording_ui.record(job);
         match (result.outcome, result.path) {
             (RecordingOutcome::Saved, Some(path)) => {
                 let copied = settings.copy_to_clipboard && self.clipboard.set_file(&path);

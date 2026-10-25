@@ -33,6 +33,8 @@ pub struct RecordingJob {
     pub path: PathBuf,
     pub config: LoopConfig,
     pub sink: Box<dyn FrameSink>,
+    /// Running audio sources, when the recording has sound.
+    pub audio: Option<crate::audio::AudioFeed>,
 }
 
 pub trait RecordingUi: Send {

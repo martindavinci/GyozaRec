@@ -156,6 +156,7 @@ pub struct Texts {
     /// full-screen recording.
     pub quick_actions: [&'static str; 4],
     pub discard_question: &'static str,
+    pub pick_monitor_hint: &'static str,
     pub jpeg_quality: &'static str,
     pub gif_fps: &'static str,
     pub gif_max_seconds: &'static str,
@@ -242,6 +243,7 @@ mod tests {
                 t.open_folder_after_recording,
                 t.open_file_after_capture,
                 t.discard_question,
+                t.pick_monitor_hint,
                 t.jpeg_quality,
                 t.gif_fps,
                 t.gif_max_seconds,

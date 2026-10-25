@@ -22,7 +22,7 @@ A small toolbar:
 - **Area** — Rectangle, Window or Full screen.
 - **Format** — PNG image, MP4 video or Animated GIF. Any area works with any format.
 - **Delay** — from no delay up to 5 seconds.
-- **Options** — save folder, copy to clipboard, sound, cursor in recordings, frame rate and maximum length of GIFs and videos, language.
+- **Options** — save folder, copy to clipboard, sound, cursor in recordings, opening the folder after a recording, frame rate and maximum length of GIFs and videos, language.
 
 <p align="center">
   <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">
@@ -30,7 +30,7 @@ A small toolbar:
   <img src="docs/screenshots/options.png" alt="The Options window" valign="top">
 </p>
 
-Images are copied to the clipboard; videos and GIFs are copied as files. A window recording keeps the area the window covered when recording started. While recording, a small panel shows the elapsed time with **Stop** and **Cancel** buttons. Nothing leaves your computer: no uploads, no accounts.
+Images are copied to the clipboard; videos and GIFs are copied as files. A window recording keeps the area the window covered when recording started. While recording, a small panel shows the elapsed time with **Pause**/**Resume**, **Stop** and **Cancel** buttons; paused time is left out of the file. Nothing leaves your computer: no uploads, no accounts.
 
 Running `gyozarec --capture` starts the selection right away; if the app is already open, the capture starts in the running instance.
 

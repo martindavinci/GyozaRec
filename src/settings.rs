@@ -26,6 +26,10 @@ pub struct AppSettings {
     pub open_editor_after_capture: bool,
     /// A notification with a thumbnail after each saved capture.
     pub show_notification: bool,
+    /// Once a day, ask GitHub whether a newer release exists.
+    pub check_for_updates: bool,
+    /// When that was last asked (Unix seconds).
+    pub last_update_check: Option<i64>,
     /// Closing the toolbar hides it; GyozaRec stays in the notification area.
     pub keep_in_tray: bool,
     pub start_with_windows: bool,
@@ -64,6 +68,8 @@ impl Default for AppSettings {
             open_file_after_capture: false,
             open_editor_after_capture: true,
             show_notification: true,
+            check_for_updates: true,
+            last_update_check: None,
             keep_in_tray: true,
             start_with_windows: false,
             shortcuts_enabled: false,

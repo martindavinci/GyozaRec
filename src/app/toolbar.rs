@@ -23,6 +23,7 @@ const ID_STATUS: u32 = 5;
 const ID_FOLDER: u32 = 6;
 const ID_FORMAT: u32 = 7;
 const ID_CANCEL_CONVERT: u32 = 8;
+const ID_DOWNLOAD: u32 = 9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolbarAction {
@@ -33,6 +34,7 @@ pub enum ToolbarAction {
     Options,
     OpenFolder,
     CancelConversion,
+    Download,
 }
 
 pub struct Toolbar {
@@ -66,7 +68,9 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let row1_bottom = widgets.iter().map(|w| w.rect.bottom()).fold(0.0, f32::max);
     let color = if state.status_is_error { GYOZA.error } else { GYOZA.text };
     let mut row2 = vec![(ID_STATUS, WidgetKind::Label { text: state.status.clone(), color })];
-    if state.converting.is_some() {
+    if state.shows_update() {
+        row2.push((ID_DOWNLOAD, WidgetKind::Link { text: texts.download.into() }));
+    } else if state.converting.is_some() {
         row2.push((ID_CANCEL_CONVERT, WidgetKind::Link { text: texts.cancel.into() }));
     } else if state.last_saved.is_some() {
         row2.push((ID_FOLDER, WidgetKind::Link { text: texts.open_folder.into() }));
@@ -172,6 +176,7 @@ impl Toolbar {
                     ID_OPTIONS => Some(ToolbarAction::Options),
                     ID_FOLDER => Some(ToolbarAction::OpenFolder),
                     ID_CANCEL_CONVERT => Some(ToolbarAction::CancelConversion),
+                    ID_DOWNLOAD => Some(ToolbarAction::Download),
                     _ => None,
                 };
             }

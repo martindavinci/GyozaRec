@@ -100,6 +100,25 @@ pub fn format_status(o: &CaptureOutcome, current: &str, texts: &Texts) -> (Strin
     }
 }
 
+/// Where GitHub shows GyozaRec's releases; nothing else is ever opened.
+pub const RELEASES_PAGE_PREFIX: &str = "https://github.com/martindavinci/GyozaRec/releases/";
+
+/// A newer release on GitHub.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateNote {
+    pub version: String,
+    pub page: String,
+}
+
+impl UpdateNote {
+    /// The page to open, if it really is one of GyozaRec's releases.
+    pub fn safe_page(&self) -> Option<&str> {
+        let rest = self.page.strip_prefix(RELEASES_PAGE_PREFIX)?;
+        let plain = rest.chars().all(|c| c.is_ascii_alphanumeric() || "._/-".contains(c));
+        (plain && !rest.contains("..")).then_some(self.page.as_str())
+    }
+}
+
 pub struct ToolbarState {
     pub settings: AppSettings,
     pub language: Language,
@@ -113,6 +132,9 @@ pub struct ToolbarState {
     showing_hint: bool,
     /// Progress of the running video conversion, in percent.
     pub converting: Option<u8>,
+    pub update: Option<UpdateNote>,
+    /// The status line announces `update`.
+    update_shown: bool,
 }
 
 impl ToolbarState {
@@ -127,6 +149,8 @@ impl ToolbarState {
             shown_outcome: None,
             showing_hint: true,
             converting: None,
+            update: None,
+            update_shown: false,
         };
         state.status = state.hint();
         state
@@ -147,7 +171,9 @@ impl ToolbarState {
     /// Switches language; the status follows unless it is free text.
     pub fn set_language(&mut self, language: Language) {
         self.language = language;
-        if let Some(percent) = self.converting {
+        if self.update_shown {
+            self.show_update();
+        } else if let Some(percent) = self.converting {
             self.conversion_progress(percent);
         } else if let Some(o) = &self.shown_outcome {
             let (text, _) = format_status(o, &self.status, self.texts());
@@ -161,7 +187,30 @@ impl ToolbarState {
         self.language.texts()
     }
 
+    /// Announces a newer release on the status line (and keeps it for Options).
+    pub fn update_available(&mut self, version: &str, page: String) {
+        self.update = Some(UpdateNote { version: version.to_string(), page });
+        self.show_update();
+    }
+
+    fn show_update(&mut self) {
+        let Some(u) = &self.update else { return };
+        self.status = self.texts().update_available.replace("{version}", &u.version);
+        self.status_is_error = false;
+        self.shown_outcome = None;
+        self.showing_hint = false;
+        self.update_shown = true;
+    }
+
+    /// The status line shows the update, with its Download link.
+    pub fn shows_update(&self) -> bool {
+        self.update_shown
+    }
+
     pub fn apply_outcome(&mut self, o: &CaptureOutcome) {
+        if o.kind != CaptureOutcomeKind::Canceled {
+            self.update_shown = false;
+        }
         let (text, is_error) = format_status(o, &self.status, self.texts());
         self.status = text;
         self.status_is_error = is_error;
@@ -180,6 +229,7 @@ impl ToolbarState {
     }
 
     pub fn conversion_progress(&mut self, percent: u8) {
+        self.update_shown = false;
         self.converting = Some(percent.min(100));
         self.status = self.texts().converting.replace("{percent}", &percent.min(100).to_string());
         self.status_is_error = false;
@@ -204,6 +254,7 @@ impl ToolbarState {
     }
 
     pub fn set_error(&mut self, msg: &str) {
+        self.update_shown = false;
         self.status = format!("{}{msg}", self.texts().error_prefix);
         self.status_is_error = true;
         self.shown_outcome = None;
@@ -261,6 +312,20 @@ mod tests {
         s.conversion_failed(&Failure::User(UserError::VideoUnreadable));
         assert_eq!(s.status, "Error: this video can't be read");
         assert!(s.status_is_error && s.can_convert());
+    }
+
+    #[test]
+    fn update_shows_a_download_link() {
+        let mut s = ToolbarState::new(AppSettings::default(), Language::En);
+        let page = "https://github.com/martindavinci/GyozaRec/releases/tag/v0.5.0";
+        s.update_available("0.5.0", page.into());
+        assert_eq!(s.status, "GyozaRec 0.5.0 is available");
+        assert!(s.shows_update());
+        s.set_language(Language::It);
+        assert_eq!(s.status, "GyozaRec 0.5.0 è disponibile");
+        s.apply_outcome(&CaptureOutcome::saved(PathBuf::from("a.png"), false));
+        assert!(!s.shows_update(), "a capture takes the status line");
+        assert_eq!(s.update.as_ref().map(|u| u.page.as_str()), Some(page), "Options still knows");
     }
 
     #[test]

@@ -23,6 +23,11 @@ license-file = "packaging/wix/License.rtf"
 [package.metadata.packager.wix]
 template = "packaging/wix/main.wxs"
 
+[features]
+default = ["github-updates"]
+# The once-a-day check for a newer release on GitHub (off for store builds).
+github-updates = []
+
 [dependencies]
 winit = "0.30"
 softbuffer = "0.4"
@@ -59,6 +64,7 @@ windows = { version = "0.62", features = [
     "Win32_System_Com",
     "Win32_Media_Audio",
     "Win32_Media_MediaFoundation",
+    "Win32_Networking_WinHttp",
     "Win32_System_LibraryLoader",
     "Win32_Globalization",
 ] }

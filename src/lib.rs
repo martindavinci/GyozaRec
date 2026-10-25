@@ -24,6 +24,8 @@ pub mod sounds;
 #[cfg(test)]
 pub(crate) mod testing;
 pub mod uikit;
+#[cfg(feature = "github-updates")]
+pub mod update;
 
 pub use error::{Error, Failure, Result, UserError};
 

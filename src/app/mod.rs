@@ -71,6 +71,9 @@ pub enum AppEvent {
     /// Left click on the notification icon.
     TrayClick,
     Convert(ConvertEvent),
+    /// The answer of the update check: a newer version and its page.
+    #[cfg(feature = "github-updates")]
+    UpdateChecked(Option<(String, String)>),
     /// The notification of that generation may close now.
     NoticeTimeout(u64),
     /// An editor's save thread finished the picture of `version`.
@@ -384,6 +387,27 @@ impl App {
         self.editors.extend(opened);
     }
 
+    /// Asks GitHub for a newer release, at most once a day.
+    #[cfg(feature = "github-updates")]
+    fn check_for_updates(&mut self) {
+        use gyozarec::update;
+        let now = chrono::Utc::now().timestamp();
+        let s = &mut self.state.settings;
+        if !s.check_for_updates || !update::due(s.last_update_check, now) {
+            return;
+        }
+        // Saved first: quitting before the answer must not mean a request at every start.
+        s.last_update_check = Some(now);
+        self.save_settings();
+        let proxy = self.proxy.clone();
+        let _ = std::thread::Builder::new().name("gyozarec-update".into()).spawn(move || {
+            let found =
+                update::check(&gyozarec::platform::GitHubReleases, update::Version::current());
+            let note = found.map(|r| (r.version.to_string(), r.page));
+            let _ = proxy.send_event(AppEvent::UpdateChecked(note));
+        });
+    }
+
     /// Closes the notification `generation` after `NOTICE_TIMEOUT`.
     fn schedule_notice_timeout(&self, generation: u64) {
         let proxy = self.proxy.clone();
@@ -523,8 +547,14 @@ impl App {
         let Some(t) = &self.toolbar else { return };
         let form = OptionsForm::from_settings(&self.state.settings);
         let lines = self.shortcut_lines();
-        self.options =
-            OptionsWindow::open(event_loop, t.surface.hwnd(), form, self.state.language, lines);
+        self.options = OptionsWindow::open(
+            event_loop,
+            t.surface.hwnd(),
+            form,
+            self.state.language,
+            lines,
+            self.state.update.clone(),
+        );
     }
 
     fn close_options(&mut self, result: OptionsResult) {
@@ -738,6 +768,8 @@ impl ApplicationHandler<AppEvent> for App {
             self.toolbar = Some(Toolbar::create(event_loop, &self.state, &self.fonts, visible));
             self.sync_shortcuts();
             self.sync_autostart();
+            #[cfg(feature = "github-updates")]
+            self.check_for_updates();
             if let Some(action) = self.action_on_start.take() {
                 self.start_quick(action);
             }
@@ -755,6 +787,13 @@ impl ApplicationHandler<AppEvent> for App {
             }
             AppEvent::TrayClick => self.activate(),
             AppEvent::Convert(event) => self.on_conversion(event),
+            #[cfg(feature = "github-updates")]
+            AppEvent::UpdateChecked(Some((version, page))) => {
+                self.state.update_available(&version, page);
+                self.refresh_toolbar();
+            }
+            #[cfg(feature = "github-updates")]
+            AppEvent::UpdateChecked(None) => {}
             AppEvent::NoticeTimeout(generation) => {
                 if self.notice_timer.expired(generation) {
                     self.notice = None;
@@ -845,6 +884,12 @@ impl ApplicationHandler<AppEvent> for App {
                 | ToolbarAction::DelayMenu),
             ) => self.show_menu(action),
             Some(ToolbarAction::OpenFolder) => self.open_folder(),
+            Some(ToolbarAction::Download) => {
+                if let Some(page) = self.state.update.as_ref().and_then(|u| u.safe_page()) {
+                    use gyozarec::capture::FileRevealer;
+                    gyozarec::platform::ExplorerRevealer.open(std::path::Path::new(page));
+                }
+            }
             Some(ToolbarAction::CancelConversion) => {
                 if let Some(c) = &self.conversion {
                     c.cancel.store(true, Ordering::SeqCst);

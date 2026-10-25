@@ -30,7 +30,7 @@ A small toolbar:
   <img src="docs/screenshots/options.png" alt="The Options window" valign="top">
 </p>
 
-Images are copied to the clipboard; videos and GIFs are copied as files. A window recording keeps the area the window covered when recording started. While recording, a small panel shows the elapsed time with **Pause**/**Resume**, **Stop** and **Discard** buttons; paused time is left out of the file, and discarding asks for confirmation first. Nothing leaves your computer: no uploads, no accounts.
+Images are copied to the clipboard; videos and GIFs are copied as files. A window recording keeps the area the window covered when recording started. While recording, a small panel shows the elapsed time with **Pause**/**Resume**, **Stop** and **Discard** buttons; paused time is left out of the file, and discarding asks for confirmation first. Nothing leaves your computer: no uploads, no accounts. The only network request is a once-a-day question to GitHub about the latest release (**Check for updates** in **Options**); when there is a newer one, the status line offers to download it.
 
 MP4 recordings include the **system audio** (what the computer plays) by default; turn it off in **Options**. With **In-app sounds** on, short tones mark the start, pause, resume and end of a recording, and they are timed so they never end up in the video.
 

@@ -33,6 +33,8 @@ const ID_AUTOSTART: u32 = 30;
 const ID_SYSTEM_AUDIO: u32 = 31;
 const ID_EDITOR: u32 = 32;
 const ID_NOTICE: u32 = 33;
+const ID_UPDATES: u32 = 34;
+const ID_UPDATE_LINK: u32 = 23;
 /// Widest hint line before wrapping, in logical pixels.
 const HINT_WIDTH: f32 = 340.0;
 const COLUMN_GAP: f32 = 28.0;
@@ -193,6 +195,8 @@ pub struct OptionsWindow {
     ui: Ui,
     logical: (f32, f32),
     cursor: (f32, f32),
+    /// A newer release, linked next to the version.
+    update: Option<gyozarec::presentation::UpdateNote>,
 }
 
 fn label(text: &str) -> WidgetKind {
@@ -236,6 +240,8 @@ fn build_ui(
         (ID_NOTICE, texts.show_notification, form.show_notification),
         (ID_TRAY, texts.keep_in_tray, form.keep_in_tray),
         (ID_AUTOSTART, texts.start_with_windows, form.start_with_windows),
+        #[cfg(feature = "github-updates")]
+        (ID_UPDATES, texts.check_for_updates, form.check_for_updates),
         (ID_SHORTCUTS, texts.shortcuts_enabled, form.shortcuts_enabled),
         (ID_PRINT_SCREEN, texts.print_screen_captures, form.print_screen_captures),
     ];
@@ -358,6 +364,30 @@ fn build_ui(
     Ui::new(widgets)
 }
 
+/// Puts "GyozaRec x.y.z is available" as a link just left of the version.
+fn add_update_link(
+    ui: &mut Ui,
+    update: Option<&gyozarec::presentation::UpdateNote>,
+    texts: &Texts,
+    fonts: &Fonts,
+) {
+    let (Some(u), Some(version)) = (update, ui.widget(ID_VERSION).map(|w| w.rect)) else {
+        return;
+    };
+    let text = texts.update_available.replace("{version}", &u.version);
+    let (w, _) = measure_text(fonts, &text, GYOZA.font_px, false);
+    let kind = WidgetKind::Link { text };
+    let link = layout_row(
+        vec![(ID_UPDATE_LINK, kind)],
+        version.x - 12.0 - w,
+        version.y,
+        0.0,
+        fonts,
+        &GYOZA,
+    );
+    ui.widgets.extend(link);
+}
+
 fn logical_size(ui: &Ui) -> (f32, f32) {
     let b = ui.bounds();
     ((b.right() + PAD).ceil().max(380.0), (b.bottom() + PAD - ROW_GAP).ceil())
@@ -370,10 +400,12 @@ impl OptionsWindow {
         form: OptionsForm,
         ui_language: Language,
         shortcuts: Vec<ShortcutLine>,
+        update: Option<gyozarec::presentation::UpdateNote>,
     ) -> Option<OptionsWindow> {
         let texts = ui_language.texts();
         let fonts = fonts_for(ui_language, &form);
-        let ui = build_ui(&form, texts, &shortcuts, &ShortcutEdit::default(), &fonts);
+        let mut ui = build_ui(&form, texts, &shortcuts, &ShortcutEdit::default(), &fonts);
+        add_update_link(&mut ui, update.as_ref(), texts, &fonts);
         let logical = logical_size(&ui);
         let attrs = Window::default_attributes()
             .with_title(texts.options)
@@ -395,6 +427,7 @@ impl OptionsWindow {
             ui,
             logical,
             cursor: (-1.0, -1.0),
+            update,
         })
     }
 
@@ -413,6 +446,7 @@ impl OptionsWindow {
 
     fn rebuild(&mut self) {
         let mut ui = build_ui(&self.form, self.texts, &self.shortcuts, &self.edit, &self.fonts);
+        add_update_link(&mut ui, self.update.as_ref(), self.texts, &self.fonts);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
         let logical = logical_size(&self.ui);
@@ -622,6 +656,13 @@ impl OptionsWindow {
             }
             ID_OPEN_FILE => self.form.open_file_after_capture = !self.form.open_file_after_capture,
             ID_NOTICE => self.form.show_notification = !self.form.show_notification,
+            ID_UPDATES => self.form.check_for_updates = !self.form.check_for_updates,
+            ID_UPDATE_LINK => {
+                if let Some(page) = self.update.as_ref().and_then(|u| u.safe_page()) {
+                    use gyozarec::capture::FileRevealer;
+                    gyozarec::platform::ExplorerRevealer.open(std::path::Path::new(page));
+                }
+            }
             ID_EDITOR => self.form.open_editor_after_capture = !self.form.open_editor_after_capture,
             ID_TRAY => self.form.keep_in_tray = !self.form.keep_in_tray,
             ID_AUTOSTART => self.form.start_with_windows = !self.form.start_with_windows,
@@ -737,6 +778,24 @@ mod layout_tests {
             matches!(&shown, Some(WidgetKind::Label { text, .. }) if *text == version),
             "{shown:?}"
         );
+    }
+
+    #[test]
+    fn update_link_sits_left_of_the_version() {
+        let form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        let fonts = fonts_for(Language::En, &form);
+        let texts = Language::En.texts();
+        let mut ui = build_ui(&form, texts, &[], &ShortcutEdit::default(), &fonts);
+        let note = gyozarec::presentation::UpdateNote {
+            version: "9.9.9".into(),
+            page: "https://github.com/martindavinci/GyozaRec/releases/tag/v9.9.9".into(),
+        };
+        add_update_link(&mut ui, Some(&note), texts, &fonts);
+        let (link, version) =
+            (ui.widget(ID_UPDATE_LINK).unwrap().rect, ui.widget(ID_VERSION).unwrap().rect);
+        assert!(link.right() < version.x && (link.y - version.y).abs() < 0.01);
+        let ok = ui.widget(ID_CANCEL).unwrap().rect;
+        assert!(link.x > ok.right(), "clear of the buttons");
     }
 
     /// Fits a 768-pixel-high screen at 125% scaling (614 logical pixels

@@ -2,7 +2,7 @@
 
 use super::surface::WindowSurface;
 use gyozarec::geometry::PixelSize;
-use gyozarec::presentation::{ToolbarState, mode_label};
+use gyozarec::presentation::{ToolbarState, delay_label, mode_label};
 use gyozarec::uikit::painter::{Fonts, Painter};
 use gyozarec::uikit::theme::GYOZA;
 use gyozarec::uikit::widgets::{Ui, WidgetKind, layout_row};
@@ -48,7 +48,7 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
                 ID_MODE,
                 button(mode_label((state.settings.area, state.settings.format), texts), true),
             ),
-            (ID_DELAY, button(texts.delay, true)),
+            (ID_DELAY, button(delay_label(state.settings.delay_seconds, texts), true)),
             (ID_OPTIONS, button(texts.options, false)),
         ],
         PAD,

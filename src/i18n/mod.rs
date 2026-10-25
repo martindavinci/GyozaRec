@@ -120,10 +120,13 @@ pub fn resolve(setting: Option<Language>, system: &[String]) -> Language {
 /// Every text the interface shows. `err_video_size` contains `{w}` and `{h}`.
 pub struct Texts {
     pub capture: &'static str,
-    pub delay: &'static str,
     pub options: &'static str,
-    /// Rectangle, Window, Full screen, MP4 video, Animated GIF.
-    pub modes: [&'static str; 5],
+    /// In `AREAS` order.
+    pub areas: [&'static str; 3],
+    /// In `FORMATS` order.
+    pub formats: [&'static str; 3],
+    /// Replaces `capture` on the button when the format is a recording.
+    pub record: &'static str,
     /// No delay, then 1 to 5 seconds.
     pub delays: [&'static str; 6],
     pub initial_status: &'static str,
@@ -204,7 +207,7 @@ mod tests {
             let t = lang.texts();
             let all = [
                 t.capture,
-                t.delay,
+                t.record,
                 t.options,
                 t.initial_status,
                 t.saved_prefix,
@@ -234,7 +237,11 @@ mod tests {
                 t.err_capture_thread,
             ];
             assert!(
-                all.iter().chain(&t.modes).chain(&t.delays).all(|s| !s.trim().is_empty()),
+                all.iter()
+                    .chain(&t.areas)
+                    .chain(&t.formats)
+                    .chain(&t.delays)
+                    .all(|s| !s.trim().is_empty()),
                 "{lang:?}"
             );
             assert!(

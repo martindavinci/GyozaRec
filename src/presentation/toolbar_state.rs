@@ -7,7 +7,30 @@ use crate::i18n::{Language, Texts};
 use crate::settings::AppSettings;
 use std::path::PathBuf;
 
-/// Modes in menu order; `Texts::modes` uses the same order.
+/// Areas in menu order; `Texts::areas` uses the same order.
+pub const AREAS: [CaptureArea; 3] =
+    [CaptureArea::Rectangle, CaptureArea::Window, CaptureArea::FullScreen];
+
+/// Formats in menu order; `Texts::formats` uses the same order.
+pub const FORMATS: [OutputFormat; 3] = [OutputFormat::Png, OutputFormat::Mp4, OutputFormat::Gif];
+
+/// Delay choices in seconds; `Texts::delays` uses the same order.
+pub const DELAYS: [u32; 6] = [0, 1, 2, 3, 4, 5];
+
+pub fn area_label(area: CaptureArea, texts: &Texts) -> &'static str {
+    texts.areas[AREAS.iter().position(|a| *a == area).unwrap_or(0)]
+}
+
+pub fn format_label(format: OutputFormat, texts: &Texts) -> &'static str {
+    texts.formats[FORMATS.iter().position(|f| *f == format).unwrap_or(0)]
+}
+
+/// "Capture" for images, "Record" for videos and GIFs.
+pub fn capture_label(settings: &AppSettings, texts: &Texts) -> &'static str {
+    if settings.format.is_recording() { texts.record } else { texts.capture }
+}
+
+// Transitional: the single menu of the previous toolbar, removed with it.
 pub const MODES: [(CaptureArea, OutputFormat); 5] = [
     (CaptureArea::Rectangle, OutputFormat::Png),
     (CaptureArea::Window, OutputFormat::Png),
@@ -16,12 +39,11 @@ pub const MODES: [(CaptureArea, OutputFormat); 5] = [
     (CaptureArea::Rectangle, OutputFormat::Gif),
 ];
 
-/// Delay choices in seconds; `Texts::delays` uses the same order.
-pub const DELAYS: [u32; 6] = [0, 1, 2, 3, 4, 5];
-
 pub fn mode_label(mode: (CaptureArea, OutputFormat), texts: &Texts) -> &'static str {
-    let index = MODES.iter().position(|m| *m == mode).unwrap_or(0);
-    texts.modes[index]
+    match mode {
+        (area, OutputFormat::Png) => area_label(area, texts),
+        (_, format) => format_label(format, texts),
+    }
 }
 
 pub fn delay_label(seconds: u32, texts: &Texts) -> &'static str {
@@ -143,18 +165,38 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn mode_and_delay_labels_follow_the_language() {
+    fn area_format_and_delay_labels_follow_the_language() {
         let it = Language::It.texts();
-        let labels: Vec<_> = MODES.iter().map(|m| mode_label(*m, it)).collect();
-        assert_eq!(
-            labels,
-            ["Rettangolo", "Finestra", "Schermo intero", "Video MP4", "GIF animata"]
-        );
-        assert_eq!(mode_label(MODES[4], Language::En.texts()), "Animated GIF");
-        assert_eq!(mode_label(MODES[1], Language::Ja.texts()), "ウィンドウ");
+        let areas: Vec<_> = AREAS.iter().map(|a| area_label(*a, it)).collect();
+        assert_eq!(areas, ["Rettangolo", "Finestra", "Schermo intero"]);
+        let formats: Vec<_> = FORMATS.iter().map(|f| format_label(*f, it)).collect();
+        assert_eq!(formats, ["Immagine PNG", "Video MP4", "GIF animata"]);
+        assert_eq!(format_label(OutputFormat::Gif, Language::En.texts()), "Animated GIF");
+        assert_eq!(format_label(OutputFormat::Mp4, Language::Ja.texts()), "MP4 動画");
+        assert_eq!(area_label(CaptureArea::Window, Language::Ja.texts()), "ウィンドウ");
         assert_eq!(DELAYS, [0, 1, 2, 3, 4, 5]);
         assert_eq!(delay_label(5, Language::En.texts()), "5 seconds");
         assert_eq!(delay_label(0, it), "Nessun ritardo");
+    }
+
+    #[test]
+    fn capture_button_says_record_for_recordings() {
+        let with = |format| AppSettings { format, ..AppSettings::default() };
+        let en = Language::En.texts();
+        assert_eq!(capture_label(&with(OutputFormat::Png), en), "Capture");
+        assert_eq!(capture_label(&with(OutputFormat::Mp4), en), "Record");
+        assert_eq!(capture_label(&with(OutputFormat::Gif), Language::It.texts()), "Registra");
+    }
+
+    #[test]
+    fn initial_status_names_the_capture_button_and_no_mode_button() {
+        for lang in Language::ALL {
+            let t = lang.texts();
+            assert!(t.initial_status.contains(t.capture), "{lang:?}: {}", t.initial_status);
+            for old in ["Mode", "Modus", "Modalità", "Modo", "モード", "모드", "模式"] {
+                assert!(!t.initial_status.contains(old), "{lang:?}: {}", t.initial_status);
+            }
+        }
     }
 
     #[test]

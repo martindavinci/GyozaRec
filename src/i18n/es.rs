@@ -2,11 +2,12 @@ use super::Texts;
 
 pub(super) const TEXTS: Texts = Texts {
     capture: "Capturar",
-    delay: "Retraso",
     options: "Opciones",
-    modes: ["Rectángulo", "Ventana", "Pantalla completa", "Vídeo MP4", "GIF animado"],
+    areas: ["Rectángulo", "Ventana", "Pantalla completa"],
+    formats: ["Imagen PNG", "Vídeo MP4", "GIF animado"],
+    record: "Grabar",
     delays: ["Sin retraso", "1 segundo", "2 segundos", "3 segundos", "4 segundos", "5 segundos"],
-    initial_status: "Elige un modo con el botón Modo y pulsa Capturar.",
+    initial_status: "Elige qué capturar y el formato, y pulsa Capturar.",
     saved_prefix: "Guardado: ",
     copied_suffix: " · copiado al portapapeles",
     error_prefix: "Error: ",

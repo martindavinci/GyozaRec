@@ -2,11 +2,12 @@ use super::Texts;
 
 pub(super) const TEXTS: Texts = Texts {
     capture: "キャプチャ",
-    delay: "遅延",
     options: "オプション",
-    modes: ["四角形", "ウィンドウ", "全画面", "MP4 動画", "アニメーション GIF"],
+    areas: ["四角形", "ウィンドウ", "全画面"],
+    formats: ["PNG 画像", "MP4 動画", "アニメーション GIF"],
+    record: "録画",
     delays: ["遅延なし", "1 秒", "2 秒", "3 秒", "4 秒", "5 秒"],
-    initial_status: "モード ボタンでモードを選び、キャプチャを押してください。",
+    initial_status: "範囲と形式を選んで、キャプチャを押してください。",
     saved_prefix: "保存しました: ",
     copied_suffix: " · クリップボードにコピーしました",
     error_prefix: "エラー: ",

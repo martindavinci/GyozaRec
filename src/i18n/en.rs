@@ -2,11 +2,12 @@ use super::Texts;
 
 pub(super) const TEXTS: Texts = Texts {
     capture: "Capture",
-    delay: "Delay",
     options: "Options",
-    modes: ["Rectangle", "Window", "Full screen", "MP4 video", "Animated GIF"],
+    areas: ["Rectangle", "Window", "Full screen"],
+    formats: ["PNG image", "MP4 video", "Animated GIF"],
+    record: "Record",
     delays: ["No delay", "1 second", "2 seconds", "3 seconds", "4 seconds", "5 seconds"],
-    initial_status: "Choose a mode with the Mode button, then press Capture.",
+    initial_status: "Choose what to capture and the format, then press Capture.",
     saved_prefix: "Saved: ",
     copied_suffix: " · copied to clipboard",
     error_prefix: "Error: ",

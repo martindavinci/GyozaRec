@@ -2,11 +2,12 @@ use super::Texts;
 
 pub(super) const TEXTS: Texts = Texts {
     capture: "Capturer",
-    delay: "Délai",
     options: "Options",
-    modes: ["Rectangle", "Fenêtre", "Plein écran", "Vidéo MP4", "GIF animé"],
+    areas: ["Rectangle", "Fenêtre", "Plein écran"],
+    formats: ["Image PNG", "Vidéo MP4", "GIF animé"],
+    record: "Enregistrer",
     delays: ["Aucun délai", "1 seconde", "2 secondes", "3 secondes", "4 secondes", "5 secondes"],
-    initial_status: "Choisissez un mode avec le bouton Mode, puis appuyez sur Capturer.",
+    initial_status: "Choisissez quoi capturer et le format, puis cliquez sur Capturer.",
     saved_prefix: "Enregistré : ",
     copied_suffix: " · copié dans le presse-papiers",
     error_prefix: "Erreur : ",

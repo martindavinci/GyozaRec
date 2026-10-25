@@ -2,9 +2,10 @@ use super::Texts;
 
 pub(super) const TEXTS: Texts = Texts {
     capture: "Aufnehmen",
-    delay: "Verzögerung",
     options: "Optionen",
-    modes: ["Rechteck", "Fenster", "Vollbild", "MP4-Video", "Animiertes GIF"],
+    areas: ["Rechteck", "Fenster", "Vollbild"],
+    formats: ["PNG-Bild", "MP4-Video", "Animiertes GIF"],
+    record: "Aufzeichnen",
     delays: [
         "Keine Verzögerung",
         "1 Sekunde",
@@ -13,7 +14,7 @@ pub(super) const TEXTS: Texts = Texts {
         "4 Sekunden",
         "5 Sekunden",
     ],
-    initial_status: "Wähle mit der Schaltfläche Modus einen Modus und klicke dann auf Aufnehmen.",
+    initial_status: "Wähle Bereich und Format und klicke dann auf Aufnehmen.",
     saved_prefix: "Gespeichert: ",
     copied_suffix: " · in die Zwischenablage kopiert",
     error_prefix: "Fehler: ",

@@ -11,6 +11,7 @@ pub mod paths;
 pub mod pixels;
 pub mod platform;
 pub mod presentation;
+pub mod quick;
 pub mod recording;
 pub mod render;
 pub mod settings;

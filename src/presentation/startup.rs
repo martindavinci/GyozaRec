@@ -1,15 +1,20 @@
 //! Command-line options.
 
+use crate::quick::QuickAction;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StartupOptions {
-    /// `--capture`: start a capture right away.
-    pub capture_now: bool,
+    /// `--capture`, `--capture-image`, `--capture-fullscreen`, `--record` or
+    /// `--record-fullscreen`: start that capture right away.
+    pub action: Option<QuickAction>,
 }
 
 impl StartupOptions {
     /// `args` excludes the executable name; unknown arguments are ignored.
     pub fn parse(args: &[String]) -> StartupOptions {
-        StartupOptions { capture_now: args.iter().any(|a| a.eq_ignore_ascii_case("--capture")) }
+        let action =
+            args.iter().find_map(|a| a.strip_prefix("--").and_then(QuickAction::from_name));
+        StartupOptions { action }
     }
 }
 
@@ -22,11 +27,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_detects_capture_flag() {
-        assert!(!StartupOptions::parse(&a(&[])).capture_now);
-        assert!(StartupOptions::parse(&a(&["--capture"])).capture_now);
-        assert!(StartupOptions::parse(&a(&["--CAPTURE"])).capture_now);
-        assert!(StartupOptions::parse(&a(&["--foo", "--capture"])).capture_now);
-        assert!(!StartupOptions::parse(&a(&["capture"])).capture_now);
+    fn parse_reads_every_quick_flag() {
+        use crate::quick::QuickAction::*;
+        let action = |v: &[&str]| StartupOptions::parse(&a(v)).action;
+        assert_eq!(action(&[]), None);
+        assert_eq!(action(&["--capture"]), Some(Current));
+        assert_eq!(action(&["--CAPTURE"]), Some(Current));
+        assert_eq!(action(&["--foo", "--capture-image"]), Some(Image));
+        assert_eq!(action(&["--capture-fullscreen"]), Some(ImageFullScreen));
+        assert_eq!(action(&["--record"]), Some(Record));
+        assert_eq!(action(&["--record-fullscreen"]), Some(RecordFullScreen));
+        assert_eq!(action(&["capture"]), None);
     }
 }

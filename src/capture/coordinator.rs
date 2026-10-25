@@ -137,6 +137,9 @@ impl CaptureCoordinator {
                 if settings.open_folder_after_recording {
                     self.revealer.reveal(&path);
                 }
+                if settings.open_file_after_capture {
+                    self.revealer.open(&path);
+                }
                 CaptureOutcome::saved(path, copied)
             }
             (RecordingOutcome::Canceled, _) => CaptureOutcome::canceled(),
@@ -168,6 +171,9 @@ impl CaptureCoordinator {
             Ok(path) => {
                 if settings.play_sound {
                     self.sound.play_capture();
+                }
+                if settings.open_file_after_capture {
+                    self.revealer.open(&path);
                 }
                 CaptureOutcome::saved(path, copied)
             }
@@ -258,6 +264,27 @@ mod tests {
         });
         let ev = [h.events(), c.events()].concat();
         assert!(!ev.iter().any(|e| e.starts_with("reveal:")), "{ev:?}");
+    }
+
+    #[test]
+    fn saved_capture_opens_the_file_when_enabled() {
+        let mut png = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)));
+        png.run(AppSettings { open_file_after_capture: true, ..png.settings() });
+        let mut gif = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        gif.run(AppSettings {
+            format: OutputFormat::Gif,
+            open_file_after_capture: true,
+            ..gif.settings()
+        });
+        let opened = |ev: Vec<String>, ext: &str| {
+            ev.iter().any(|e| e.starts_with("open:") && e.ends_with(ext))
+        };
+        assert!(opened(png.events(), ".png"), "{:?}", png.events());
+        assert!(opened(gif.events(), ".gif"), "{:?}", gif.events());
+        let mut off = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)));
+        off.run(off.settings());
+        assert!(!off.events().iter().any(|e| e.starts_with("open:")));
     }
 
     #[test]

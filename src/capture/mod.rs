@@ -62,6 +62,8 @@ pub trait ClipboardService: Send {
 pub trait FileRevealer: Send {
     /// Shows `path` in the file manager.
     fn reveal(&self, path: &Path);
+    /// Opens `path` in its default app.
+    fn open(&self, path: &Path);
 }
 
 pub trait SoundPlayer: Send {

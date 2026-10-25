@@ -31,6 +31,31 @@ impl crate::capture::FileRevealer for ExplorerRevealer {
     fn reveal(&self, path: &Path) {
         reveal_in_explorer(path);
     }
+
+    fn open(&self, path: &Path) {
+        open_with_default_app(path);
+    }
+}
+
+/// Opens `path` like a double click would. A failure is ignored: the file
+/// is saved either way.
+pub fn open_with_default_app(path: &Path) {
+    use windows::Win32::System::Com::{
+        COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize,
+    };
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::{HSTRING, w};
+    // SAFETY: COM is initialized for this call only and balanced below; the
+    // strings outlive ShellExecuteW.
+    unsafe {
+        let com = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).is_ok();
+        let file = HSTRING::from(path.as_os_str());
+        let _ = ShellExecuteW(None, w!("open"), &file, None, None, SW_SHOWNORMAL);
+        if com {
+            CoUninitialize();
+        }
+    }
 }
 
 /// Lets the running instance take the foreground when this process asks it to.

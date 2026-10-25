@@ -25,6 +25,7 @@ pub(super) const TEXTS: Texts = Texts {
     play_sound: "Ton bei der Aufnahme",
     include_cursor: "Mauszeiger einbeziehen (Video/GIF)",
     open_folder_after_recording: "Ordner nach einer Aufzeichnung öffnen",
+    open_file_after_capture: "Datei nach einer Aufnahme öffnen",
     discard_question: "Diese Aufzeichnung verwerfen?",
     gif_fps: "GIF: Bilder pro Sekunde",
     gif_max_seconds: "GIF: maximale Länge (s)",

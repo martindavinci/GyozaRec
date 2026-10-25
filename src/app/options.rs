@@ -25,6 +25,7 @@ const ID_CLIPBOARD: u32 = 2;
 const ID_SOUND: u32 = 3;
 const ID_CURSOR: u32 = 4;
 const ID_OPEN_FOLDER: u32 = 5;
+const ID_OPEN_FILE: u32 = 6;
 const ID_LANGUAGE: u32 = 15;
 const ID_OK: u32 = 20;
 const ID_CANCEL: u32 = 21;
@@ -124,6 +125,7 @@ fn build_ui(form: &OptionsForm, texts: &Texts, fonts: &Fonts) -> Ui {
         (ID_SOUND, texts.play_sound, form.play_sound),
         (ID_CURSOR, texts.include_cursor, form.include_cursor),
         (ID_OPEN_FOLDER, texts.open_folder_after_recording, form.open_folder_after_recording),
+        (ID_OPEN_FILE, texts.open_file_after_capture, form.open_file_after_capture),
     ];
     for (id, text, checked) in checks {
         let check = WidgetKind::Check { label: text.into(), checked };
@@ -314,6 +316,7 @@ impl OptionsWindow {
             ID_OPEN_FOLDER => {
                 self.form.open_folder_after_recording = !self.form.open_folder_after_recording
             }
+            ID_OPEN_FILE => self.form.open_file_after_capture = !self.form.open_file_after_capture,
             id if id == ID_LANGUAGE || COMBOS.iter().any(|(cid, _)| *cid == id) => {
                 self.show_choices(id)
             }

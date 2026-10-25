@@ -18,6 +18,7 @@ pub(super) const TEXTS: Texts = Texts {
     play_sound: "캡처할 때 소리 재생",
     include_cursor: "커서 포함 (동영상/GIF)",
     open_folder_after_recording: "녹화 후 폴더 열기",
+    open_file_after_capture: "캡처 후 파일 열기",
     discard_question: "이 녹화를 삭제할까요?",
     gif_fps: "GIF: 초당 프레임 수",
     gif_max_seconds: "GIF: 최대 길이 (초)",

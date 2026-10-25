@@ -18,6 +18,8 @@ pub struct AppSettings {
     pub include_cursor: bool,
     /// Show a saved video or GIF in Explorer.
     pub open_folder_after_recording: bool,
+    /// Open each saved capture in its default app.
+    pub open_file_after_capture: bool,
     pub gif_fps: u32,
     pub gif_max_seconds: u32,
     pub gif_max_long_side: u32,
@@ -41,6 +43,7 @@ impl Default for AppSettings {
             play_sound: true,
             include_cursor: true,
             open_folder_after_recording: false,
+            open_file_after_capture: false,
             gif_fps: 10,
             gif_max_seconds: 15,
             gif_max_long_side: 800,

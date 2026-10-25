@@ -315,6 +315,10 @@ impl FileRevealer for FakeRevealer {
     fn reveal(&self, path: &Path) {
         log_event(&Some(self.log.clone()), format!("reveal:{}", path.display()));
     }
+
+    fn open(&self, path: &Path) {
+        log_event(&Some(self.log.clone()), format!("open:{}", path.display()));
+    }
 }
 
 pub struct FakeToolbar {

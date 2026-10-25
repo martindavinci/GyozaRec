@@ -20,6 +20,7 @@ use gyozarec::presentation::{
     AREAS, Activation, DELAYS, FORMATS, OptionsForm, ToolbarState, activation, area_label,
     delay_label, format_label,
 };
+use gyozarec::quick::{QuickAction, apply, can_start};
 use gyozarec::settings::SettingsStore;
 use gyozarec::uikit::painter::Fonts;
 use muda::{CheckMenuItem, ContextMenu, Menu, MenuEvent};
@@ -69,12 +70,12 @@ pub struct App {
     recording: Option<RecordingSession>,
     options: Option<OptionsWindow>,
     capture_dir: PathBuf,
-    /// `--capture`: start a capture as soon as the toolbar exists.
-    capture_on_start: bool,
+    /// Command-line capture to run as soon as the toolbar exists.
+    action_on_start: Option<QuickAction>,
 }
 
 impl App {
-    pub fn new(proxy: EventLoopProxy<AppEvent>, capture_on_start: bool) -> App {
+    pub fn new(proxy: EventLoopProxy<AppEvent>, action_on_start: Option<QuickAction>) -> App {
         let paths = AppPaths::current();
         let capture_dir = paths.capture_dir.clone();
         let store = SettingsStore::from_paths(&paths);
@@ -117,7 +118,7 @@ impl App {
             recording: None,
             options: None,
             capture_dir,
-            capture_on_start,
+            action_on_start,
         }
     }
 
@@ -133,12 +134,14 @@ impl App {
         }
     }
 
-    fn start_capture(&mut self) {
-        if self.state.busy {
+    /// Starts a capture unless one is running or Options is open; quick
+    /// actions override area and format for this capture only.
+    fn start_quick(&mut self, action: QuickAction) {
+        if !can_start(self.state.busy, self.options.is_some()) {
             return;
         }
         self.state.busy = true;
-        if !self.capture.request(self.state.settings.clone()) {
+        if !self.capture.request(apply(action, &self.state.settings)) {
             self.state.busy = false;
             self.state.set_error(self.state.texts().err_capture_thread);
         }
@@ -313,8 +316,8 @@ impl ApplicationHandler<AppEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.toolbar.is_none() {
             self.toolbar = Some(Toolbar::create(event_loop, &self.state, &self.fonts));
-            if std::mem::take(&mut self.capture_on_start) {
-                self.start_capture();
+            if let Some(action) = self.action_on_start.take() {
+                self.start_quick(action);
             }
         }
     }
@@ -323,7 +326,7 @@ impl ApplicationHandler<AppEvent> for App {
         match event {
             AppEvent::Ui(req) => self.on_ui(event_loop, req),
             AppEvent::Menu(event) => self.on_menu(event),
-            AppEvent::Instance(InstanceCommand::Capture) => self.start_capture(),
+            AppEvent::Instance(InstanceCommand::Quick(action)) => self.start_quick(action),
             AppEvent::Instance(InstanceCommand::Activate) => self.activate(),
         }
     }
@@ -362,7 +365,7 @@ impl ApplicationHandler<AppEvent> for App {
             return; // the Options window is modal
         }
         match action {
-            Some(ToolbarAction::Capture) => self.start_capture(),
+            Some(ToolbarAction::Capture) => self.start_quick(QuickAction::Current),
             Some(
                 action @ (ToolbarAction::AreaMenu
                 | ToolbarAction::FormatMenu

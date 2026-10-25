@@ -3,25 +3,31 @@
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Stream, prelude::*};
 use std::io::{self, BufRead, BufReader, Write};
 
+use crate::quick::QuickAction;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InstanceCommand {
     Activate,
-    Capture,
+    Quick(QuickAction),
 }
 
 impl InstanceCommand {
-    pub fn as_line(self) -> &'static str {
+    pub fn as_line(self) -> String {
         match self {
-            InstanceCommand::Activate => "activate",
-            InstanceCommand::Capture => "capture",
+            InstanceCommand::Activate => "activate".into(),
+            InstanceCommand::Quick(action) => format!("quick:{}", action.name()),
         }
     }
 
     pub fn parse(line: &str) -> Option<InstanceCommand> {
         match line.trim() {
             "activate" => Some(InstanceCommand::Activate),
-            "capture" => Some(InstanceCommand::Capture),
-            _ => None,
+            // Sent by 0.1.x.
+            "capture" => Some(InstanceCommand::Quick(QuickAction::Current)),
+            other => {
+                let name = other.strip_prefix("quick:")?;
+                QuickAction::from_name(name).map(InstanceCommand::Quick)
+            }
         }
     }
 }
@@ -91,10 +97,23 @@ mod tests {
 
     #[test]
     fn command_lines_roundtrip() {
-        for c in [InstanceCommand::Activate, InstanceCommand::Capture] {
+        use crate::quick::QuickAction;
+        let commands = std::iter::once(InstanceCommand::Activate)
+            .chain(QuickAction::ALL.iter().map(|a| InstanceCommand::Quick(*a)));
+        for c in commands {
             assert_eq!(InstanceCommand::parse(&format!("{}\n", c.as_line())), Some(c));
         }
         assert_eq!(InstanceCommand::parse("boh"), None);
+        assert_eq!(InstanceCommand::parse("quick:nope"), None);
+    }
+
+    #[test]
+    fn older_capture_line_still_works() {
+        use crate::quick::QuickAction;
+        assert_eq!(
+            InstanceCommand::parse("capture"),
+            Some(InstanceCommand::Quick(QuickAction::Current))
+        );
     }
 
     #[test]
@@ -115,7 +134,8 @@ mod tests {
         let Instance::Secondary(client) = acquire(&name).unwrap() else {
             panic!("second must be secondary")
         };
-        client.send(InstanceCommand::Capture).unwrap();
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), InstanceCommand::Capture);
+        let record = InstanceCommand::Quick(crate::quick::QuickAction::Record);
+        client.send(record).unwrap();
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), record);
     }
 }

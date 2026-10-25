@@ -1,0 +1,27 @@
+name: winget
+
+# After a release is published, proposes the new version to the Windows
+# Package Manager catalog. Needs the WINGET_TOKEN secret (see
+# packaging/winget/README.md); without it the job does nothing.
+on:
+  release:
+    types: [released]
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: windows-latest
+    env:
+      HAS_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
+    steps:
+      - name: Skip without a token
+        if: env.HAS_TOKEN != 'true'
+        run: echo "WINGET_TOKEN is not set; skipping the winget update."
+      - uses: vedantmgoyal9/winget-releaser@v2
+        if: env.HAS_TOKEN == 'true'
+        with:
+          identifier: MartinDaVinci.GyozaRec
+          installers-regex: '\.msi$'
+          token: ${{ secrets.WINGET_TOKEN }}

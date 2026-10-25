@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     record_system_audio: "录制系统声音 (MP4)",
     open_folder_after_recording: "录制后打开文件夹",
     open_file_after_capture: "捕获后打开文件",
+    open_editor_after_capture: "截图后打开编辑器",
     keep_in_tray: "保持在通知区域运行",
     start_with_windows: "随 Windows 启动",
     shortcuts_enabled: "全局快捷键",

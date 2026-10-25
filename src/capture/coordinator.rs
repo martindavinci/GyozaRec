@@ -1,9 +1,10 @@
 //! Runs one capture end to end: hide toolbar, wait, grab, select, save.
 
 use super::{
-    AudioStarter, CaptureOutcome, ClipboardService, Cues, CursorLocator, FileRevealer,
-    MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi,
-    SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowSnapshotter, monitor_from_point,
+    AudioStarter, CaptureOutcome, ClipboardService, Cues, CursorLocator, EditorLauncher,
+    FileRevealer, MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest,
+    SelectionUi, SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowSnapshotter,
+    monitor_from_point,
 };
 use crate::clock::Clock;
 use crate::geometry::{CaptureArea, OutputFormat, PixelRect, meets_minimum};
@@ -28,6 +29,7 @@ pub struct CaptureCoordinator {
     pub clipboard: Box<dyn ClipboardService>,
     pub sound: Box<dyn SoundPlayer>,
     pub revealer: Box<dyn FileRevealer>,
+    pub editor: Box<dyn EditorLauncher>,
     pub toolbar: Box<dyn ToolbarVisibility>,
     pub recording_ui: Box<dyn RecordingUi>,
     pub sinks: Box<dyn SinkFactory>,
@@ -205,7 +207,15 @@ impl CaptureCoordinator {
                 if settings.play_sound {
                     self.sound.play(crate::sounds::Cue::Saved);
                 }
-                if settings.open_file_after_capture {
+                if settings.open_editor_after_capture {
+                    // The editor takes the place of the default app.
+                    let monitors = self.monitors.monitors();
+                    if !monitors.is_empty() {
+                        let m = monitor_from_point(&monitors, img.bounds.center());
+                        let image = Arc::new(img.clone());
+                        self.editor.open(image, path.clone(), m.work_area, m.scale);
+                    }
+                } else if settings.open_file_after_capture {
                     self.revealer.open(&path);
                 }
                 CaptureOutcome::saved(path, copied)
@@ -383,6 +393,13 @@ mod tests {
         let opened = |ev: Vec<String>, ext: &str| {
             ev.iter().any(|e| e.starts_with("open:") && e.ends_with(ext))
         };
+        assert!(!opened(png.events(), ".png"), "the editor opens instead: {:?}", png.events());
+        let mut png = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)));
+        png.run(AppSettings {
+            open_file_after_capture: true,
+            open_editor_after_capture: false,
+            ..png.settings()
+        });
         assert!(opened(png.events(), ".png"), "{:?}", png.events());
         assert!(opened(gif.events(), ".gif"), "{:?}", gif.events());
         let mut off = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)));
@@ -430,6 +447,7 @@ mod tests {
                 "select:Rectangle:frozen=true:windows=0",
                 "clip:image:10,20,30,40",
                 "sound",
+                "editor:GyozaRec_2026-10-24_12-00-00.png:30x40:work=0,0,1920,1080:scale=1",
                 "show"
             ]
         );
@@ -564,6 +582,47 @@ mod tests {
         let mut h = CoordinatorHarness::two_monitors_with_selection(PixelPoint::default(), None);
         let o = h.run(AppSettings { area: CaptureArea::FullScreen, ..h.settings() });
         assert_eq!(o.kind, CaptureOutcomeKind::Canceled);
+    }
+
+    #[test]
+    fn saved_image_opens_the_editor_instead_of_the_file() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(10, 20, 200, 100)));
+        h.run(AppSettings { open_file_after_capture: true, ..h.settings() });
+        let ev = h.events();
+        let editor = ev.iter().find(|e| e.starts_with("editor:")).expect("editor opened");
+        assert!(editor.ends_with(".png:200x100:work=0,0,1920,1080:scale=1"), "{editor}");
+        assert!(!ev.iter().any(|e| e.starts_with("open:")), "{ev:?}");
+        assert!(ev.iter().any(|e| e.starts_with("clip:image")), "still copied: {ev:?}");
+    }
+
+    #[test]
+    fn editor_off_keeps_the_old_behaviour() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)));
+        h.run(AppSettings {
+            open_file_after_capture: true,
+            open_editor_after_capture: false,
+            ..h.settings()
+        });
+        let ev = h.events();
+        assert!(ev.iter().any(|e| e.starts_with("open:")), "{ev:?}");
+        assert!(!ev.iter().any(|e| e.starts_with("editor:")), "{ev:?}");
+    }
+
+    #[test]
+    fn recordings_never_open_the_editor() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        h.run(AppSettings { format: OutputFormat::Mp4, ..h.settings() });
+        assert!(!h.events().iter().any(|e| e.starts_with("editor:")));
+    }
+
+    #[test]
+    fn failed_save_does_not_open_the_editor() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 10, 10)));
+        let blocker = h.dir().join("blocker");
+        fs::write(&blocker, b"").unwrap();
+        h.run(AppSettings { save_folder: blocker.join("sub"), ..h.settings() });
+        assert!(!h.events().iter().any(|e| e.starts_with("editor:")));
     }
 
     #[test]

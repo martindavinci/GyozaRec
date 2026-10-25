@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     record_system_audio: "Record system audio (MP4)",
     open_folder_after_recording: "Open the folder after a recording",
     open_file_after_capture: "Open the file after a capture",
+    open_editor_after_capture: "Open the editor after an image capture",
     keep_in_tray: "Keep running in the notification area",
     start_with_windows: "Start with Windows",
     shortcuts_enabled: "Global shortcuts",

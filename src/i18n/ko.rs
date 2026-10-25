@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     record_system_audio: "시스템 오디오 녹음 (MP4)",
     open_folder_after_recording: "녹화 후 폴더 열기",
     open_file_after_capture: "캡처 후 파일 열기",
+    open_editor_after_capture: "이미지 캡처 후 편집기 열기",
     keep_in_tray: "알림 영역에서 계속 실행",
     start_with_windows: "Windows 시작 시 실행",
     shortcuts_enabled: "전역 단축키",

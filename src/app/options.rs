@@ -31,6 +31,7 @@ const ID_SHORTCUTS: u32 = 8;
 const ID_PRINT_SCREEN: u32 = 9;
 const ID_AUTOSTART: u32 = 30;
 const ID_SYSTEM_AUDIO: u32 = 31;
+const ID_EDITOR: u32 = 32;
 /// Widest hint line before wrapping, in logical pixels.
 const HINT_WIDTH: f32 = 340.0;
 const COLUMN_GAP: f32 = 28.0;
@@ -229,6 +230,7 @@ fn build_ui(
         (ID_CURSOR, texts.include_cursor, form.include_cursor),
         (ID_SYSTEM_AUDIO, texts.record_system_audio, form.record_system_audio),
         (ID_OPEN_FOLDER, texts.open_folder_after_recording, form.open_folder_after_recording),
+        (ID_EDITOR, texts.open_editor_after_capture, form.open_editor_after_capture),
         (ID_OPEN_FILE, texts.open_file_after_capture, form.open_file_after_capture),
         (ID_TRAY, texts.keep_in_tray, form.keep_in_tray),
         (ID_AUTOSTART, texts.start_with_windows, form.start_with_windows),
@@ -617,6 +619,7 @@ impl OptionsWindow {
                 self.form.open_folder_after_recording = !self.form.open_folder_after_recording
             }
             ID_OPEN_FILE => self.form.open_file_after_capture = !self.form.open_file_after_capture,
+            ID_EDITOR => self.form.open_editor_after_capture = !self.form.open_editor_after_capture,
             ID_TRAY => self.form.keep_in_tray = !self.form.keep_in_tray,
             ID_AUTOSTART => self.form.start_with_windows = !self.form.start_with_windows,
             ID_SHORTCUTS => self.form.shortcuts_enabled = !self.form.shortcuts_enabled,

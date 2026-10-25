@@ -22,6 +22,8 @@ pub struct AppSettings {
     pub open_folder_after_recording: bool,
     /// Open each saved capture in its default app.
     pub open_file_after_capture: bool,
+    /// After an image capture, open it in the editor.
+    pub open_editor_after_capture: bool,
     /// Closing the toolbar hides it; GyozaRec stays in the notification area.
     pub keep_in_tray: bool,
     pub start_with_windows: bool,
@@ -58,6 +60,7 @@ impl Default for AppSettings {
             record_system_audio: true,
             open_folder_after_recording: false,
             open_file_after_capture: false,
+            open_editor_after_capture: true,
             keep_in_tray: true,
             start_with_windows: false,
             shortcuts_enabled: false,
@@ -205,6 +208,14 @@ mod tests {
         let s = SettingsStore::new(p, cap()).load();
         assert!(s.shortcut_keys.is_empty() && s.shortcuts_disabled.is_empty());
         assert_eq!(crate::shortcuts::effective(&s).len(), 4);
+    }
+
+    #[test]
+    fn old_settings_get_the_editor_on() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "open_file_after_capture": true }"#).unwrap();
+        assert!(SettingsStore::new(p, cap()).load().open_editor_after_capture);
     }
 
     #[test]

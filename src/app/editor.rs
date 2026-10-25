@@ -407,6 +407,10 @@ impl EditorWindow {
         self.surface.window.focus_window();
     }
 
+    pub fn set_visible(&self, visible: bool) {
+        self.surface.window.set_visible(visible);
+    }
+
     fn scale(&self) -> f32 {
         self.surface.window.scale_factor() as f32
     }

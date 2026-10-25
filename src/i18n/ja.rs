@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     record_system_audio: "システム音声を録音 (MP4)",
     open_folder_after_recording: "録画後にフォルダーを開く",
     open_file_after_capture: "キャプチャ後にファイルを開く",
+    open_editor_after_capture: "画像をキャプチャしたらエディターを開く",
     keep_in_tray: "通知領域で実行を続ける",
     start_with_windows: "Windows の起動時に開始",
     shortcuts_enabled: "グローバル ショートカット",

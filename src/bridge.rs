@@ -20,6 +20,12 @@ pub enum UiRequest {
         reply: mpsc::Sender<Option<PixelRect>>,
     },
     CaptureFinished(CaptureOutcome),
+    OpenEditor {
+        image: Arc<crate::pixels::PixelBuffer>,
+        path: std::path::PathBuf,
+        work_area: PixelRect,
+        scale: f64,
+    },
     RecordingStarted {
         region: PixelRect,
         monitor: MonitorInfo,
@@ -147,6 +153,23 @@ impl<S: UiSender> ToolbarVisibility for BridgeToolbar<S> {
 
     fn show(&mut self) {
         self.sender.send(UiRequest::ShowToolbar);
+    }
+}
+
+/// Asks the UI thread to open the editor.
+pub struct BridgeEditor<S: UiSender> {
+    pub sender: S,
+}
+
+impl<S: UiSender> crate::capture::EditorLauncher for BridgeEditor<S> {
+    fn open(
+        &self,
+        image: Arc<crate::pixels::PixelBuffer>,
+        path: std::path::PathBuf,
+        work_area: PixelRect,
+        scale: f64,
+    ) {
+        self.sender.send(UiRequest::OpenEditor { image, path, work_area, scale });
     }
 }
 

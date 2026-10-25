@@ -3,9 +3,10 @@
 
 use crate::bridge::{RecordingCommand, UiRequest, UiSender};
 use crate::capture::{
-    CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, FileRevealer,
-    MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi,
-    SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowCandidate, WindowSnapshotter,
+    CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, EditorLauncher,
+    FileRevealer, MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest,
+    SelectionUi, SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowCandidate,
+    WindowSnapshotter,
 };
 use crate::clock::Clock;
 use crate::geometry::{MonitorInfo, PixelPoint, PixelRect};
@@ -149,6 +150,7 @@ impl UiSender for FakeUiSender {
                 }
                 *self.held.lock().unwrap() = Some(commands);
             }
+            UiRequest::OpenEditor { .. } => log_event(&log, "ui:editor"),
             UiRequest::RecordingTick { .. } => log_event(&log, "ui:rec-tick"),
             UiRequest::RecordingEnded => {
                 log_event(&log, "ui:rec-end");
@@ -350,6 +352,23 @@ impl crate::capture::AudioStarter for FakeAudioStarter {
     }
 }
 
+/// Logs `editor:<file>:<w>x<h>:work=<x>,<y>,<w>,<h>:scale=<s>`.
+pub struct FakeEditor {
+    pub log: EventLog,
+}
+
+impl EditorLauncher for FakeEditor {
+    fn open(&self, image: Arc<PixelBuffer>, path: std::path::PathBuf, work: PixelRect, scale: f64) {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let (w, h) = (image.width(), image.height());
+        let area = format!("{},{},{},{}", work.x, work.y, work.width, work.height);
+        log_event(
+            &Some(self.log.clone()),
+            format!("editor:{name}:{w}x{h}:work={area}:scale={scale}"),
+        );
+    }
+}
+
 pub struct FakeRevealer {
     pub log: EventLog,
 }
@@ -404,6 +423,7 @@ impl CoordinatorHarness {
             clipboard: Box::new(FakeClipboard { log: log.clone() }),
             sound: Box::new(FakeSound { log: log.clone() }),
             revealer: Box::new(FakeRevealer { log: log.clone() }),
+            editor: Box::new(FakeEditor { log: log.clone() }),
             audio: Box::new(FakeAudioStarter { available: false, log: log.clone() }),
             toolbar: Box::new(FakeToolbar { log: log.clone() }),
             recording_ui: Box::new(FakeRecordingUi {

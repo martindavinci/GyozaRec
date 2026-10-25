@@ -82,6 +82,11 @@ pub trait FileRevealer: Send {
     fn open(&self, path: &Path);
 }
 
+/// Opens the editor on a saved image, on the monitor it came from.
+pub trait EditorLauncher: Send {
+    fn open(&self, image: Arc<PixelBuffer>, path: PathBuf, work_area: PixelRect, scale: f64);
+}
+
 pub trait SoundPlayer: Send {
     fn play(&self, cue: crate::sounds::Cue);
 }

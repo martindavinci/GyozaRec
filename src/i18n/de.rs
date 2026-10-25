@@ -27,6 +27,7 @@ pub(super) const TEXTS: Texts = Texts {
     record_system_audio: "Systemton aufzeichnen (MP4)",
     open_folder_after_recording: "Ordner nach einer Aufzeichnung öffnen",
     open_file_after_capture: "Datei nach einer Aufnahme öffnen",
+    open_editor_after_capture: "Nach einem Bildschirmfoto den Editor öffnen",
     keep_in_tray: "Im Infobereich weiterlaufen",
     start_with_windows: "Mit Windows starten",
     shortcuts_enabled: "Globale Tastenkürzel",

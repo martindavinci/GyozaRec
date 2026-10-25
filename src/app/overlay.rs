@@ -1,7 +1,7 @@
 //! Full-screen selection overlays, one borderless window per monitor.
 
 use super::surface::WindowSurface;
-use gyozarec::capture::{SelectionRequest, WindowCandidate, window_at};
+use gyozarec::capture::{SelectionRequest, WindowCandidate, hovered_window};
 use gyozarec::geometry::{CaptureArea, MonitorInfo, PixelPoint, PixelRect, PixelSize};
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::render::OverlayCache;
@@ -205,9 +205,7 @@ impl OverlaySession {
         w.cursor = p;
         if self.area == CaptureArea::Window {
             let screen = w.to_screen(p);
-            let hovered = window_at(&self.candidates, screen)
-                .map(|c| c.bounds.intersect(&w.monitor.bounds))
-                .filter(|r| !r.is_empty());
+            let hovered = hovered_window(&self.candidates, screen);
             if hovered != self.hovered {
                 self.hovered = hovered;
                 for other in &mut self.windows {

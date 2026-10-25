@@ -65,7 +65,7 @@ impl OptionsForm {
         }
     }
 
-    /// `base` with the edited fields applied; mode and delay stay as in `base`.
+    /// `base` with the edited fields applied; area, format and delay stay as in `base`.
     pub fn to_settings(&self, base: &AppSettings, capture_dir: &Path) -> AppSettings {
         AppSettings {
             save_folder: self.save_folder.clone(),
@@ -87,7 +87,7 @@ impl OptionsForm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::CaptureArea;
+    use crate::geometry::{CaptureArea, OutputFormat};
     use crate::settings::AppSettings;
     use std::path::PathBuf;
 
@@ -114,9 +114,10 @@ mod tests {
     }
 
     #[test]
-    fn to_settings_applies_edits_and_keeps_mode_and_delay() {
+    fn to_settings_applies_edits_and_keeps_area_format_and_delay() {
         let base = AppSettings {
             area: CaptureArea::Window,
+            format: OutputFormat::Gif,
             delay_seconds: 2,
             ..AppSettings::defaults(&cap())
         };
@@ -126,9 +127,10 @@ mod tests {
         f.save_folder = PathBuf::from(r"D:\Shots");
         let s = f.to_settings(&base, &cap());
         assert_eq!(
-            (s.gif_fps, s.copy_to_clipboard, s.save_folder.clone(), s.area, s.delay_seconds),
-            (20, false, PathBuf::from(r"D:\Shots"), CaptureArea::Window, 2)
+            (s.gif_fps, s.copy_to_clipboard, s.save_folder.clone(), s.delay_seconds),
+            (20, false, PathBuf::from(r"D:\Shots"), 2)
         );
+        assert_eq!((s.area, s.format), (CaptureArea::Window, OutputFormat::Gif));
     }
 
     #[test]

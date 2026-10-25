@@ -154,6 +154,12 @@ pub fn window_at(z_ordered: &[WindowCandidate], p: PixelPoint) -> Option<&Window
     z_ordered.iter().find(|w| w.bounds.contains(p))
 }
 
+/// The whole rectangle of the topmost window under `at`, even where it
+/// extends onto other monitors.
+pub fn hovered_window(z_ordered: &[WindowCandidate], at: PixelPoint) -> Option<PixelRect> {
+    window_at(z_ordered, at).map(|w| w.bounds).filter(|r| !r.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,6 +173,16 @@ mod tests {
     fn topmost_window_wins_on_overlap() {
         let ws = [w(1, 0, 0, 100, 100), w(2, 50, 50, 100, 100)];
         assert_eq!(window_at(&ws, PixelPoint { x: 60, y: 60 }).unwrap().id, 1);
+    }
+
+    #[test]
+    fn hovered_window_returns_the_whole_window_across_monitors() {
+        let ws = [w(1, -200, 100, 600, 400)];
+        assert_eq!(
+            hovered_window(&ws, PixelPoint { x: 50, y: 200 }),
+            Some(PixelRect::new(-200, 100, 600, 400))
+        );
+        assert_eq!(hovered_window(&ws, PixelPoint { x: 900, y: 900 }), None);
     }
 
     #[test]

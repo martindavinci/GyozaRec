@@ -11,6 +11,7 @@ mod monitors;
 mod mp4;
 mod recording;
 mod sound;
+mod video_reader;
 mod window_snapshot;
 
 pub use audio::LoopbackStarter;
@@ -26,6 +27,7 @@ pub use recording::{
     exclude_from_capture, layered_color_key, make_color_keyed, reveal_in_explorer,
 };
 pub use sound::SystemSound;
+pub use video_reader::MfVideoReader;
 pub use window_snapshot::Win32WindowList;
 
 #[cfg(test)]

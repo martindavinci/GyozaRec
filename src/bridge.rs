@@ -36,6 +36,8 @@ pub enum UiRequest {
 /// Buttons of the recording panel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RecordingCommand {
+    Pause,
+    Resume,
     Stop,
     Cancel,
 }
@@ -43,7 +45,7 @@ pub enum RecordingCommand {
 /// How often the panel's timer is refreshed.
 const TICK: Duration = Duration::from_millis(250);
 
-/// Runs the recording worker and relays the panel's Stop/Cancel to it.
+/// Runs the recording worker and relays the panel's buttons to it.
 pub struct BridgeRecordingUi<S: UiSender> {
     pub sender: S,
     pub grabber: Arc<dyn ScreenGrabber>,
@@ -69,6 +71,8 @@ impl<S: UiSender> RecordingUi for BridgeRecordingUi<S> {
         );
         let result = loop {
             match inbox.recv_timeout(TICK) {
+                Ok(RecordingCommand::Pause) => worker.pause(),
+                Ok(RecordingCommand::Resume) => worker.resume(),
                 Ok(RecordingCommand::Stop) => break worker.stop(),
                 Ok(RecordingCommand::Cancel) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                     break worker.cancel();

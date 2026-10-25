@@ -1,6 +1,6 @@
 //! Grabs frames at a fixed rate and feeds them to a sink.
 
-use super::{CANCEL, FrameSink, LoopConfig, LoopEnd, STOP};
+use super::{CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, PauseClock, STOP};
 use crate::capture::ScreenGrabber;
 use crate::clock::Clock;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -10,7 +10,8 @@ use std::time::Duration;
 const MAX_WAIT: Duration = Duration::from_millis(50);
 
 /// Frame `k` is due at `k × period`. A slow grab skips the frames it made
-/// late instead of catching up in a burst.
+/// late instead of catching up in a burst. While paused nothing is grabbed,
+/// and the paused time counts neither in the timestamps nor in the limit.
 pub fn run_capture_loop(
     grabber: &dyn ScreenGrabber,
     sink: &mut dyn FrameSink,
@@ -21,6 +22,7 @@ pub fn run_capture_loop(
     let start = clock.elapsed();
     let period = Duration::from_secs(1) / cfg.fps.max(1);
     let mut next = Duration::ZERO;
+    let mut pauses = PauseClock::default();
     loop {
         match control.load(Ordering::SeqCst) {
             CANCEL => return Ok(LoopEnd::Canceled),
@@ -28,9 +30,14 @@ pub fn run_capture_loop(
                 sink.finish()?;
                 return Ok(LoopEnd::Stopped);
             }
-            _ => {}
+            PAUSE => {
+                pauses.pause(clock.elapsed());
+                clock.sleep(MAX_WAIT);
+                continue;
+            }
+            _ => pauses.resume(clock.elapsed()),
         }
-        let t = clock.elapsed().saturating_sub(start);
+        let t = pauses.active(start, clock.elapsed());
         if t >= cfg.max_duration {
             sink.finish()?;
             return Ok(LoopEnd::MaxDuration);
@@ -38,7 +45,7 @@ pub fn run_capture_loop(
         if t >= next {
             let frame = grabber.grab(cfg.region, cfg.include_cursor)?;
             sink.push(&frame, t)?;
-            let after = clock.elapsed().saturating_sub(start);
+            let after = pauses.active(start, clock.elapsed());
             let done = (after.as_nanos() / period.as_nanos()) as u32;
             next = period * (done + 1);
         } else {
@@ -50,8 +57,9 @@ pub fn run_capture_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clock::Clock;
     use crate::geometry::PixelRect;
-    use crate::recording::{CANCEL, LoopConfig, LoopEnd, RUN, STOP};
+    use crate::recording::{CANCEL, LoopConfig, LoopEnd, PAUSE, RUN, STOP};
     use crate::testing::{FakeClock, FakeGrabber, VecSink};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU8, Ordering};
@@ -110,6 +118,47 @@ mod tests {
         );
         assert_eq!(end.unwrap(), LoopEnd::Stopped);
         assert_eq!((sink.times().len(), sink.is_finished()), (3, true));
+    }
+
+    #[test]
+    fn pause_removes_paused_time_from_timestamps_and_limit() {
+        let control = Arc::new(AtomicU8::new(RUN));
+        let (on_grab, on_sleep) = (control.clone(), control.clone());
+        let grabber = FakeGrabber::with_hook(move |n| {
+            if n == 3 {
+                on_grab.store(PAUSE, Ordering::SeqCst)
+            }
+        });
+        let clock = FakeClock::default().with_sleep_hook(move |elapsed| {
+            if elapsed >= Duration::from_millis(700) {
+                let _ = on_sleep.compare_exchange(PAUSE, RUN, Ordering::SeqCst, Ordering::SeqCst);
+            }
+        });
+        let mut sink = VecSink::default();
+        let end = run_capture_loop(&grabber, &mut sink, &clock, &cfg(10, 600), &control).unwrap();
+        assert_eq!(end, LoopEnd::MaxDuration);
+        assert_eq!(sink.times(), ms(&[0, 100, 200, 300, 400, 500]));
+        assert!(clock.elapsed() >= Duration::from_millis(1100), "{:?}", clock.elapsed());
+    }
+
+    #[test]
+    fn stop_while_paused_finishes_sink() {
+        let control = Arc::new(AtomicU8::new(RUN));
+        let (on_grab, on_sleep) = (control.clone(), control.clone());
+        let grabber = FakeGrabber::with_hook(move |n| {
+            if n == 2 {
+                on_grab.store(PAUSE, Ordering::SeqCst)
+            }
+        });
+        let clock = FakeClock::default().with_sleep_hook(move |elapsed| {
+            if elapsed >= Duration::from_millis(500) {
+                on_sleep.store(STOP, Ordering::SeqCst);
+            }
+        });
+        let mut sink = VecSink::default();
+        let end = run_capture_loop(&grabber, &mut sink, &clock, &cfg(10, 10_000), &control);
+        assert_eq!(end.unwrap(), LoopEnd::Stopped);
+        assert_eq!((sink.times().len(), sink.is_finished()), (2, true));
     }
 
     #[test]

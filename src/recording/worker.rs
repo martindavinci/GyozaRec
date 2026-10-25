@@ -1,14 +1,14 @@
 //! Runs the capture loop on its own thread.
 
 use super::{
-    CANCEL, FrameSink, LoopConfig, LoopEnd, RecordingOutcome, RecordingResult, STOP,
-    run_capture_loop,
+    CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, PauseClock, RUN, RecordingOutcome,
+    RecordingResult, STOP, run_capture_loop,
 };
 use crate::capture::ScreenGrabber;
 use crate::clock::Clock;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -17,6 +17,7 @@ pub struct RecordingWorker {
     control: Arc<AtomicU8>,
     clock: Arc<dyn Clock>,
     started: Duration,
+    pauses: Mutex<PauseClock>,
     output: PathBuf,
 }
 
@@ -38,11 +39,26 @@ impl RecordingWorker {
                 run_capture_loop(&*grabber, &mut *sink, &*loop_clock, &cfg, &loop_control)
             })
             .expect("spawn recording thread");
-        RecordingWorker { handle, control, clock, started, output }
+        let pauses = Mutex::new(PauseClock::default());
+        RecordingWorker { handle, control, clock, started, pauses, output }
     }
 
+    /// Recorded time so far, without pauses.
     pub fn elapsed(&self) -> Duration {
-        self.clock.elapsed().saturating_sub(self.started)
+        let pauses = self.pauses.lock().unwrap_or_else(|e| e.into_inner());
+        pauses.active(self.started, self.clock.elapsed())
+    }
+
+    pub fn pause(&self) {
+        if self.control.compare_exchange(RUN, PAUSE, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            self.pauses.lock().unwrap_or_else(|e| e.into_inner()).pause(self.clock.elapsed());
+        }
+    }
+
+    pub fn resume(&self) {
+        if self.control.compare_exchange(PAUSE, RUN, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            self.pauses.lock().unwrap_or_else(|e| e.into_inner()).resume(self.clock.elapsed());
+        }
     }
 
     pub fn is_finished(&self) -> bool {

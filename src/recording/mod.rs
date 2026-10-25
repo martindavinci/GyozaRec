@@ -33,6 +33,36 @@ pub struct LoopConfig {
 pub const RUN: u8 = 0;
 pub const STOP: u8 = 1;
 pub const CANCEL: u8 = 2;
+pub const PAUSE: u8 = 3;
+
+/// Keeps paused stretches out of a recording's running time.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PauseClock {
+    paused_total: Duration,
+    since: Option<Duration>,
+}
+
+impl PauseClock {
+    pub fn pause(&mut self, now: Duration) {
+        self.since.get_or_insert(now);
+    }
+
+    pub fn resume(&mut self, now: Duration) {
+        if let Some(since) = self.since.take() {
+            self.paused_total += now.saturating_sub(since);
+        }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.since.is_some()
+    }
+
+    /// Time between `start` and `now`, without the paused parts.
+    pub fn active(&self, start: Duration, now: Duration) -> Duration {
+        let current = self.since.map_or(Duration::ZERO, |since| now.saturating_sub(since));
+        now.saturating_sub(start).saturating_sub(self.paused_total + current)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LoopEnd {
@@ -67,6 +97,21 @@ pub fn bitrate(size: crate::geometry::PixelSize, fps: u32) -> u32 {
 mod tests {
     use super::*;
     use crate::geometry::PixelSize;
+
+    #[test]
+    fn pause_clock_excludes_paused_time() {
+        let s = |v: u64| Duration::from_secs(v);
+        let mut p = PauseClock::default();
+        assert_eq!(p.active(s(10), s(13)), s(3));
+        p.pause(s(13));
+        p.pause(s(14)); // already paused: keeps the first start
+        assert!(p.is_paused());
+        assert_eq!(p.active(s(10), s(20)), s(3));
+        p.resume(s(20));
+        assert_eq!(p.active(s(10), s(22)), s(5));
+        p.resume(s(23)); // not paused: no effect
+        assert_eq!(p.active(s(10), s(24)), s(7));
+    }
 
     #[test]
     fn bitrate_is_clamped() {

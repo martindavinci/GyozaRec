@@ -136,6 +136,19 @@ pub fn meets_minimum(format: OutputFormat, rect: &PixelRect) -> bool {
     rect.width >= min.width && rect.height >= min.height
 }
 
+/// Largest frame the H.264 encoder takes (level 5.1).
+const ENCODER_MAX: PixelSize = PixelSize { width: 4096, height: 2304 };
+
+/// The video size for a `region`: scaled down to fit the encoder's limit,
+/// aspect kept, both sides even. Never upscales.
+pub fn encoder_size(region: PixelSize) -> PixelSize {
+    let ratio = (f64::from(ENCODER_MAX.width) / f64::from(region.width.max(1)))
+        .min(f64::from(ENCODER_MAX.height) / f64::from(region.height.max(1)))
+        .min(1.0);
+    let side = |v: i32| (((f64::from(v) * ratio) as i32) & !1).max(2);
+    PixelSize { width: side(region.width), height: side(region.height) }
+}
+
 /// Scales `size` down so its long side is at most `max_long_side`, keeping the
 /// aspect ratio. Never upscales; each side is at least 1.
 pub fn fit(size: PixelSize, max_long_side: i32) -> PixelSize {
@@ -206,6 +219,14 @@ mod tests {
         for (format, w, h, ok) in cases {
             assert_eq!(meets_minimum(format, &r(0, 0, w, h)), ok, "{format:?} {w}x{h}");
         }
+    }
+
+    #[test]
+    fn encoder_size_fits_h264_limits() {
+        assert_eq!(encoder_size(s(5120, 1440)), s(4096, 1152));
+        assert_eq!(encoder_size(s(1920, 1080)), s(1920, 1080));
+        assert_eq!(encoder_size(s(4096, 2304)), s(4096, 2304));
+        assert_eq!(encoder_size(s(3000, 5000)), s(1382, 2304));
     }
 
     #[test]

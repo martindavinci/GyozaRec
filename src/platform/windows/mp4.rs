@@ -175,6 +175,8 @@ impl Mp4Sink {
             }
             .into());
         }
+        // Regions past the encoder's limit are scaled down frame by frame in `push`.
+        let size = crate::geometry::encoder_size(size);
         Ok(Mp4Sink { path: path.to_path_buf(), size, fps, writer: None })
     }
 }
@@ -333,6 +335,32 @@ mod tests {
         let decoded = decode_first_frame(&p).unwrap();
         let top = decoded.pixel(crate::geometry::PixelPoint { x: 160, y: 40 });
         let bottom = decoded.pixel(crate::geometry::PixelPoint { x: 160, y: 200 });
+        assert!(top[2] > 200 && top[0] < 60, "top should be red, got BGRA {top:?}");
+        assert!(bottom[0] > 200 && bottom[2] < 60, "bottom should be blue, got BGRA {bottom:?}");
+    }
+
+    #[test]
+    #[ignore = "desktop"]
+    fn mp4_larger_than_encoder_limit_is_scaled() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("wide.mp4");
+        let region = PixelSize { width: 5120, height: 1440 };
+        let mut frame = PixelBuffer::solid(PixelRect::new(0, 0, 5120, 1440), 255, 0, 0); // blue
+        for y in 0..720 {
+            for x in 0..5120 {
+                frame.put_pixel(crate::geometry::PixelPoint { x, y }, [0, 0, 255, 255]); // red
+            }
+        }
+        let mut s = Mp4Sink::new(&p, region, 30).unwrap();
+        for i in 0..5u64 {
+            s.push(&frame, Duration::from_millis(i * 33)).unwrap();
+        }
+        s.finish().unwrap();
+        drop(s);
+        assert_eq!(probe_mp4(&p).unwrap(), PixelSize { width: 4096, height: 1152 });
+        let decoded = decode_first_frame(&p).unwrap();
+        let top = decoded.pixel(crate::geometry::PixelPoint { x: 2048, y: 200 });
+        let bottom = decoded.pixel(crate::geometry::PixelPoint { x: 2048, y: 950 });
         assert!(top[2] > 200 && top[0] < 60, "top should be red, got BGRA {top:?}");
         assert!(bottom[0] > 200 && bottom[2] < 60, "bottom should be blue, got BGRA {bottom:?}");
     }

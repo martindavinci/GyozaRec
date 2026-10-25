@@ -192,6 +192,39 @@ mod tests {
     }
 
     #[test]
+    fn cancelled_gif_recording_deletes_the_file() {
+        use crate::geometry::PixelSize;
+        use crate::recording::{CANCEL, GifSink};
+        use std::sync::Mutex;
+        use std::sync::atomic::Ordering;
+        use std::sync::mpsc;
+        let (release, release_rx) = mpsc::channel::<()>();
+        let (entered_tx, entered) = mpsc::channel::<()>();
+        let (release_rx, entered_tx) = (Mutex::new(release_rx), Mutex::new(entered_tx));
+        let grabber = FakeGrabber::with_hook(move |n| {
+            if n == 3 {
+                entered_tx.lock().unwrap().send(()).unwrap();
+                release_rx.lock().unwrap().recv().unwrap();
+            }
+        });
+        let d = tempdir().unwrap();
+        let out = d.path().join("a.gif");
+        let sink = GifSink::create(&out, PixelSize { width: 32, height: 32 }, 800, 10).unwrap();
+        let w = RecordingWorker::spawn(
+            Arc::new(grabber),
+            Arc::new(FakeClock::default()),
+            LoopConfig { max_duration: Duration::from_secs(60), ..cfg() },
+            Box::new(sink),
+            out.clone(),
+        );
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        w.control().store(CANCEL, Ordering::SeqCst);
+        release.send(()).unwrap();
+        assert_eq!(w.cancel().outcome, RecordingOutcome::Canceled);
+        assert!(!out.exists(), "the partial GIF must be deleted");
+    }
+
+    #[test]
     fn worker_cancel_deletes_output() {
         let d = tempdir().unwrap();
         let out = d.path().join("a.gif");

@@ -19,10 +19,10 @@
 A small toolbar:
 
 - **Capture** (**Record** for videos and GIFs) — starts a capture with the selected area, format and delay.
-- **Area** — Rectangle, Window or Full screen.
-- **Format** — PNG image, MP4 video or Animated GIF. Any area works with any format.
+- **Area** — Rectangle, Window or Full screen. With several monitors, Full screen asks which one: click it, or press Esc to cancel.
+- **Format** — PNG image, JPG image, MP4 video or Animated GIF. Any area works with any format.
 - **Delay** — from no delay up to 5 seconds.
-- **Options** — save folder, copy to clipboard, sound, cursor in recordings, opening the folder or the file after a capture, notification area, global shortcuts, frame rate and maximum length of GIFs and videos, language.
+- **Options** — save folder, copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder or the file after a capture, notification area, start with Windows, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
 
 <p align="center">
   <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">
@@ -32,11 +32,13 @@ A small toolbar:
 
 Images are copied to the clipboard; videos and GIFs are copied as files. A window recording keeps the area the window covered when recording started. While recording, a small panel shows the elapsed time with **Pause**/**Resume**, **Stop** and **Discard** buttons; paused time is left out of the file, and discarding asks for confirmation first. Nothing leaves your computer: no uploads, no accounts.
 
+MP4 recordings include the **system audio** (what the computer plays) by default; turn it off in **Options**. With **In-app sounds** on, short tones mark the start, pause, resume and end of a recording, and they are timed so they never end up in the video.
+
 ### Notification area and shortcuts
 
 GyozaRec stays in the notification area: closing the toolbar hides it, a click on the icon brings it back, and the icon's menu offers every kind of capture, **Options** and **Exit**. Turn this off in **Options** to make closing the toolbar quit the app.
 
-Global shortcuts are off by default; turn them on in **Options**:
+Global shortcuts are off by default; turn them on in **Options**, where each one can also be switched off on its own or given new keys (click its keys and press the new combination; **Reset shortcuts** restores these defaults):
 
 | Shortcut | Action |
 |---|---|
@@ -46,7 +48,9 @@ Global shortcuts are off by default; turn them on in **Options**:
 | Ctrl+Shift+F10 | Record the full screen |
 | Print Screen | Capture an image (optional; Windows' own Print Screen shortcut must be turned off) |
 
-If another app already uses a combination, **Options** marks it as unavailable.
+If another app already uses a combination, **Options** marks it as unavailable and the previous keys stay in use.
+
+**Start with Windows** (off by default) launches GyozaRec hidden in the notification area when you sign in; it also works for the portable version, which updates its entry when the folder moves. Turn the option off before uninstalling or deleting the portable folder: otherwise the sign-in entry stays behind, pointing to a missing file (Windows ignores it).
 
 ### Command line
 

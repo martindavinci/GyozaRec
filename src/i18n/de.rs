@@ -24,6 +24,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "In die Zwischenablage kopieren",
     play_sound: "Ton bei der Aufnahme",
     include_cursor: "Mauszeiger einbeziehen (Video/GIF)",
+    open_folder_after_recording: "Ordner nach einer Aufzeichnung öffnen",
     gif_fps: "GIF: Bilder pro Sekunde",
     gif_max_seconds: "GIF: maximale Länge (s)",
     gif_max_long_side: "GIF: maximale lange Seite (px)",

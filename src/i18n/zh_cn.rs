@@ -17,6 +17,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "复制到剪贴板",
     play_sound: "捕获时播放声音",
     include_cursor: "包含光标（视频/GIF）",
+    open_folder_after_recording: "录制后打开文件夹",
     gif_fps: "GIF：每秒帧数",
     gif_max_seconds: "GIF：最长时长（秒）",
     gif_max_long_side: "GIF：长边最大值（像素）",

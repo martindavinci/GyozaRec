@@ -3,9 +3,9 @@
 
 use crate::bridge::{RecordingCommand, UiRequest, UiSender};
 use crate::capture::{
-    CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, MonitorProvider,
-    RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind,
-    SoundPlayer, ToolbarVisibility, WindowCandidate, WindowSnapshotter,
+    CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, FileRevealer,
+    MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi,
+    SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowCandidate, WindowSnapshotter,
 };
 use crate::clock::Clock;
 use crate::geometry::{MonitorInfo, PixelPoint, PixelRect};
@@ -307,6 +307,16 @@ impl SoundPlayer for FakeSound {
     }
 }
 
+pub struct FakeRevealer {
+    pub log: EventLog,
+}
+
+impl FileRevealer for FakeRevealer {
+    fn reveal(&self, path: &Path) {
+        log_event(&Some(self.log.clone()), format!("reveal:{}", path.display()));
+    }
+}
+
 pub struct FakeToolbar {
     pub log: EventLog,
 }
@@ -346,6 +356,7 @@ impl CoordinatorHarness {
             selection: Box::new(FakeSelection { result: selection, log: log.clone() }),
             clipboard: Box::new(FakeClipboard { log: log.clone() }),
             sound: Box::new(FakeSound { log: log.clone() }),
+            revealer: Box::new(FakeRevealer { log: log.clone() }),
             toolbar: Box::new(FakeToolbar { log: log.clone() }),
             recording_ui: Box::new(FakeRecordingUi {
                 outcome: RecordingOutcome::Saved,

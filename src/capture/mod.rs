@@ -59,6 +59,11 @@ pub trait ClipboardService: Send {
     fn set_file(&self, path: &Path) -> bool;
 }
 
+pub trait FileRevealer: Send {
+    /// Shows `path` in the file manager.
+    fn reveal(&self, path: &Path);
+}
+
 pub trait SoundPlayer: Send {
     fn play_capture(&self);
 }

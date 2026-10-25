@@ -23,6 +23,15 @@ pub fn reveal_in_explorer(path: &Path) {
     let _ = std::process::Command::new("explorer.exe").raw_arg(explorer_select_arg(path)).spawn();
 }
 
+/// Opens Explorer on saved recordings.
+pub struct ExplorerRevealer;
+
+impl crate::capture::FileRevealer for ExplorerRevealer {
+    fn reveal(&self, path: &Path) {
+        reveal_in_explorer(path);
+    }
+}
+
 /// Lets the running instance take the foreground when this process asks it to.
 pub fn allow_foreground_for_others() {
     use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};

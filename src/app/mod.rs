@@ -91,6 +91,7 @@ impl App {
             selection: Box::new(BridgeSelectionUi { sender: sender.clone() }),
             clipboard: Box::new(Win32Clipboard),
             sound: Box::new(SystemSound),
+            revealer: Box::new(gyozarec::platform::ExplorerRevealer),
             toolbar: Box::new(BridgeToolbar { sender: sender.clone() }),
             recording_ui: Box::new(BridgeRecordingUi {
                 sender: sender.clone(),

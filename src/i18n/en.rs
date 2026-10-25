@@ -17,6 +17,7 @@ pub(super) const TEXTS: Texts = Texts {
     copy_to_clipboard: "Copy to clipboard",
     play_sound: "Sound on capture",
     include_cursor: "Include cursor (video/GIF)",
+    open_folder_after_recording: "Open the folder after a recording",
     gif_fps: "GIF: frames per second",
     gif_max_seconds: "GIF: maximum length (s)",
     gif_max_long_side: "GIF: maximum long side (px)",

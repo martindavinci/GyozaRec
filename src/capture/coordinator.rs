@@ -1,8 +1,8 @@
 //! Runs one capture end to end: hide toolbar, wait, grab, select, save.
 
 use super::{
-    CaptureOutcome, ClipboardService, CursorLocator, MonitorProvider, RecordingJob, RecordingUi,
-    ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind, SoundPlayer,
+    CaptureOutcome, ClipboardService, CursorLocator, FileRevealer, MonitorProvider, RecordingJob,
+    RecordingUi, ScreenGrabber, SelectionRequest, SelectionUi, SinkFactory, SinkKind, SoundPlayer,
     ToolbarVisibility, WindowSnapshotter, monitor_from_point,
 };
 use crate::clock::Clock;
@@ -27,6 +27,7 @@ pub struct CaptureCoordinator {
     pub selection: Box<dyn SelectionUi>,
     pub clipboard: Box<dyn ClipboardService>,
     pub sound: Box<dyn SoundPlayer>,
+    pub revealer: Box<dyn FileRevealer>,
     pub toolbar: Box<dyn ToolbarVisibility>,
     pub recording_ui: Box<dyn RecordingUi>,
     pub sinks: Box<dyn SinkFactory>,
@@ -133,6 +134,9 @@ impl CaptureCoordinator {
                 if settings.play_sound {
                     self.sound.play_capture();
                 }
+                if settings.open_folder_after_recording {
+                    self.revealer.reveal(&path);
+                }
                 CaptureOutcome::saved(path, copied)
             }
             (RecordingOutcome::Canceled, _) => CaptureOutcome::canceled(),
@@ -218,6 +222,42 @@ mod tests {
         });
         assert!(h.events().contains(&"sink:Gif { max_long_side: 640 }:200x100".to_string()));
         assert!(h.events().contains(&"record:0,0,200,100:gif:fps=15:max=7".to_string()));
+    }
+
+    #[test]
+    fn saved_recording_reveals_the_file_when_enabled() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        h.run(AppSettings {
+            format: OutputFormat::Gif,
+            open_folder_after_recording: true,
+            ..h.settings()
+        });
+        let ev = h.events();
+        assert!(ev.iter().any(|e| e.starts_with("reveal:") && e.ends_with(".gif")), "{ev:?}");
+    }
+
+    #[test]
+    fn recording_does_not_reveal_by_default() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        h.run(AppSettings { format: OutputFormat::Mp4, ..h.settings() });
+        assert!(!h.events().iter().any(|e| e.starts_with("reveal:")));
+    }
+
+    #[test]
+    fn png_and_canceled_recordings_never_reveal() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)));
+        h.run(AppSettings { open_folder_after_recording: true, ..h.settings() });
+        let mut c = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Canceled);
+        c.run(AppSettings {
+            format: OutputFormat::Gif,
+            open_folder_after_recording: true,
+            ..c.settings()
+        });
+        let ev = [h.events(), c.events()].concat();
+        assert!(!ev.iter().any(|e| e.starts_with("reveal:")), "{ev:?}");
     }
 
     #[test]

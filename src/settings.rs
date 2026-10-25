@@ -16,6 +16,8 @@ pub struct AppSettings {
     pub copy_to_clipboard: bool,
     pub play_sound: bool,
     pub include_cursor: bool,
+    /// Show a saved video or GIF in Explorer.
+    pub open_folder_after_recording: bool,
     pub gif_fps: u32,
     pub gif_max_seconds: u32,
     pub gif_max_long_side: u32,
@@ -38,6 +40,7 @@ impl Default for AppSettings {
             copy_to_clipboard: true,
             play_sound: true,
             include_cursor: true,
+            open_folder_after_recording: false,
             gif_fps: 10,
             gif_max_seconds: 15,
             gif_max_long_side: 800,

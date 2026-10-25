@@ -40,6 +40,7 @@ pub struct OptionsForm {
     pub copy_to_clipboard: bool,
     pub play_sound: bool,
     pub include_cursor: bool,
+    pub open_folder_after_recording: bool,
     pub gif_fps: u32,
     pub gif_max_seconds: u32,
     pub gif_max_long_side: u32,
@@ -56,6 +57,7 @@ impl OptionsForm {
             copy_to_clipboard: s.copy_to_clipboard,
             play_sound: s.play_sound,
             include_cursor: s.include_cursor,
+            open_folder_after_recording: s.open_folder_after_recording,
             gif_fps: s.gif_fps,
             gif_max_seconds: s.gif_max_seconds,
             gif_max_long_side: s.gif_max_long_side,
@@ -72,6 +74,7 @@ impl OptionsForm {
             copy_to_clipboard: self.copy_to_clipboard,
             play_sound: self.play_sound,
             include_cursor: self.include_cursor,
+            open_folder_after_recording: self.open_folder_after_recording,
             gif_fps: self.gif_fps,
             gif_max_seconds: self.gif_max_seconds,
             gif_max_long_side: self.gif_max_long_side,
@@ -138,6 +141,15 @@ mod tests {
         let mut f = OptionsForm::from_settings(&AppSettings::defaults(&cap()));
         f.save_folder = PathBuf::new();
         assert_eq!(f.to_settings(&AppSettings::defaults(&cap()), &cap()).save_folder, cap());
+    }
+
+    #[test]
+    fn open_folder_option_defaults_off_and_roundtrips() {
+        let base = AppSettings::defaults(&cap());
+        let mut f = OptionsForm::from_settings(&base);
+        assert!(!f.open_folder_after_recording);
+        f.open_folder_after_recording = true;
+        assert!(f.to_settings(&base, &cap()).open_folder_after_recording);
     }
 
     #[test]

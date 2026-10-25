@@ -23,11 +23,21 @@ A small toolbar with four buttons:
 - **Delay** — from no delay up to 5 seconds.
 - **Options** — save folder, copy to clipboard, sound, cursor in recordings, frame rate and maximum length of GIFs and videos, language.
 
+<p align="center">
+  <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/options.png" alt="The Options window" valign="top">
+</p>
+
 Images are saved as PNG and copied to the clipboard. Videos and GIFs record an area you pick on screen; while recording, a small panel shows the elapsed time with **Stop** and **Cancel** buttons. Nothing leaves your computer: no uploads, no accounts.
 
 Running `gyozarec --capture` starts the selection right away; if the app is already open, the capture starts in the running instance.
 
 The interface is available in English, Spanish, French, German, Italian, Brazilian Portuguese, Japanese, Korean and Simplified Chinese. The language follows Windows on first start and can be changed in **Options**.
+
+<p align="center">
+  <img src="docs/screenshots/languages.png" alt="The toolbar in Italian, Spanish, Japanese, Korean, Chinese and English">
+</p>
 
 ## Download
 

@@ -9,7 +9,8 @@ mod toolbar;
 mod tray;
 
 use gyozarec::bridge::{
-    BridgeRecordingUi, BridgeSelectionUi, BridgeToolbar, CaptureThread, UiRequest, UiSender,
+    BridgeEditor, BridgeRecordingUi, BridgeSelectionUi, BridgeToolbar, CaptureThread, UiRequest,
+    UiSender,
 };
 use gyozarec::capture::{CaptureCoordinator, CursorLocator, ScreenGrabber};
 use gyozarec::clock::{Clock, SystemClock};
@@ -130,6 +131,8 @@ pub struct App {
     editors: Vec<editor::EditorWindow>,
     /// Fonts for typed annotations, with every script; loaded on first use.
     editor_fonts: Option<Arc<Fonts>>,
+    /// An editor opened during the running capture gets the focus after it.
+    focus_editor: bool,
 }
 
 impl App {
@@ -152,6 +155,7 @@ impl App {
             clipboard: Box::new(Win32Clipboard),
             sound: Box::new(SystemSound),
             revealer: Box::new(gyozarec::platform::ExplorerRevealer),
+            editor: Box::new(BridgeEditor { sender: sender.clone() }),
             toolbar: Box::new(BridgeToolbar { sender: sender.clone() }),
             recording_ui: Box::new(BridgeRecordingUi {
                 sender: sender.clone(),
@@ -210,6 +214,7 @@ impl App {
             conversion: None,
             editors: Vec::new(),
             editor_fonts: None,
+            focus_editor: false,
         }
     }
 
@@ -342,7 +347,6 @@ impl App {
     }
 
     /// Opens an editor on a saved image.
-    #[expect(dead_code, reason = "captures open it in the next commit")]
     fn open_editor(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -582,11 +586,31 @@ impl App {
                 if let Some(t) = &self.toolbar {
                     t.surface.window.set_visible(false);
                 }
+                // Editors stay out of the capture too.
+                for e in &self.editors {
+                    e.set_visible(false);
+                }
             }
             UiRequest::ShowToolbar => {
                 if let Some(t) = self.toolbar.as_ref().filter(|_| !self.toolbar_hidden) {
                     t.surface.window.set_visible(true);
-                    t.surface.window.focus_window();
+                    if !self.focus_editor {
+                        t.surface.window.focus_window();
+                    }
+                }
+                for e in &self.editors {
+                    e.set_visible(true);
+                }
+                if std::mem::take(&mut self.focus_editor)
+                    && let Some(e) = self.editors.last()
+                {
+                    e.focus();
+                }
+            }
+            UiRequest::OpenEditor { image, path, work_area, scale } => {
+                if !self.exit_pending {
+                    self.open_editor(event_loop, image, path, Some(work_area), scale);
+                    self.focus_editor = true;
                 }
             }
             UiRequest::Select { request, reply } => {

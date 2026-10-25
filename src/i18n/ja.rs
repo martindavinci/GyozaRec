@@ -18,6 +18,7 @@ pub(super) const TEXTS: Texts = Texts {
     play_sound: "キャプチャ時に音を鳴らす",
     include_cursor: "カーソルを含める (動画/GIF)",
     open_folder_after_recording: "録画後にフォルダーを開く",
+    discard_question: "この録画を破棄しますか？",
     gif_fps: "GIF: フレーム/秒",
     gif_max_seconds: "GIF: 最大の長さ (秒)",
     gif_max_long_side: "GIF: 長辺の最大 (px)",

@@ -18,6 +18,7 @@ pub(super) const TEXTS: Texts = Texts {
     play_sound: "Suono alla cattura",
     include_cursor: "Includi cursore (video/GIF)",
     open_folder_after_recording: "Apri la cartella dopo una registrazione",
+    discard_question: "Scartare questa registrazione?",
     gif_fps: "GIF: fotogrammi al secondo",
     gif_max_seconds: "GIF: durata massima (s)",
     gif_max_long_side: "GIF: lato lungo massimo (px)",

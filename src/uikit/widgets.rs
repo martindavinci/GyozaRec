@@ -14,6 +14,10 @@ pub enum Icon {
     Resume,
     Stop,
     Cancel,
+    /// A bin: throws the recording away.
+    Discard,
+    /// A curved arrow: go back without doing anything.
+    Back,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -252,6 +256,22 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
         Icon::Cancel => {
             p.line((cx - 5.0, cy - 5.0), (cx + 5.0, cy + 5.0), 2.0, color);
             p.line((cx + 5.0, cy - 5.0), (cx - 5.0, cy + 5.0), 2.0, color);
+        }
+        Icon::Discard => {
+            p.line((cx - 6.0, cy - 4.0), (cx + 6.0, cy - 4.0), 2.0, color);
+            p.line((cx - 2.0, cy - 6.5), (cx + 2.0, cy - 6.5), 2.0, color);
+            p.line((cx - 4.5, cy - 3.0), (cx - 3.5, cy + 6.0), 2.0, color);
+            p.line((cx + 4.5, cy - 3.0), (cx + 3.5, cy + 6.0), 2.0, color);
+            p.line((cx - 3.5, cy + 6.0), (cx + 3.5, cy + 6.0), 2.0, color);
+            p.line((cx, cy - 1.0), (cx, cy + 3.5), 1.5, color);
+        }
+        Icon::Back => {
+            p.line((cx + 5.0, cy + 5.0), (cx + 5.0, cy - 1.0), 2.0, color);
+            p.line((cx + 5.0, cy - 1.0), (cx - 2.0, cy - 1.0), 2.0, color);
+            p.fill_triangle(
+                [(cx - 6.5, cy - 1.0), (cx - 2.0, cy - 5.5), (cx - 2.0, cy + 3.5)],
+                color,
+            );
         }
     }
 }

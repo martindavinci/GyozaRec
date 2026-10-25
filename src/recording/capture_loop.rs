@@ -5,7 +5,7 @@ use super::{CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, STOP};
 use crate::audio::{AudioFeed, LATENCY, PauseHistory, Timeline};
 use crate::capture::ScreenGrabber;
 use crate::clock::Clock;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::Duration;
 
 /// Longest single wait, so STOP and CANCEL are noticed quickly.
@@ -19,7 +19,8 @@ pub fn run_capture_loop(
     cfg: &LoopConfig,
     control: &AtomicU8,
 ) -> crate::Result<LoopEnd> {
-    run_capture_loop_with_audio(grabber, sink, clock, cfg, control, None)
+    let never = AtomicU64::new(u64::MAX);
+    run_capture_loop_with_audio(grabber, sink, clock, cfg, control, &never, None)
 }
 
 /// Frame `k` is due at `k × period`. A slow grab skips the frames it made
@@ -27,13 +28,15 @@ pub fn run_capture_loop(
 /// and the paused time counts neither in the timestamps nor in the limit.
 /// Audio chunks are taken every turn (also while paused, so the queue never
 /// grows) and committed after `LATENCY`; at the end the sources are stopped
-/// and everything left is written before the sink finishes.
+/// and everything left is written before the sink finishes. `paused_at` holds
+/// when the last pause was asked (nanoseconds on `clock`, `u64::MAX` if never).
 pub fn run_capture_loop_with_audio(
     grabber: &dyn ScreenGrabber,
     sink: &mut dyn FrameSink,
     clock: &dyn Clock,
     cfg: &LoopConfig,
     control: &AtomicU8,
+    paused_at: &AtomicU64,
     audio: Option<AudioFeed>,
 ) -> crate::Result<LoopEnd> {
     let start = clock.elapsed();
@@ -61,7 +64,10 @@ pub fn run_capture_loop_with_audio(
                 return Ok(LoopEnd::Stopped);
             }
             PAUSE => {
-                pauses.pause(clock.elapsed());
+                // From when the pause was asked: a slow grab or encode may
+                // have kept this turn from noticing it for a while.
+                let asked = Duration::from_nanos(paused_at.load(Ordering::SeqCst));
+                pauses.pause(asked.min(clock.elapsed()));
                 write_audio(&mut audio, sink, &pauses, clock.elapsed())?;
                 clock.sleep(MAX_WAIT);
                 continue;
@@ -132,7 +138,7 @@ mod tests {
     use crate::recording::{CANCEL, LoopConfig, LoopEnd, PAUSE, RUN, STOP};
     use crate::testing::{FakeClock, FakeGrabber, VecSink};
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicU8, Ordering};
+    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
     use std::time::Duration;
 
     fn cfg(fps: u32, max_ms: u64) -> LoopConfig {
@@ -262,6 +268,7 @@ mod tests {
             &FakeClock::default(),
             &cfg(10, 1000),
             &AtomicU8::new(RUN),
+            &AtomicU64::new(u64::MAX),
             Some(feed(second_of_audio())),
         )
         .unwrap();
@@ -278,6 +285,48 @@ mod tests {
         assert!(sink.is_finished());
     }
 
+    /// The pause was asked at 150 ms, while a grab the loop only finished at
+    /// 200 ms was running: audio from 150 ms on is out, so the pause cue the
+    /// panel plays right after asking never lands in the file.
+    #[test]
+    fn pause_starts_when_it_was_asked_not_when_the_loop_noticed() {
+        let control = Arc::new(AtomicU8::new(RUN));
+        let paused_at = Arc::new(AtomicU64::new(u64::MAX));
+        let (on_grab, on_sleep, asked) = (control.clone(), control.clone(), paused_at.clone());
+        let grabber = FakeGrabber::with_hook(move |n| {
+            if n == 3 {
+                asked.store(150_000_000, Ordering::SeqCst);
+                on_grab.store(PAUSE, Ordering::SeqCst);
+            }
+        });
+        let clock = FakeClock::default().with_sleep_hook(move |elapsed| {
+            if elapsed >= Duration::from_millis(700) {
+                let _ = on_sleep.compare_exchange(PAUSE, RUN, Ordering::SeqCst, Ordering::SeqCst);
+            }
+        });
+        // Each 10 ms chunk holds its capture time: chunk i is i / 1000.
+        let chunks = second_of_audio()
+            .into_iter()
+            .enumerate()
+            .map(|(i, c)| crate::audio::PcmChunk { samples: vec![i as f32 / 1000.0; 960], ..c })
+            .collect();
+        let mut sink = VecSink::default();
+        run_capture_loop_with_audio(
+            &grabber,
+            &mut sink,
+            &clock,
+            &cfg(10, 600),
+            &control,
+            &paused_at,
+            Some(feed(chunks)),
+        )
+        .unwrap();
+        let samples = sink.audio_samples();
+        let at = |ms: usize| f32::from(samples[ms * 48 * 2]) / f32::from(i16::MAX);
+        assert!(at(100) < 0.02, "before the pause: {}", at(100));
+        assert!(at(160) > 0.06, "160 ms of recording is after the resume: {}", at(160));
+    }
+
     #[test]
     fn cancel_discards_audio() {
         let mut sink = VecSink::default();
@@ -287,6 +336,7 @@ mod tests {
             &FakeClock::default(),
             &cfg(10, 1000),
             &AtomicU8::new(CANCEL),
+            &AtomicU64::new(u64::MAX),
             Some(feed(second_of_audio())),
         )
         .unwrap();

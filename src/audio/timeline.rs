@@ -17,8 +17,10 @@ impl PauseHistory {
         PauseHistory { start, done: Vec::new(), current: None }
     }
 
+    /// A pause never starts before the start or the last resume.
     pub fn pause(&mut self, now: Duration) {
-        self.current.get_or_insert(now);
+        let floor = self.done.last().map_or(self.start, |&(_, end)| end);
+        self.current.get_or_insert(now.max(floor));
     }
 
     pub fn resume(&mut self, now: Duration) {
@@ -99,6 +101,8 @@ impl Timeline {
         let horizon = if final_ { now } else { now.saturating_sub(self.latency) };
         let target = to_frame_floor(pauses.active_elapsed(horizon));
         if target <= self.committed {
+            // Paused: nothing to commit, but what came in meanwhile goes.
+            self.prune(horizon);
             return None;
         }
         let n = (target - self.committed) as usize;
@@ -129,11 +133,15 @@ impl Timeline {
             samples.push(to_i16(l));
             samples.push(to_i16(r));
         }
-        // Packets that ended before the horizon are fully committed or dropped.
-        self.placed.retain(|p| p.at + frame_time(p.frames.len() as u64) > horizon);
+        self.prune(horizon);
         let start_frame = self.committed;
         self.committed = target;
         Some(AudioOut { samples, start_frame })
+    }
+
+    /// Packets that ended before the horizon are fully committed or dropped.
+    fn prune(&mut self, horizon: Duration) {
+        self.placed.retain(|p| p.at + frame_time(p.frames.len() as u64) > horizon);
     }
 }
 
@@ -191,6 +199,31 @@ mod tests {
             at: ms(at_ms),
             discontinuity: false,
         }
+    }
+
+    /// A recording left paused while sound plays must not pile up packets.
+    #[test]
+    fn packets_inside_a_long_pause_are_not_kept() {
+        let mut t = Timeline::new(ms(300));
+        let mut p = PauseHistory::new(ms(0));
+        t.push(chunk(0, 100, 0.5));
+        assert!(t.drain(ms(700), &p, false).is_some(), "commits up to 400 ms");
+        p.pause(ms(400));
+        for i in 0..100 {
+            t.push(chunk(400 + i * 10, 10, 0.5));
+        }
+        assert!(t.drain(ms(2000), &p, false).is_none());
+        assert!(t.placed.is_empty(), "{} packets kept", t.placed.len());
+    }
+
+    #[test]
+    fn a_pause_never_starts_before_the_last_resume() {
+        let mut p = PauseHistory::new(ms(0));
+        p.pause(ms(100));
+        p.resume(ms(300));
+        p.pause(ms(250));
+        assert_eq!(p.active_elapsed(ms(400)), ms(100));
+        assert_eq!(p.map(ms(299)), None);
     }
 
     fn frames(out: &AudioOut) -> usize {

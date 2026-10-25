@@ -244,17 +244,26 @@ impl Shortcuts {
 }
 
 /// After Windows refused some changed bindings, puts their previous keys
-/// back into `new` (taken from `old`). Returns whether anything changed.
+/// back into `new` (taken from `old`), and so for any other edited binding
+/// that took keys handed back this way. Returns whether anything changed.
 pub fn rollback(new: &mut AppSettings, old: &AppSettings, refused: &[&str]) -> bool {
     let mut changed = false;
-    for id in refused {
-        let previous = old.shortcut_keys.get(*id).cloned();
-        if new.shortcut_keys.get(*id) != previous.as_ref() {
-            match previous {
-                Some(keys) => new.shortcut_keys.insert(id.to_string(), keys),
-                None => new.shortcut_keys.remove(*id),
-            };
-            changed = true;
+    let mut undo: Vec<String> = refused.iter().map(|id| id.to_string()).collect();
+    while let Some(id) = undo.pop() {
+        let previous = old.shortcut_keys.get(&id).cloned();
+        if new.shortcut_keys.get(&id) == previous.as_ref() {
+            continue;
+        }
+        match previous {
+            Some(keys) => new.shortcut_keys.insert(id.clone(), keys),
+            None => new.shortcut_keys.remove(&id),
+        };
+        changed = true;
+        let restored = keys_for(new, &id).and_then(|k| normalize(&k));
+        for d in SHORTCUTS.iter().chain([&PRINT_SCREEN]).filter(|d| d.id != id) {
+            if keys_for(new, d.id).and_then(|k| normalize(&k)) == restored {
+                undo.push(d.id.to_string());
+            }
         }
     }
     changed
@@ -471,6 +480,24 @@ mod tests {
         s.apply(effective(&new), &mut reg);
         assert_eq!(s.status("record"), Some(Ok(())));
         assert!(reg.live.values().any(|k| k == "Ctrl+Shift+F9"));
+    }
+
+    /// Image moved to keys another app holds, Record took Image's old keys:
+    /// giving Image its keys back means Record must give them up too.
+    #[test]
+    fn rollback_also_undoes_edits_that_took_the_restored_keys() {
+        let old = with(true, false);
+        let mut new = old.clone();
+        new.shortcut_keys.insert("image".into(), "Ctrl+Alt+I".into());
+        new.shortcut_keys.insert("record".into(), "Ctrl+Shift+F7".into());
+        new.shortcut_keys.insert("record-full".into(), "Ctrl+Alt+X".into());
+        assert!(rollback(&mut new, &old, &["image"]));
+        assert!(!new.shortcut_keys.contains_key("image"));
+        assert!(!new.shortcut_keys.contains_key("record"));
+        assert_eq!(keys_for(&new, "record-full").as_deref(), Some("Ctrl+Alt+X"), "unrelated edit");
+        let keys: Vec<String> = effective(&new).into_iter().map(|b| b.keys).collect();
+        let unique: std::collections::BTreeSet<&String> = keys.iter().collect();
+        assert_eq!(unique.len(), keys.len(), "{keys:?}");
     }
 
     #[test]

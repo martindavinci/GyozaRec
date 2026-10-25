@@ -7,7 +7,7 @@ use super::{
 use crate::capture::ScreenGrabber;
 use crate::clock::Clock;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -15,6 +15,8 @@ use std::time::Duration;
 pub struct RecordingWorker {
     handle: JoinHandle<crate::Result<LoopEnd>>,
     control: Arc<AtomicU8>,
+    /// When the last pause was asked, in nanoseconds on `clock`.
+    paused_at: Arc<AtomicU64>,
     clock: Arc<dyn Clock>,
     started: Duration,
     pauses: Mutex<PauseClock>,
@@ -41,8 +43,10 @@ impl RecordingWorker {
         audio: Option<crate::audio::AudioFeed>,
     ) -> RecordingWorker {
         let control = Arc::new(AtomicU8::new(super::RUN));
+        let paused_at = Arc::new(AtomicU64::new(u64::MAX));
         let started = clock.elapsed();
-        let (loop_control, loop_clock) = (control.clone(), clock.clone());
+        let (loop_control, loop_paused_at, loop_clock) =
+            (control.clone(), paused_at.clone(), clock.clone());
         let handle = std::thread::Builder::new()
             .name("gyozarec-recording".into())
             .spawn(move || {
@@ -53,12 +57,13 @@ impl RecordingWorker {
                     &*loop_clock,
                     &cfg,
                     &loop_control,
+                    &loop_paused_at,
                     audio,
                 )
             })
             .expect("spawn recording thread");
         let pauses = Mutex::new(PauseClock::default());
-        RecordingWorker { handle, control, clock, started, pauses, output }
+        RecordingWorker { handle, control, paused_at, clock, started, pauses, output }
     }
 
     #[cfg(test)]
@@ -72,9 +77,14 @@ impl RecordingWorker {
         pauses.active(self.started, self.clock.elapsed())
     }
 
+    /// The recording leaves out everything from this moment, even if the loop
+    /// notices the pause later.
     pub fn pause(&self) {
+        let now = self.clock.elapsed();
+        let nanos = u64::try_from(now.as_nanos()).unwrap_or(u64::MAX);
+        self.paused_at.store(nanos, Ordering::SeqCst);
         if self.control.compare_exchange(RUN, PAUSE, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-            self.pauses.lock().unwrap_or_else(|e| e.into_inner()).pause(self.clock.elapsed());
+            self.pauses.lock().unwrap_or_else(|e| e.into_inner()).pause(now);
         }
     }
 

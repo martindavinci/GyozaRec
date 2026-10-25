@@ -28,11 +28,17 @@ pub struct VecSink {
     finished: Arc<std::sync::atomic::AtomicBool>,
     /// (start frame, sample count) of every audio push.
     audio: Arc<Mutex<Vec<(u64, usize)>>>,
+    /// Every audio sample, in push order.
+    samples: Arc<Mutex<Vec<i16>>>,
 }
 
 impl VecSink {
     pub fn audio(&self) -> Vec<(u64, usize)> {
         self.audio.lock().unwrap().clone()
+    }
+
+    pub fn audio_samples(&self) -> Vec<i16> {
+        self.samples.lock().unwrap().clone()
     }
 
     pub fn times(&self) -> Vec<Duration> {
@@ -57,6 +63,7 @@ impl crate::recording::FrameSink for VecSink {
 
     fn push_audio(&mut self, samples: &[i16], start_frame: u64) -> crate::Result<()> {
         self.audio.lock().unwrap().push((start_frame, samples.len()));
+        self.samples.lock().unwrap().extend_from_slice(samples);
         Ok(())
     }
 }

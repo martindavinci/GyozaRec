@@ -143,6 +143,7 @@ pub struct Texts {
     pub open_folder_after_recording: &'static str,
     pub open_file_after_capture: &'static str,
     pub keep_in_tray: &'static str,
+    pub start_with_windows: &'static str,
     pub shortcuts_enabled: &'static str,
     pub print_screen_captures: &'static str,
     pub print_screen_hint: &'static str,
@@ -273,6 +274,7 @@ mod tests {
             );
             let shortcut_texts = [
                 t.keep_in_tray,
+                t.start_with_windows,
                 t.shortcuts_enabled,
                 t.print_screen_captures,
                 t.print_screen_hint,

@@ -44,6 +44,7 @@ pub struct OptionsForm {
     pub open_folder_after_recording: bool,
     pub open_file_after_capture: bool,
     pub keep_in_tray: bool,
+    pub start_with_windows: bool,
     pub shortcuts_enabled: bool,
     pub print_screen_captures: bool,
     pub jpeg_quality: u8,
@@ -66,6 +67,7 @@ impl OptionsForm {
             open_folder_after_recording: s.open_folder_after_recording,
             open_file_after_capture: s.open_file_after_capture,
             keep_in_tray: s.keep_in_tray,
+            start_with_windows: s.start_with_windows,
             shortcuts_enabled: s.shortcuts_enabled,
             print_screen_captures: s.print_screen_captures,
             jpeg_quality: s.jpeg_quality,
@@ -88,6 +90,7 @@ impl OptionsForm {
             open_folder_after_recording: self.open_folder_after_recording,
             open_file_after_capture: self.open_file_after_capture,
             keep_in_tray: self.keep_in_tray,
+            start_with_windows: self.start_with_windows,
             shortcuts_enabled: self.shortcuts_enabled,
             print_screen_captures: self.print_screen_captures,
             jpeg_quality: self.jpeg_quality,
@@ -173,6 +176,15 @@ mod tests {
             (s.keep_in_tray, s.shortcuts_enabled, s.print_screen_captures),
             (false, true, true)
         );
+    }
+
+    #[test]
+    fn start_with_windows_defaults_off_and_roundtrips() {
+        let base = AppSettings::defaults(&cap());
+        let mut f = OptionsForm::from_settings(&base);
+        assert!(!f.start_with_windows);
+        f.start_with_windows = true;
+        assert!(f.to_settings(&base, &cap()).start_with_windows);
     }
 
     #[test]

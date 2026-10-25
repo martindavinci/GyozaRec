@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "Abrir a pasta depois de uma gravação",
     open_file_after_capture: "Abrir o arquivo depois de uma captura",
     keep_in_tray: "Continuar na área de notificação",
+    start_with_windows: "Iniciar com o Windows",
     shortcuts_enabled: "Atalhos globais",
     print_screen_captures: "A tecla Print Screen captura uma imagem",
     print_screen_hint: "Desative o atalho de captura do Windows para Print Screen em Configurações › Acessibilidade › Teclado.",

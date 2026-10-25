@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "Abrir la carpeta después de grabar",
     open_file_after_capture: "Abrir el archivo después de capturar",
     keep_in_tray: "Seguir en el área de notificación",
+    start_with_windows: "Iniciar con Windows",
     shortcuts_enabled: "Atajos globales",
     print_screen_captures: "La tecla Impr Pant captura una imagen",
     print_screen_hint: "Desactiva el atajo de captura de Windows para Impr Pant en Configuración › Accesibilidad › Teclado.",

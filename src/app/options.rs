@@ -29,6 +29,7 @@ const ID_OPEN_FILE: u32 = 6;
 const ID_TRAY: u32 = 7;
 const ID_SHORTCUTS: u32 = 8;
 const ID_PRINT_SCREEN: u32 = 9;
+const ID_AUTOSTART: u32 = 30;
 /// Widest hint line before wrapping, in logical pixels.
 const HINT_WIDTH: f32 = 340.0;
 const COLUMN_GAP: f32 = 28.0;
@@ -164,6 +165,7 @@ fn build_ui(form: &OptionsForm, texts: &Texts, shortcuts: &[ShortcutLine], fonts
         (ID_OPEN_FOLDER, texts.open_folder_after_recording, form.open_folder_after_recording),
         (ID_OPEN_FILE, texts.open_file_after_capture, form.open_file_after_capture),
         (ID_TRAY, texts.keep_in_tray, form.keep_in_tray),
+        (ID_AUTOSTART, texts.start_with_windows, form.start_with_windows),
         (ID_SHORTCUTS, texts.shortcuts_enabled, form.shortcuts_enabled),
         (ID_PRINT_SCREEN, texts.print_screen_captures, form.print_screen_captures),
     ];
@@ -396,6 +398,7 @@ impl OptionsWindow {
             }
             ID_OPEN_FILE => self.form.open_file_after_capture = !self.form.open_file_after_capture,
             ID_TRAY => self.form.keep_in_tray = !self.form.keep_in_tray,
+            ID_AUTOSTART => self.form.start_with_windows = !self.form.start_with_windows,
             ID_SHORTCUTS => self.form.shortcuts_enabled = !self.form.shortcuts_enabled,
             ID_PRINT_SCREEN => self.form.print_screen_captures = !self.form.print_screen_captures,
             id if id == ID_LANGUAGE || COMBOS.iter().any(|(cid, _)| *cid == id) => {

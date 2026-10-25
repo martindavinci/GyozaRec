@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "Ouvrir le dossier après un enregistrement",
     open_file_after_capture: "Ouvrir le fichier après une capture",
     keep_in_tray: "Rester dans la zone de notification",
+    start_with_windows: "Démarrer avec Windows",
     shortcuts_enabled: "Raccourcis globaux",
     print_screen_captures: "La touche Impr. écran capture une image",
     print_screen_hint: "Désactivez le raccourci de capture de Windows pour Impr. écran dans Paramètres › Accessibilité › Clavier.",

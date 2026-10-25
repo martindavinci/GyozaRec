@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "녹화 후 폴더 열기",
     open_file_after_capture: "캡처 후 파일 열기",
     keep_in_tray: "알림 영역에서 계속 실행",
+    start_with_windows: "Windows 시작 시 실행",
     shortcuts_enabled: "전역 단축키",
     print_screen_captures: "Print Screen 키로 이미지 캡처",
     print_screen_hint: "설정 › 접근성 › 키보드에서 Print Screen 키의 Windows 스크린샷 기능을 끄세요.",

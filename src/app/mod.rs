@@ -22,6 +22,7 @@ use gyozarec::presentation::{
     AREAS, Activation, DELAYS, FORMATS, OptionsForm, ToolbarState, activation, area_label,
     delay_label, format_label,
 };
+use gyozarec::presentation::{StartupOptions, startup_visible};
 use gyozarec::quick::{QuickAction, apply, can_start};
 use gyozarec::settings::SettingsStore;
 use gyozarec::shortcuts::{
@@ -85,6 +86,8 @@ pub struct App {
     capture_dir: PathBuf,
     /// Command-line capture to run as soon as the toolbar exists.
     action_on_start: Option<QuickAction>,
+    /// Launched at sign-in.
+    autostart: bool,
     tray: Option<TrayIcon>,
     /// Language of the tray menu, to rebuild it when the language changes.
     tray_language: Option<Language>,
@@ -97,7 +100,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(proxy: EventLoopProxy<AppEvent>, action_on_start: Option<QuickAction>) -> App {
+    pub fn new(proxy: EventLoopProxy<AppEvent>, startup: StartupOptions) -> App {
         let paths = AppPaths::current();
         let capture_dir = paths.capture_dir.clone();
         let store = SettingsStore::from_paths(&paths);
@@ -160,7 +163,8 @@ impl App {
             recording: None,
             options: None,
             capture_dir,
-            action_on_start,
+            action_on_start: startup.action,
+            autostart: startup.autostart,
             tray: None,
             tray_language: None,
             hotkeys: HotkeyRegistrar::new(),
@@ -184,6 +188,14 @@ impl App {
         if self.tray.is_none() && self.toolbar_hidden {
             // The tray was the only way back to a closed toolbar.
             self.show_toolbar();
+        }
+    }
+
+    /// Keeps the sign-in entry in line with the setting and the current path.
+    fn sync_autostart(&self) {
+        if let Ok(exe) = std::env::current_exe() {
+            let store = gyozarec::platform::RunKeyStore { value_name: "GyozaRec" };
+            gyozarec::autostart::sync(&store, self.state.settings.start_with_windows, &exe);
         }
     }
 
@@ -326,6 +338,7 @@ impl App {
                 self.apply_language();
                 self.sync_tray();
                 self.sync_shortcuts();
+                self.sync_autostart();
                 self.refresh_toolbar();
             }
             OptionsResult::Canceled => {}
@@ -463,9 +476,12 @@ impl App {
 impl ApplicationHandler<AppEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.toolbar.is_none() {
-            self.toolbar = Some(Toolbar::create(event_loop, &self.state, &self.fonts));
             self.sync_tray();
+            let visible = startup_visible(self.autostart, self.tray.is_some());
+            self.toolbar_hidden = !visible;
+            self.toolbar = Some(Toolbar::create(event_loop, &self.state, &self.fonts, visible));
             self.sync_shortcuts();
+            self.sync_autostart();
             if let Some(action) = self.action_on_start.take() {
                 self.start_quick(action);
             }

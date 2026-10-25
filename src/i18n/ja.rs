@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "録画後にフォルダーを開く",
     open_file_after_capture: "キャプチャ後にファイルを開く",
     keep_in_tray: "通知領域で実行を続ける",
+    start_with_windows: "Windows の起動時に開始",
     shortcuts_enabled: "グローバル ショートカット",
     print_screen_captures: "PrintScreen キーで画像をキャプチャ",
     print_screen_hint: "設定 › アクセシビリティ › キーボードで、PrintScreen キーに割り当てられた Windows のスクリーンショット機能をオフにしてください。",

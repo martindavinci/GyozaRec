@@ -22,6 +22,7 @@ pub struct AppSettings {
     pub open_file_after_capture: bool,
     /// Closing the toolbar hides it; GyozaRec stays in the notification area.
     pub keep_in_tray: bool,
+    pub start_with_windows: bool,
     pub shortcuts_enabled: bool,
     pub print_screen_captures: bool,
     /// 50–100.
@@ -51,6 +52,7 @@ impl Default for AppSettings {
             open_folder_after_recording: false,
             open_file_after_capture: false,
             keep_in_tray: true,
+            start_with_windows: false,
             shortcuts_enabled: false,
             print_screen_captures: false,
             jpeg_quality: 90,

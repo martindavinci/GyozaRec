@@ -27,6 +27,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "Ordner nach einer Aufzeichnung öffnen",
     open_file_after_capture: "Datei nach einer Aufnahme öffnen",
     keep_in_tray: "Im Infobereich weiterlaufen",
+    start_with_windows: "Mit Windows starten",
     shortcuts_enabled: "Globale Tastenkürzel",
     print_screen_captures: "Druck-Taste nimmt ein Bild auf",
     print_screen_hint: "Deaktiviere den Screenshot-Shortcut von Windows für die Druck-Taste unter Einstellungen › Barrierefreiheit › Tastatur.",

@@ -77,7 +77,12 @@ fn logical_size(ui: &Ui) -> (f32, f32) {
 }
 
 impl Toolbar {
-    pub fn create(event_loop: &ActiveEventLoop, state: &ToolbarState, fonts: &Fonts) -> Toolbar {
+    pub fn create(
+        event_loop: &ActiveEventLoop,
+        state: &ToolbarState,
+        fonts: &Fonts,
+        visible: bool,
+    ) -> Toolbar {
         let ui = build_ui(state, fonts);
         let logical = logical_size(&ui);
         let attrs = Window::default_attributes()
@@ -86,7 +91,8 @@ impl Toolbar {
             .with_taskbar_icon(super::window_icon())
             .with_resizable(false)
             .with_enabled_buttons(WindowButtons::CLOSE | WindowButtons::MINIMIZE)
-            .with_inner_size(LogicalSize::new(logical.0, logical.1));
+            .with_inner_size(LogicalSize::new(logical.0, logical.1))
+            .with_visible(visible);
         let window = event_loop.create_window(attrs).expect("toolbar window");
         Toolbar { surface: WindowSurface::new(window), ui, logical, cursor: (-1.0, -1.0) }
     }

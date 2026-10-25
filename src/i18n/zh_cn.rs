@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "录制后打开文件夹",
     open_file_after_capture: "捕获后打开文件",
     keep_in_tray: "保持在通知区域运行",
+    start_with_windows: "随 Windows 启动",
     shortcuts_enabled: "全局快捷键",
     print_screen_captures: "按 Print Screen 键捕获图片",
     print_screen_hint: "请在 设置 › 辅助功能 › 键盘 中关闭 Print Screen 键的 Windows 截图快捷方式。",

@@ -1,3 +1,4 @@
+pub mod autostart;
 pub mod bridge;
 pub mod capture;
 pub mod clock;

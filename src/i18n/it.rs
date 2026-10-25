@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "Apri la cartella dopo una registrazione",
     open_file_after_capture: "Apri il file dopo una cattura",
     keep_in_tray: "Resta attivo nell'area di notifica",
+    start_with_windows: "Avvia con Windows",
     shortcuts_enabled: "Scorciatoie globali",
     print_screen_captures: "Il tasto Stamp cattura un'immagine",
     print_screen_hint: "Disattiva la scorciatoia di cattura di Windows per Stamp in Impostazioni › Accessibilità › Tastiera.",

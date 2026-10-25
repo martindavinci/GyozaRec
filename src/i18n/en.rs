@@ -20,6 +20,7 @@ pub(super) const TEXTS: Texts = Texts {
     open_folder_after_recording: "Open the folder after a recording",
     open_file_after_capture: "Open the file after a capture",
     keep_in_tray: "Keep running in the notification area",
+    start_with_windows: "Start with Windows",
     shortcuts_enabled: "Global shortcuts",
     print_screen_captures: "Print Screen key captures an image",
     print_screen_hint: "Turn off Windows' own screenshot shortcut for Print Screen in Settings › Accessibility › Keyboard.",

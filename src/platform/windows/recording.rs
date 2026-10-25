@@ -192,6 +192,25 @@ impl SinkFactory for DefaultSinkFactory {
 }
 
 /// Keeps a window out of screen captures (Windows 10 2004+; ignored before).
+/// Shows a hidden popup without activating it, and keeps clicks on it from
+/// taking the focus or adding it to Alt+Tab.
+pub fn show_without_activating(hwnd: isize) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SW_SHOWNOACTIVATE, ShowWindow, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    };
+    // SAFETY: `hwnd` is a live top-level window owned by this process.
+    unsafe {
+        let hwnd = HWND(hwnd as *mut _);
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            ex | (WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0) as isize,
+        );
+        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    }
+}
+
 pub fn exclude_from_capture(hwnd: isize) {
     // SAFETY: `hwnd` is a live top-level window owned by this process.
     unsafe {

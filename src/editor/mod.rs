@@ -6,7 +6,7 @@ mod draw;
 mod view;
 
 pub use document::Document;
-pub use draw::{draw, save};
+pub use draw::{draw, load, save};
 pub use view::View;
 
 use crate::uikit::theme::Color;

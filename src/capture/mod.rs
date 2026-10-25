@@ -87,6 +87,11 @@ pub trait EditorLauncher: Send {
     fn open(&self, image: Arc<PixelBuffer>, path: PathBuf, work_area: PixelRect, scale: f64);
 }
 
+/// Shows the notification of a saved capture.
+pub trait Notifier: Send {
+    fn notify(&self, notice: crate::presentation::Notice);
+}
+
 pub trait SoundPlayer: Send {
     fn play(&self, cue: crate::sounds::Cue);
 }

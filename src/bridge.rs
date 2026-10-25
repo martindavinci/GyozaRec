@@ -20,6 +20,7 @@ pub enum UiRequest {
         reply: mpsc::Sender<Option<PixelRect>>,
     },
     CaptureFinished(CaptureOutcome),
+    Notify(crate::presentation::Notice),
     OpenEditor {
         image: Arc<crate::pixels::PixelBuffer>,
         path: std::path::PathBuf,
@@ -153,6 +154,17 @@ impl<S: UiSender> ToolbarVisibility for BridgeToolbar<S> {
 
     fn show(&mut self) {
         self.sender.send(UiRequest::ShowToolbar);
+    }
+}
+
+/// Asks the UI thread to show a notification.
+pub struct BridgeNotifier<S: UiSender> {
+    pub sender: S,
+}
+
+impl<S: UiSender> crate::capture::Notifier for BridgeNotifier<S> {
+    fn notify(&self, notice: crate::presentation::Notice) {
+        self.sender.send(UiRequest::Notify(notice));
     }
 }
 

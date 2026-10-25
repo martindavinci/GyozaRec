@@ -1,5 +1,6 @@
 mod editor;
 mod hotkeys;
+mod notice;
 mod options;
 mod overlay;
 mod recording;
@@ -8,8 +9,8 @@ mod toolbar;
 mod tray;
 
 use gyozarec::bridge::{
-    BridgeEditor, BridgeRecordingUi, BridgeSelectionUi, BridgeToolbar, CaptureThread, UiRequest,
-    UiSender,
+    BridgeEditor, BridgeNotifier, BridgeRecordingUi, BridgeSelectionUi, BridgeToolbar,
+    CaptureThread, UiRequest, UiSender,
 };
 use gyozarec::capture::{CaptureCoordinator, CursorLocator, ScreenGrabber};
 use gyozarec::clock::{Clock, SystemClock};
@@ -70,6 +71,8 @@ pub enum AppEvent {
     /// Left click on the notification icon.
     TrayClick,
     Convert(ConvertEvent),
+    /// The notification of that generation may close now.
+    NoticeTimeout(u64),
     /// An editor's save thread finished the picture of `version`.
     EditorSaved {
         window: WindowId,
@@ -132,6 +135,8 @@ pub struct App {
     editor_fonts: Option<Arc<Fonts>>,
     /// An editor opened during the running capture gets the focus after it.
     focus_editor: bool,
+    notice: Option<notice::NoticeWindow>,
+    notice_timer: gyozarec::presentation::NoticeTimer,
 }
 
 impl App {
@@ -155,6 +160,7 @@ impl App {
             sound: Box::new(SystemSound),
             revealer: Box::new(gyozarec::platform::ExplorerRevealer),
             editor: Box::new(BridgeEditor { sender: sender.clone() }),
+            notifier: Box::new(BridgeNotifier { sender: sender.clone() }),
             toolbar: Box::new(BridgeToolbar { sender: sender.clone() }),
             recording_ui: Box::new(BridgeRecordingUi {
                 sender: sender.clone(),
@@ -214,6 +220,8 @@ impl App {
             editors: Vec::new(),
             editor_fonts: None,
             focus_editor: false,
+            notice: None,
+            notice_timer: Default::default(),
         }
     }
 
@@ -374,6 +382,35 @@ impl App {
             self.proxy.clone(),
         );
         self.editors.extend(opened);
+    }
+
+    /// Closes the notification `generation` after `NOTICE_TIMEOUT`.
+    fn schedule_notice_timeout(&self, generation: u64) {
+        let proxy = self.proxy.clone();
+        let _ = std::thread::Builder::new().name("gyozarec-notice".into()).spawn(move || {
+            std::thread::sleep(gyozarec::presentation::NOTICE_TIMEOUT);
+            let _ = proxy.send_event(AppEvent::NoticeTimeout(generation));
+        });
+    }
+
+    /// The notification was clicked: images open in the editor, videos in
+    /// their default app.
+    fn open_notice(&mut self, event_loop: &ActiveEventLoop, n: gyozarec::presentation::Notice) {
+        match n.kind {
+            gyozarec::presentation::NoticeKind::Image => match gyozarec::editor::load(&n.path) {
+                Ok(img) => {
+                    self.open_editor(event_loop, Arc::new(img), n.path, Some(n.work_area), n.scale)
+                }
+                Err(err) => {
+                    self.state.set_error(&err.to_string());
+                    self.refresh_toolbar();
+                }
+            },
+            gyozarec::presentation::NoticeKind::Video => {
+                use gyozarec::capture::FileRevealer;
+                gyozarec::platform::ExplorerRevealer.open(&n.path);
+            }
+        }
     }
 
     /// Quits now, or as soon as the running capture has been cancelled.
@@ -606,6 +643,14 @@ impl App {
                     e.focus();
                 }
             }
+            UiRequest::Notify(n) => {
+                if !self.exit_pending {
+                    self.notice = None;
+                    self.notice = notice::NoticeWindow::open(event_loop, n, self.state.texts());
+                    let generation = self.notice_timer.start();
+                    self.schedule_notice_timeout(generation);
+                }
+            }
             UiRequest::OpenEditor { image, path, work_area, scale } => {
                 if !self.exit_pending {
                     self.open_editor(event_loop, image, path, Some(work_area), scale);
@@ -710,6 +755,11 @@ impl ApplicationHandler<AppEvent> for App {
             }
             AppEvent::TrayClick => self.activate(),
             AppEvent::Convert(event) => self.on_conversion(event),
+            AppEvent::NoticeTimeout(generation) => {
+                if self.notice_timer.expired(generation) {
+                    self.notice = None;
+                }
+            }
             AppEvent::EditorSaved { window, version, result } => {
                 if let Some(i) = self.editors.iter().position(|e| e.id() == window)
                     && self.editors[i].saved(version, result) == editor::EditorResult::Closed
@@ -724,8 +774,28 @@ impl ApplicationHandler<AppEvent> for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
         let pinned = self.overlay.as_ref().and_then(|o| o.surface(id));
-        if let Some(surface) = pinned.or_else(|| self.recording.as_ref()?.surface(id)) {
+        let pinned = pinned.or_else(|| self.recording.as_ref()?.surface(id));
+        let pinned =
+            pinned.or_else(|| self.notice.as_ref().filter(|n| n.id() == id).map(|n| n.surface()));
+        if let Some(surface) = pinned {
             surface.keep_on_target(&mut event);
+        }
+        if let Some(n) = self.notice.as_mut().filter(|n| n.id() == id) {
+            match n.handle(&event, &self.fonts) {
+                notice::NoticeAction::Open => {
+                    if let Some(n) = self.notice.take() {
+                        self.open_notice(event_loop, n.notice);
+                    }
+                }
+                notice::NoticeAction::Close => self.notice = None,
+                notice::NoticeAction::Hover(inside) => {
+                    if let Some(generation) = self.notice_timer.hover(inside) {
+                        self.schedule_notice_timeout(generation);
+                    }
+                }
+                notice::NoticeAction::None => {}
+            }
+            return;
         }
         if let Some(session) = self.overlay.as_mut().filter(|s| s.owns(id)) {
             session.handle(id, &event, &self.fonts);

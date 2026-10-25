@@ -84,6 +84,18 @@ pub fn save(img: &PixelBuffer, path: &Path, jpeg_quality: u8) -> crate::Result<(
     Ok(())
 }
 
+/// Reads a PNG or JPEG back into an opaque buffer at (0, 0).
+pub fn load(path: &Path) -> crate::Result<PixelBuffer> {
+    let rgba = image::open(path)?.to_rgba8();
+    let (w, h) = (rgba.width() as i32, rgba.height() as i32);
+    let mut bgra = rgba.into_raw();
+    for px in bgra.as_chunks_mut::<4>().0 {
+        px.swap(0, 2);
+        px[3] = 255;
+    }
+    Ok(PixelBuffer::new(PixelRect::new(0, 0, w, h), bgra))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{Document, PALETTE, pixel_block};
@@ -197,6 +209,16 @@ mod tests {
         let names: Vec<_> =
             std::fs::read_dir(d.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(names.len(), 2, "no temporary files left: {names:?}");
+    }
+
+    #[test]
+    fn saved_png_loads_back() {
+        let d = tempfile::tempdir().unwrap();
+        let mut img = PixelBuffer::solid(PixelRect::new(0, 0, 3, 2), 10, 20, 200);
+        img.put_pixel(PixelPoint { x: 2, y: 1 }, [1, 2, 3, 255]);
+        let path = d.path().join("a.png");
+        save(&img, &path, 90).unwrap();
+        assert_eq!(load(&path).unwrap(), img);
     }
 
     #[test]

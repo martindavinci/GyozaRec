@@ -24,6 +24,7 @@ pub use mp4::{Mp4Sink, probe_mp4};
 pub use recording::{
     DefaultSinkFactory, ExplorerRevealer, allow_foreground_for_others, allow_tiny_window,
     exclude_from_capture, layered_color_key, make_color_keyed, reveal_in_explorer,
+    show_without_activating,
 };
 pub use sound::SystemSound;
 pub use video_reader::MfVideoReader;

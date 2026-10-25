@@ -24,6 +24,8 @@ pub struct AppSettings {
     pub open_file_after_capture: bool,
     /// After an image capture, open it in the editor.
     pub open_editor_after_capture: bool,
+    /// A notification with a thumbnail after each saved capture.
+    pub show_notification: bool,
     /// Closing the toolbar hides it; GyozaRec stays in the notification area.
     pub keep_in_tray: bool,
     pub start_with_windows: bool,
@@ -61,6 +63,7 @@ impl Default for AppSettings {
             open_folder_after_recording: false,
             open_file_after_capture: false,
             open_editor_after_capture: true,
+            show_notification: true,
             keep_in_tray: true,
             start_with_windows: false,
             shortcuts_enabled: false,

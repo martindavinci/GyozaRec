@@ -151,6 +151,7 @@ impl UiSender for FakeUiSender {
                 *self.held.lock().unwrap() = Some(commands);
             }
             UiRequest::OpenEditor { .. } => log_event(&log, "ui:editor"),
+            UiRequest::Notify(_) => log_event(&log, "ui:notice"),
             UiRequest::RecordingTick { .. } => log_event(&log, "ui:rec-tick"),
             UiRequest::RecordingEnded => {
                 log_event(&log, "ui:rec-end");
@@ -369,6 +370,20 @@ impl EditorLauncher for FakeEditor {
     }
 }
 
+/// Logs `notice:<image|video>:<file>:<thumbnail w>x<h>`.
+pub struct FakeNotifier {
+    pub log: EventLog,
+}
+
+impl crate::capture::Notifier for FakeNotifier {
+    fn notify(&self, n: crate::presentation::Notice) {
+        let name = n.path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+        let kind = format!("{:?}", n.kind).to_lowercase();
+        let (w, h) = (n.thumbnail.width(), n.thumbnail.height());
+        log_event(&Some(self.log.clone()), format!("notice:{kind}:{name}:{w}x{h}"));
+    }
+}
+
 pub struct FakeRevealer {
     pub log: EventLog,
 }
@@ -424,6 +439,7 @@ impl CoordinatorHarness {
             sound: Box::new(FakeSound { log: log.clone() }),
             revealer: Box::new(FakeRevealer { log: log.clone() }),
             editor: Box::new(FakeEditor { log: log.clone() }),
+            notifier: Box::new(FakeNotifier { log: log.clone() }),
             audio: Box::new(FakeAudioStarter { available: false, log: log.clone() }),
             toolbar: Box::new(FakeToolbar { log: log.clone() }),
             recording_ui: Box::new(FakeRecordingUi {

@@ -2,14 +2,15 @@
 
 use super::{
     AudioStarter, CaptureOutcome, ClipboardService, Cues, CursorLocator, EditorLauncher,
-    FileRevealer, MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest,
-    SelectionUi, SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowSnapshotter,
-    monitor_from_point,
+    FileRevealer, MonitorProvider, Notifier, RecordingJob, RecordingUi, ScreenGrabber,
+    SelectionRequest, SelectionUi, SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility,
+    WindowSnapshotter, monitor_from_point,
 };
 use crate::clock::Clock;
 use crate::geometry::{CaptureArea, OutputFormat, PixelRect, meets_minimum};
 use crate::output::{FileNamer, ensure_folder, save_image};
 use crate::pixels::PixelBuffer;
+use crate::presentation::{Notice, NoticeKind, thumbnail};
 use crate::recording::{LoopConfig, RecordingOutcome};
 use crate::settings::AppSettings;
 use std::sync::Arc;
@@ -30,6 +31,7 @@ pub struct CaptureCoordinator {
     pub sound: Box<dyn SoundPlayer>,
     pub revealer: Box<dyn FileRevealer>,
     pub editor: Box<dyn EditorLauncher>,
+    pub notifier: Box<dyn Notifier>,
     pub toolbar: Box<dyn ToolbarVisibility>,
     pub recording_ui: Box<dyn RecordingUi>,
     pub sinks: Box<dyn SinkFactory>,
@@ -96,11 +98,11 @@ impl CaptureCoordinator {
         if monitors.is_empty() {
             return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
         }
-        let picked = if settings.area == CaptureArea::FullScreen && monitors.len() == 1 {
-            monitors[0].bounds
+        let (picked, frozen) = if settings.area == CaptureArea::FullScreen && monitors.len() == 1 {
+            (monitors[0].bounds, None)
         } else {
             match self.select_on_frozen(settings) {
-                Ok((_, region)) => region,
+                Ok((frozen, region)) => (region, Some(frozen)),
                 Err(outcome) => return outcome,
             }
         };
@@ -155,6 +157,16 @@ impl CaptureCoordinator {
             max_duration: Duration::from_secs(u64::from(max_seconds)),
         };
         self.clock.sleep(OVERLAY_CLOSE_SETTLE);
+        // The notification shows the screen as the recording started.
+        let first_screen = if settings.show_notification {
+            match &frozen {
+                Some(f) => Some(thumbnail(&f.crop(&region))),
+                None => self.grabber.grab(region, false).ok().map(|img| thumbnail(&img)),
+            }
+        } else {
+            None
+        };
+        let home = (monitor.work_area, monitor.scale);
         let job = RecordingJob { region, monitor, path, config, sink, audio: feed, cues };
         let result = self.recording_ui.record(job);
         match (result.outcome, result.path) {
@@ -166,6 +178,17 @@ impl CaptureCoordinator {
                 }
                 if settings.open_file_after_capture {
                     self.revealer.open(&path);
+                }
+                if let Some(thumbnail) = first_screen {
+                    let (work_area, scale) = home;
+                    let kind = NoticeKind::Video;
+                    self.notifier.notify(Notice {
+                        path: path.clone(),
+                        kind,
+                        thumbnail,
+                        work_area,
+                        scale,
+                    });
                 }
                 CaptureOutcome::saved(path, copied)
             }
@@ -207,16 +230,31 @@ impl CaptureCoordinator {
                 if settings.play_sound {
                     self.sound.play(crate::sounds::Cue::Saved);
                 }
-                if settings.open_editor_after_capture {
-                    // The editor takes the place of the default app.
-                    let monitors = self.monitors.monitors();
-                    if !monitors.is_empty() {
-                        let m = monitor_from_point(&monitors, img.bounds.center());
-                        let image = Arc::new(img.clone());
-                        self.editor.open(image, path.clone(), m.work_area, m.scale);
+                let monitors = self.monitors.monitors();
+                let home = (!monitors.is_empty())
+                    .then(|| monitor_from_point(&monitors, img.bounds.center()))
+                    .map(|m| (m.work_area, m.scale));
+                match home {
+                    // The editor takes the place of the default app and the notification.
+                    Some((work_area, scale)) if settings.open_editor_after_capture => {
+                        self.editor.open(Arc::new(img.clone()), path.clone(), work_area, scale);
                     }
-                } else if settings.open_file_after_capture {
-                    self.revealer.open(&path);
+                    _ => {
+                        if settings.open_file_after_capture {
+                            self.revealer.open(&path);
+                        }
+                        if let Some((work_area, scale)) =
+                            home.filter(|_| settings.show_notification)
+                        {
+                            self.notifier.notify(Notice {
+                                path: path.clone(),
+                                kind: NoticeKind::Image,
+                                thumbnail: thumbnail(img),
+                                work_area,
+                                scale,
+                            });
+                        }
+                    }
                 }
                 CaptureOutcome::saved(path, copied)
             }
@@ -539,7 +577,17 @@ mod tests {
         });
         let ev = h.events();
         assert!(ev.contains(&"record:0,0,1920,1080:mp4:fps=30:max=300".to_string()), "{ev:?}");
-        assert!(!ev.iter().any(|e| e.starts_with("select") || e.starts_with("grab")), "{ev:?}");
+        assert!(!ev.iter().any(|e| e.starts_with("select")), "{ev:?}");
+        let grabs: Vec<_> = ev.iter().filter(|e| e.starts_with("grab")).collect();
+        assert_eq!(grabs, ["grab:0,0,1920,1080"], "one grab, for the notification");
+        let mut quiet = CoordinatorHarness::rect(None).recording(RecordingOutcome::Saved);
+        quiet.run(AppSettings {
+            area: CaptureArea::FullScreen,
+            format: OutputFormat::Mp4,
+            show_notification: false,
+            ..quiet.settings()
+        });
+        assert!(!quiet.events().iter().any(|e| e.starts_with("grab")));
     }
 
     #[test]
@@ -623,6 +671,55 @@ mod tests {
         fs::write(&blocker, b"").unwrap();
         h.run(AppSettings { save_folder: blocker.join("sub"), ..h.settings() });
         assert!(!h.events().iter().any(|e| e.starts_with("editor:")));
+    }
+
+    #[test]
+    fn image_without_editor_is_notified() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 640, 360)));
+        h.run(AppSettings { open_editor_after_capture: false, ..h.settings() });
+        let ev = h.events();
+        let notice = ev.iter().find(|e| e.starts_with("notice:")).expect("notified");
+        assert!(
+            notice.starts_with("notice:image:") && notice.ends_with(".png:320x180"),
+            "{notice}"
+        );
+    }
+
+    #[test]
+    fn image_with_editor_is_not_notified() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)));
+        h.run(h.settings());
+        assert!(!h.events().iter().any(|e| e.starts_with("notice:")), "{:?}", h.events());
+    }
+
+    #[test]
+    fn recording_is_notified_with_its_first_screen() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 640, 480)))
+            .recording(RecordingOutcome::Saved);
+        h.run(AppSettings { format: OutputFormat::Mp4, ..h.settings() });
+        let ev = h.events();
+        let notice = ev.iter().find(|e| e.starts_with("notice:")).expect("notified");
+        assert!(
+            notice.starts_with("notice:video:") && notice.ends_with(".mp4:240x180"),
+            "{notice}"
+        );
+    }
+
+    #[test]
+    fn notification_off_shows_nothing() {
+        let off = |format| AppSettings {
+            format,
+            open_editor_after_capture: false,
+            show_notification: false,
+            ..AppSettings::default()
+        };
+        for format in [OutputFormat::Png, OutputFormat::Gif] {
+            let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+                .recording(RecordingOutcome::Saved);
+            let settings = AppSettings { save_folder: h.dir().to_path_buf(), ..off(format) };
+            h.run(settings);
+            assert!(!h.events().iter().any(|e| e.starts_with("notice:")), "{:?}", h.events());
+        }
     }
 
     #[test]

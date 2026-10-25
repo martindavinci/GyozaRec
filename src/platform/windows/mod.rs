@@ -2,6 +2,7 @@
 //! Windows backend.
 
 mod clipboard;
+mod dialog;
 mod grab;
 mod locale;
 mod monitors;
@@ -11,6 +12,7 @@ mod sound;
 mod window_snapshot;
 
 pub use clipboard::Win32Clipboard;
+pub use dialog::show_error_box;
 pub use grab::GdiGrabber;
 pub use locale::{cjk_font_path, system_ui_languages};
 pub use monitors::{Win32Cursor, Win32Monitors};

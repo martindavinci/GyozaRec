@@ -350,6 +350,14 @@ impl App {
                 self.save_settings();
                 self.sync_autostart();
                 self.refresh_toolbar();
+                if !refused.is_empty() {
+                    // Options stays open to say which keys another app holds.
+                    let settings = self.state.settings.clone();
+                    if let Some(o) = &mut self.options {
+                        o.refused(&refused, &settings);
+                    }
+                    return;
+                }
             }
             OptionsResult::Canceled => {}
         }

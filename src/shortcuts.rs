@@ -168,6 +168,18 @@ pub fn validate(
     Ok(norm)
 }
 
+/// Ids whose keys are the same as another id's, in input order.
+pub fn conflicts<'a>(keys: &[(&'a str, String)]) -> Vec<&'a str> {
+    let norm: Vec<Option<String>> = keys.iter().map(|(_, k)| normalize(k)).collect();
+    keys.iter()
+        .enumerate()
+        .filter(|(i, _)| {
+            norm[*i].is_some() && norm.iter().enumerate().any(|(j, n)| j != *i && *n == norm[*i])
+        })
+        .map(|(_, (id, _))| *id)
+        .collect()
+}
+
 /// Settings back to the default shortcuts.
 pub fn reset(s: &mut AppSettings) {
     s.shortcut_keys.clear();
@@ -498,6 +510,17 @@ mod tests {
         let keys: Vec<String> = effective(&new).into_iter().map(|b| b.keys).collect();
         let unique: std::collections::BTreeSet<&String> = keys.iter().collect();
         assert_eq!(unique.len(), keys.len(), "{keys:?}");
+    }
+
+    #[test]
+    fn conflicts_lists_every_id_sharing_keys() {
+        let keys = vec![
+            ("image", "Ctrl+Shift+F7".to_string()),
+            ("record", "shift+ctrl+f7".to_string()),
+            ("record-full", "Ctrl+Shift+F10".to_string()),
+        ];
+        assert_eq!(conflicts(&keys), ["image", "record"]);
+        assert!(conflicts(&keys[2..]).is_empty());
     }
 
     #[test]

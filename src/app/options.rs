@@ -482,7 +482,16 @@ impl OptionsWindow {
         match &event.logical_key {
             Key::Named(NamedKey::Escape) => {}
             Key::Named(NamedKey::Backspace) => {
-                self.form.shortcut_keys.remove(id);
+                // Back to the default, unless another line took those keys.
+                let default = gyozarec::shortcuts::default_keys(id).unwrap_or_default();
+                match gyozarec::shortcuts::validate(default, &self.others(id), |_| true) {
+                    Ok(_) => {
+                        self.form.shortcut_keys.remove(id);
+                    }
+                    Err(e) => {
+                        self.edit.errors.insert(id, key_error_text(e, self.texts));
+                    }
+                }
             }
             _ => {
                 let Some(name) = super::hotkeys::key_name(&event.physical_key) else {
@@ -500,15 +509,9 @@ impl OptionsWindow {
                 .map(|(_, name)| *name)
                 .collect();
                 parts.push(name);
-                let others: Vec<(&str, String)> = self
-                    .shortcuts
-                    .iter()
-                    .filter(|l| l.id != id)
-                    .map(|l| (l.id, form_keys(&self.form, l.id)))
-                    .collect();
                 match gyozarec::shortcuts::validate(
                     &parts.join("+"),
-                    &others,
+                    &self.others(id),
                     super::hotkeys::parses,
                 ) {
                     Ok(keys) => {
@@ -528,6 +531,44 @@ impl OptionsWindow {
         }
         self.edit.capturing = None;
         self.rebuild();
+    }
+
+    /// The keys of every other line, as the form has them now.
+    fn others(&self, id: &str) -> Vec<(&'static str, String)> {
+        self.shortcuts
+            .iter()
+            .filter(|l| l.id != id)
+            .map(|l| (l.id, form_keys(&self.form, l.id)))
+            .collect()
+    }
+
+    /// OK: refused while two lines share keys.
+    fn accept(&mut self) -> OptionsResult {
+        let keys: Vec<(&'static str, String)> =
+            self.shortcuts.iter().map(|l| (l.id, form_keys(&self.form, l.id))).collect();
+        let clashing = gyozarec::shortcuts::conflicts(&keys);
+        if clashing.is_empty() {
+            return OptionsResult::Accepted(self.form.clone());
+        }
+        for id in clashing {
+            self.edit.errors.insert(id, self.texts.shortcut_duplicate);
+        }
+        self.rebuild();
+        OptionsResult::Open
+    }
+
+    /// Windows refused the new keys of `ids`: the form gets the keys still in
+    /// use back and those lines say why.
+    pub fn refused(&mut self, ids: &[&str], settings: &gyozarec::settings::AppSettings) {
+        self.form.shortcut_keys = settings.shortcut_keys.clone();
+        for id in ids {
+            if let Some(line) = self.shortcuts.iter().find(|l| l.id == *id) {
+                self.edit.errors.insert(line.id, self.texts.shortcut_unavailable);
+            }
+        }
+        self.edit.capturing = None;
+        self.rebuild();
+        self.focus();
     }
 
     fn click(&mut self, id: u32) -> OptionsResult {
@@ -559,7 +600,7 @@ impl OptionsWindow {
             return OptionsResult::Open;
         }
         match id {
-            ID_OK => return OptionsResult::Accepted(self.form.clone()),
+            ID_OK => return self.accept(),
             ID_CANCEL => return OptionsResult::Canceled,
             ID_BROWSE => self.browse(),
             ID_CLIPBOARD => self.form.copy_to_clipboard = !self.form.copy_to_clipboard,
@@ -618,9 +659,7 @@ impl OptionsWindow {
             {
                 match logical_key {
                     Key::Named(NamedKey::Escape) => return OptionsResult::Canceled,
-                    Key::Named(NamedKey::Enter) => {
-                        return OptionsResult::Accepted(self.form.clone());
-                    }
+                    Key::Named(NamedKey::Enter) => return self.accept(),
                     _ => {}
                 }
             }
@@ -713,6 +752,8 @@ mod preview_tests {
             .collect();
         let mut edit = ShortcutEdit { capturing: Some("image"), ..Default::default() };
         edit.errors.insert("print-screen", texts.shortcut_duplicate);
+        // As `refused` leaves a line whose new keys Windows turned down.
+        edit.errors.insert("record", texts.shortcut_unavailable);
         let fonts = fonts_for(Language::En, &form);
         let ui = build_ui(&form, texts, &lines, &edit, &fonts);
         let (w, h) = logical_size(&ui);

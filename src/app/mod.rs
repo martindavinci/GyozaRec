@@ -17,7 +17,8 @@ use gyozarec::platform::{
     Win32WindowList, system_ui_languages,
 };
 use gyozarec::presentation::{
-    AREAS, DELAYS, FORMATS, OptionsForm, ToolbarState, area_label, delay_label, format_label,
+    AREAS, Activation, DELAYS, FORMATS, OptionsForm, ToolbarState, activation, area_label,
+    delay_label, format_label,
 };
 use gyozarec::settings::SettingsStore;
 use gyozarec::uikit::painter::Fonts;
@@ -282,6 +283,25 @@ impl App {
         }
     }
 
+    /// Brings GyozaRec forward, unless a capture is running.
+    fn activate(&self) {
+        match activation(self.state.busy, self.options.is_some()) {
+            Activation::Nothing => {}
+            Activation::FocusOptions => {
+                if let Some(o) = &self.options {
+                    o.focus();
+                }
+            }
+            Activation::ShowToolbar => {
+                if let Some(t) = &self.toolbar {
+                    t.surface.window.set_minimized(false);
+                    t.surface.window.set_visible(true);
+                    t.surface.window.focus_window();
+                }
+            }
+        }
+    }
+
     fn open_folder(&self) {
         if let Some(path) = &self.state.last_saved {
             gyozarec::platform::reveal_in_explorer(path);
@@ -304,13 +324,7 @@ impl ApplicationHandler<AppEvent> for App {
             AppEvent::Ui(req) => self.on_ui(event_loop, req),
             AppEvent::Menu(event) => self.on_menu(event),
             AppEvent::Instance(InstanceCommand::Capture) => self.start_capture(),
-            AppEvent::Instance(InstanceCommand::Activate) => {
-                if let Some(t) = &self.toolbar {
-                    t.surface.window.set_minimized(false);
-                    t.surface.window.set_visible(true);
-                    t.surface.window.focus_window();
-                }
-            }
+            AppEvent::Instance(InstanceCommand::Activate) => self.activate(),
         }
     }
 

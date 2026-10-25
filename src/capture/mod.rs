@@ -161,6 +161,13 @@ pub fn window_at(z_ordered: &[WindowCandidate], p: PixelPoint) -> Option<&Window
     z_ordered.iter().find(|w| w.bounds.contains(p))
 }
 
+/// Click-through (`WS_EX_TRANSPARENT`) and cloaked windows are invisible to
+/// the user, so they are never offered as a pick.
+pub fn is_capturable(ex_style: u32, cloaked: bool) -> bool {
+    const WS_EX_TRANSPARENT: u32 = 0x20;
+    !cloaked && ex_style & WS_EX_TRANSPARENT == 0
+}
+
 /// The topmost window under `at`, as much of it as the monitors show: the
 /// whole window when it spans several monitors, without the parts no monitor
 /// covers. A maximized window keeps to the monitor it is maximized on.
@@ -234,6 +241,16 @@ mod tests {
             hovered_window(&ws, &monitors, PixelPoint { x: 500, y: 500 }),
             Some(PixelRect::new(0, 0, 1920, 1080))
         );
+    }
+
+    #[test]
+    fn transparent_or_cloaked_windows_are_not_capturable() {
+        const WS_EX_TRANSPARENT: u32 = 0x20;
+        const WS_EX_LAYERED: u32 = 0x80000;
+        assert!(is_capturable(0, false));
+        assert!(is_capturable(WS_EX_LAYERED, false));
+        assert!(!is_capturable(WS_EX_TRANSPARENT | WS_EX_LAYERED, false));
+        assert!(!is_capturable(0, true));
     }
 
     #[test]

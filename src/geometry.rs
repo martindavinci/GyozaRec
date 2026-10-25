@@ -93,6 +93,11 @@ pub struct MonitorInfo {
     pub scale: f64,
 }
 
+/// `screen` relative to the top-left corner of `monitor`.
+pub fn local_point(screen: PixelPoint, monitor: PixelRect) -> PixelPoint {
+    PixelPoint { x: screen.x - monitor.x, y: screen.y - monitor.y }
+}
+
 /// What part of the screen a capture takes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CaptureArea {
@@ -173,6 +178,12 @@ mod tests {
     fn clamp_keeps_selection_inside_monitor() {
         assert_eq!(r(-10, -10, 60, 60).clamp_to(&r(0, 0, 100, 100)), r(0, 0, 50, 50));
     }
+    #[test]
+    fn local_point_subtracts_monitor_origin() {
+        let p = local_point(PixelPoint { x: -1500, y: 300 }, r(-1920, 0, 1920, 1080));
+        assert_eq!(p, PixelPoint { x: 420, y: 300 });
+    }
+
     #[test]
     fn even_floor_rounds_size_down() {
         assert_eq!(r(5, 5, 101, 65).even_floor(), r(5, 5, 100, 64));

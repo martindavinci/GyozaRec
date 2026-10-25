@@ -1,12 +1,13 @@
 use super::monitors::rect_from;
-use crate::capture::{WindowCandidate, WindowSnapshotter};
+use crate::capture::{WindowCandidate, WindowSnapshotter, is_capturable};
 use std::ffi::c_void;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{
     DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed,
+    EnumWindows, GWL_EXSTYLE, GetWindowLongW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
+    IsWindowVisible, IsZoomed,
 };
 use windows::core::BOOL;
 
@@ -35,7 +36,8 @@ unsafe extern "system" fn collect_window(hwnd: HWND, data: LPARAM) -> BOOL {
             &mut cloaked as *mut u32 as *mut c_void,
             std::mem::size_of::<u32>() as u32,
         );
-        if cloaked_ok.is_ok() && cloaked != 0 {
+        let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+        if !is_capturable(ex_style, cloaked_ok.is_ok() && cloaked != 0) {
             return BOOL(1);
         }
         let mut pid = 0u32;

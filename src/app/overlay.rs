@@ -2,7 +2,7 @@
 
 use super::surface::WindowSurface;
 use gyozarec::capture::{SelectionRequest, WindowCandidate, hovered_window};
-use gyozarec::geometry::{CaptureArea, MonitorInfo, PixelPoint, PixelRect, PixelSize};
+use gyozarec::geometry::{CaptureArea, MonitorInfo, PixelPoint, PixelRect, PixelSize, local_point};
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::render::OverlayCache;
 use gyozarec::uikit::painter::{Fonts, Painter, measure_text};
@@ -132,18 +132,56 @@ impl OverlaySession {
                 shown: false,
             });
         }
-        for w in &mut windows {
+        let mut session =
+            OverlaySession::new(windows, request.area, request.windows, reply, cursor);
+        for w in &mut session.windows {
             w.redraw(fonts);
             if w.monitor.bounds.contains(cursor) {
                 w.surface.window.focus_window();
             }
         }
-        OverlaySession {
-            windows,
-            area: request.area,
-            candidates: request.windows,
-            reply: Some(reply),
-            hovered: None,
+        session
+    }
+
+    /// Starts from the real cursor, so a click before any mouse movement
+    /// works; with no window to select on, the selection ends at once.
+    fn new(
+        mut windows: Vec<OverlayWindow>,
+        area: CaptureArea,
+        candidates: Vec<WindowCandidate>,
+        reply: Sender<Option<PixelRect>>,
+        cursor: PixelPoint,
+    ) -> OverlaySession {
+        for w in &mut windows {
+            w.cursor = local_point(cursor, w.monitor.bounds);
+        }
+        let mut session =
+            OverlaySession { windows, area, candidates, reply: Some(reply), hovered: None };
+        if session.windows.is_empty() {
+            session.finish(None);
+        } else if area == CaptureArea::Window {
+            session.update_hover(cursor);
+        }
+        session
+    }
+
+    /// Window mode: highlights the window under `screen` on every monitor.
+    fn update_hover(&mut self, screen: PixelPoint) {
+        let monitors: Vec<PixelRect> = self.windows.iter().map(|o| o.monitor.bounds).collect();
+        let hovered = hovered_window(&self.candidates, &monitors, screen);
+        if hovered == self.hovered {
+            return;
+        }
+        self.hovered = hovered;
+        for other in &mut self.windows {
+            let local = hovered
+                .map(|r| r.offset(-other.monitor.bounds.x, -other.monitor.bounds.y))
+                .map(|r| r.intersect(&other.local_bounds()))
+                .filter(|r| !r.is_empty());
+            if local != other.selection {
+                other.selection = local;
+                other.surface.window.request_redraw();
+            }
         }
     }
 
@@ -205,21 +243,7 @@ impl OverlaySession {
         w.cursor = p;
         if self.area == CaptureArea::Window {
             let screen = w.to_screen(p);
-            let monitors: Vec<PixelRect> = self.windows.iter().map(|o| o.monitor.bounds).collect();
-            let hovered = hovered_window(&self.candidates, &monitors, screen);
-            if hovered != self.hovered {
-                self.hovered = hovered;
-                for other in &mut self.windows {
-                    let local = hovered
-                        .map(|r| r.offset(-other.monitor.bounds.x, -other.monitor.bounds.y))
-                        .map(|r| r.intersect(&other.local_bounds()))
-                        .filter(|r| !r.is_empty());
-                    if local != other.selection {
-                        other.selection = local;
-                        other.surface.window.request_redraw();
-                    }
-                }
-            }
+            self.update_hover(screen);
         } else if let Some(start) = w.drag_start {
             let sel = PixelRect::from_points(start, p).clamp_to(&w.local_bounds());
             if Some(sel) != w.selection {
@@ -247,5 +271,24 @@ impl OverlaySession {
                 local.offset(w.monitor.bounds.x, w.monitor.bounds.y).clamp_to(&w.monitor.bounds);
             self.finish(Some(result));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overlay_session_without_windows_replies_none() {
+        let (reply, answer) = std::sync::mpsc::channel();
+        let session = OverlaySession::new(
+            Vec::new(),
+            CaptureArea::Rectangle,
+            Vec::new(),
+            reply,
+            PixelPoint::default(),
+        );
+        assert!(session.is_finished());
+        assert_eq!(answer.try_recv(), Ok(None));
     }
 }

@@ -197,6 +197,11 @@ impl OptionsWindow {
         })
     }
 
+    pub fn focus(&self) {
+        self.surface.window.set_minimized(false);
+        self.surface.window.focus_window();
+    }
+
     pub fn id(&self) -> WindowId {
         self.surface.window.id()
     }

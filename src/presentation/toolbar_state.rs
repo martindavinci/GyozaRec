@@ -34,6 +34,23 @@ pub fn delay_label(seconds: u32, texts: &Texts) -> &'static str {
     texts.delays[(seconds as usize).min(DELAYS.len() - 1)]
 }
 
+/// What a request to bring GyozaRec forward should do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Activation {
+    /// A capture is running: showing the toolbar would put it in the picture.
+    Nothing,
+    FocusOptions,
+    ShowToolbar,
+}
+
+pub fn activation(busy: bool, options_open: bool) -> Activation {
+    match (busy, options_open) {
+        (true, _) => Activation::Nothing,
+        (false, true) => Activation::FocusOptions,
+        (false, false) => Activation::ShowToolbar,
+    }
+}
+
 /// Recording timer, e.g. `00:07 / 05:00`.
 pub fn format_elapsed(elapsed: std::time::Duration, max: std::time::Duration) -> String {
     let mmss = |d: std::time::Duration| format!("{:02}:{:02}", d.as_secs() / 60, d.as_secs() % 60);
@@ -200,6 +217,14 @@ mod tests {
                 assert!(!t.initial_status.contains(old), "{lang:?}: {}", t.initial_status);
             }
         }
+    }
+
+    #[test]
+    fn activation_policy() {
+        assert_eq!(activation(true, false), Activation::Nothing);
+        assert_eq!(activation(true, true), Activation::Nothing);
+        assert_eq!(activation(false, true), Activation::FocusOptions);
+        assert_eq!(activation(false, false), Activation::ShowToolbar);
     }
 
     #[test]

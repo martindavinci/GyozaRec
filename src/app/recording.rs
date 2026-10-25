@@ -4,7 +4,7 @@ use super::surface::WindowSurface;
 use gyozarec::bridge::RecordingCommand;
 use gyozarec::geometry::{MonitorInfo, PixelRect, PixelSize};
 use gyozarec::i18n::Texts;
-use gyozarec::platform::{exclude_from_capture, make_color_keyed};
+use gyozarec::platform::{allow_tiny_window, exclude_from_capture, make_color_keyed};
 use gyozarec::presentation::format_elapsed;
 use gyozarec::recording::{
     PanelAction, PanelInput, PanelMode, frame_bounds, panel_step, place_panel, render_frame,
@@ -45,6 +45,7 @@ fn popup(event_loop: &ActiveEventLoop, rect: PixelRect) -> Option<WindowSurface>
         .with_position(PhysicalPosition::new(rect.x, rect.y))
         .with_inner_size(PhysicalSize::new(rect.width.max(1) as u32, rect.height.max(1) as u32));
     let surface = WindowSurface::pinned(event_loop.create_window(attrs).ok()?, rect);
+    allow_tiny_window(surface.hwnd(), rect);
     exclude_from_capture(surface.hwnd());
     Some(surface)
 }
@@ -275,19 +276,20 @@ mod tests {
     use winit::platform::windows::EventLoopBuilderExtWindows;
 
     struct FrameProbe {
-        region: PixelRect,
-        frame: Option<WindowSurface>,
+        regions: Vec<PixelRect>,
+        frames: Vec<WindowSurface>,
     }
 
     impl ApplicationHandler for FrameProbe {
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-            if self.frame.is_none() {
-                self.frame = open_frame(event_loop, self.region);
+            if self.frames.is_empty() {
+                self.frames =
+                    self.regions.iter().filter_map(|r| open_frame(event_loop, *r)).collect();
             }
         }
 
-        fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, mut event: WindowEvent) {
-            if let Some(frame) = &self.frame {
+        fn window_event(&mut self, _: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
+            if let Some(frame) = self.frames.iter().find(|f| f.window.id() == id) {
                 frame.keep_on_target(&mut event);
             }
         }
@@ -402,17 +404,22 @@ mod tests {
             .find(|m| !m.bounds.contains(primary))
             .or_else(|| monitors.first())
             .expect("a monitor");
-        let region = PixelRect::new(target.bounds.x + 200, target.bounds.y + 200, 160, 120);
+        let (x, y) = (target.bounds.x + 200, target.bounds.y + 200);
+        // A normal area, and one far below Windows' default minimum window size.
+        let regions = vec![PixelRect::new(x, y, 160, 120), PixelRect::new(x + 300, y, 20, 12)];
         let mut event_loop = EventLoop::builder().with_any_thread(true).build().unwrap();
-        let mut probe = FrameProbe { region, frame: None };
+        let mut probe = FrameProbe { regions: regions.clone(), frames: Vec::new() };
         for _ in 0..5 {
             event_loop.pump_app_events(Some(Duration::from_millis(40)), &mut probe);
         }
-        let frame = probe.frame.as_ref().expect("frame window");
-        assert_eq!(gyozarec::platform::layered_color_key(frame.hwnd()), Some(FRAME_KEY));
-        let expected = frame_bounds(region, FRAME_THICKNESS);
-        let pos = frame.window.outer_position().unwrap();
-        let size = frame.window.inner_size();
-        assert_eq!(PixelRect::new(pos.x, pos.y, size.width as i32, size.height as i32), expected);
+        assert_eq!(probe.frames.len(), 2, "frame windows");
+        for (frame, region) in probe.frames.iter().zip(regions) {
+            assert_eq!(gyozarec::platform::layered_color_key(frame.hwnd()), Some(FRAME_KEY));
+            let expected = frame_bounds(region, FRAME_THICKNESS);
+            let pos = frame.window.outer_position().unwrap();
+            let size = frame.window.inner_size();
+            let actual = PixelRect::new(pos.x, pos.y, size.width as i32, size.height as i32);
+            assert_eq!(actual, expected, "{region:?}");
+        }
     }
 }

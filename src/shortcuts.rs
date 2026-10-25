@@ -111,6 +111,31 @@ pub enum ExitPlan {
     CancelRecording,
 }
 
+/// The stage to cancel: a recording wins over a selection, and a selection
+/// that has already ended does not count.
+pub fn stage(busy: bool, selecting: bool, recording: bool) -> Stage {
+    match (busy, recording, selecting) {
+        (false, ..) => Stage::Idle,
+        (true, true, _) => Stage::Recording,
+        (true, false, true) => Stage::Selecting,
+        (true, false, false) => Stage::Capturing,
+    }
+}
+
+/// UI requests a capture can still send after the user asked to quit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Incoming {
+    Selection,
+    Recording,
+    Other,
+}
+
+/// While quitting, a delayed capture must not open a selection or start a
+/// recording; everything else (e.g. the final result) is still handled.
+pub fn accepts(exit_pending: bool, incoming: Incoming) -> bool {
+    !exit_pending || incoming == Incoming::Other
+}
+
 pub fn exit_plan(stage: Stage) -> ExitPlan {
     match stage {
         Stage::Idle => ExitPlan::ExitNow,
@@ -211,6 +236,23 @@ mod tests {
     fn close_policy_uses_actual_tray() {
         assert_eq!(close_policy(true), ClosePolicy::HideToTray);
         assert_eq!(close_policy(false), ClosePolicy::Exit);
+    }
+
+    #[test]
+    fn stage_prefers_recording_and_ignores_finished_selection() {
+        assert_eq!(stage(false, true, true), Stage::Idle);
+        assert_eq!(stage(true, true, true), Stage::Recording);
+        assert_eq!(stage(true, true, false), Stage::Selecting);
+        assert_eq!(stage(true, false, false), Stage::Capturing);
+    }
+
+    #[test]
+    fn nothing_new_starts_while_quitting() {
+        assert!(!accepts(true, Incoming::Selection));
+        assert!(!accepts(true, Incoming::Recording));
+        assert!(accepts(true, Incoming::Other));
+        assert!(accepts(false, Incoming::Selection));
+        assert!(accepts(false, Incoming::Recording));
     }
 
     #[test]

@@ -31,6 +31,7 @@ const ID_SHORTCUTS: u32 = 8;
 const ID_PRINT_SCREEN: u32 = 9;
 /// Widest hint line before wrapping, in logical pixels.
 const HINT_WIDTH: f32 = 340.0;
+const COLUMN_GAP: f32 = 28.0;
 const ID_LANGUAGE: u32 = 15;
 const ID_OK: u32 = 20;
 const ID_CANCEL: u32 = 21;
@@ -166,36 +167,12 @@ fn build_ui(form: &OptionsForm, texts: &Texts, shortcuts: &[ShortcutLine], fonts
         let check = WidgetKind::Check { label: text.into(), checked };
         push_row(vec![(id, check)], PAD, &mut widgets, &mut y);
     }
+    let left_bottom = y;
 
-    let listed: Vec<&ShortcutLine> = shortcuts
-        .iter()
-        .filter(
-            |l| if l.print_screen { form.print_screen_captures } else { form.shortcuts_enabled },
-        )
-        .collect();
-    let mut next_id = 400;
-    let mut text_row = |text: String, color, widgets: &mut Vec<Widget>, y: &mut f32| {
-        next_id += 1;
-        let kind = WidgetKind::Label { text, color };
-        push_row(vec![(next_id, kind)], PAD + 26.0, widgets, y);
-    };
-    if !listed.is_empty() {
-        text_row(texts.shortcuts_title.into(), GYOZA.text, &mut widgets, &mut y);
-        for l in listed {
-            let mut text = format!("{} — {}", l.label, l.keys);
-            if !l.available {
-                text = format!("{text} ({})", texts.shortcut_unavailable);
-            }
-            let color = if l.available { GYOZA.text } else { GYOZA.error };
-            text_row(text, color, &mut widgets, &mut y);
-        }
-    }
-    if form.print_screen_captures {
-        for line in wrap(texts.print_screen_hint, HINT_WIDTH, fonts) {
-            text_row(line, GYOZA.disabled_text, &mut widgets, &mut y);
-        }
-    }
-
+    // Right column: recording parameters, language, then the shortcut list,
+    // so the window stays short enough for small screens.
+    let right_x = widgets.iter().map(|w| w.rect.right()).fold(0.0, f32::max) + COLUMN_GAP;
+    let mut y = PAD;
     let dropdowns: Vec<(u32, &str, String)> = COMBOS
         .iter()
         .map(|(id, _)| (*id, combo_label(*id, texts), combo_value(form, *id).to_string()))
@@ -211,14 +188,45 @@ fn build_ui(form: &OptionsForm, texts: &Texts, shortcuts: &[ShortcutLine], fonts
         .fold(0.0, f32::max);
     for (id, text, value) in dropdowns {
         let value = WidgetKind::Button { label: value, dropdown: true };
-        let mut row = layout_row(vec![(200 + id, label(text))], PAD, y, 0.0, fonts, &GYOZA);
-        let button = layout_row(vec![(id, value)], PAD + label_w + 16.0, y, 0.0, fonts, &GYOZA);
+        let mut row = layout_row(vec![(200 + id, label(text))], right_x, y, 0.0, fonts, &GYOZA);
+        let button = layout_row(vec![(id, value)], right_x + label_w + 16.0, y, 0.0, fonts, &GYOZA);
         let row_h = button[0].rect.h;
         row[0].rect.y = y + (row_h - row[0].rect.h) / 2.0;
         y += row_h + ROW_GAP;
         widgets.extend(row);
         widgets.extend(button);
     }
+
+    let listed: Vec<&ShortcutLine> = shortcuts
+        .iter()
+        .filter(
+            |l| if l.print_screen { form.print_screen_captures } else { form.shortcuts_enabled },
+        )
+        .collect();
+    let mut next_id = 400;
+    let mut text_row = |text: String, color, widgets: &mut Vec<Widget>, y: &mut f32| {
+        next_id += 1;
+        let kind = WidgetKind::Label { text, color };
+        push_row(vec![(next_id, kind)], right_x, widgets, y);
+    };
+    if !listed.is_empty() {
+        y += ROW_GAP;
+        text_row(texts.shortcuts_title.into(), GYOZA.text, &mut widgets, &mut y);
+        for l in listed {
+            let mut text = format!("{} — {}", l.label, l.keys);
+            if !l.available {
+                text = format!("{text} ({})", texts.shortcut_unavailable);
+            }
+            let color = if l.available { GYOZA.text } else { GYOZA.error };
+            text_row(text, color, &mut widgets, &mut y);
+        }
+    }
+    if form.print_screen_captures {
+        for line in wrap(texts.print_screen_hint, HINT_WIDTH, fonts) {
+            text_row(line, GYOZA.disabled_text, &mut widgets, &mut y);
+        }
+    }
+    let mut y = y.max(left_bottom);
 
     y += ROW_GAP;
     let ok = WidgetKind::Button { label: texts.ok.into(), dropdown: false };
@@ -441,5 +449,36 @@ impl OptionsWindow {
             _ => {}
         }
         OptionsResult::Open
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    /// Fits a 768-pixel-high screen at 125% scaling (614 logical pixels
+    /// minus the title bar), with every option that adds rows turned on.
+    #[test]
+    fn options_fit_a_small_screen_in_every_language() {
+        let form = OptionsForm {
+            shortcuts_enabled: true,
+            print_screen_captures: true,
+            ..OptionsForm::from_settings(&gyozarec::settings::AppSettings::default())
+        };
+        for lang in Language::ALL {
+            let texts = lang.texts();
+            let lines: Vec<ShortcutLine> = (0..5)
+                .map(|i| ShortcutLine {
+                    label: texts.quick_actions[i % 4],
+                    keys: "Ctrl+Shift+F10",
+                    print_screen: i == 4,
+                    available: false,
+                })
+                .collect();
+            let fonts = fonts_for(lang, &form);
+            let (w, h) = logical_size(&build_ui(&form, texts, &lines, &fonts));
+            assert!(h <= 560.0, "{lang:?}: {h} logical pixels high");
+            assert!(w <= 1000.0, "{lang:?}: {w} logical pixels wide");
+        }
     }
 }

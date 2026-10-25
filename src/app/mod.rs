@@ -25,8 +25,8 @@ use gyozarec::presentation::{
 use gyozarec::quick::{QuickAction, apply, can_start};
 use gyozarec::settings::SettingsStore;
 use gyozarec::shortcuts::{
-    ClosePolicy, ExitPlan, PRINT_SCREEN, SHORTCUTS, Shortcuts, Stage, close_policy, exit_plan,
-    wanted,
+    ClosePolicy, ExitPlan, Incoming, PRINT_SCREEN, SHORTCUTS, Shortcuts, accepts, close_policy,
+    exit_plan, stage, wanted,
 };
 use gyozarec::uikit::painter::Fonts;
 use hotkeys::HotkeyRegistrar;
@@ -226,12 +226,8 @@ impl App {
 
     /// Quits now, or as soon as the running capture has been cancelled.
     fn request_exit(&mut self, event_loop: &ActiveEventLoop) {
-        let stage = match (self.state.busy, &self.overlay, &self.recording) {
-            (false, ..) => Stage::Idle,
-            (true, Some(_), _) => Stage::Selecting,
-            (true, None, Some(_)) => Stage::Recording,
-            (true, None, None) => Stage::Capturing,
-        };
+        let selecting = self.overlay.as_ref().is_some_and(|o| !o.is_finished());
+        let stage = stage(self.state.busy, selecting, self.recording.is_some());
         match exit_plan(stage) {
             ExitPlan::ExitNow => event_loop.exit(),
             ExitPlan::WaitForCapture => self.exit_pending = true,
@@ -399,9 +395,14 @@ impl App {
                 if let Some(mut old) = self.overlay.take() {
                     old.cancel();
                 }
+                if !accepts(self.exit_pending, Incoming::Selection) {
+                    let _ = reply.send(None);
+                    return;
+                }
                 let cursor = Win32Cursor.position();
-                self.overlay =
-                    Some(OverlaySession::open(event_loop, request, reply, cursor, &self.fonts));
+                let session = OverlaySession::open(event_loop, request, reply, cursor, &self.fonts);
+                // A session that could not open any window has already replied.
+                self.overlay = (!session.is_finished()).then_some(session);
             }
             UiRequest::CaptureFinished(outcome) => {
                 self.state.busy = false;
@@ -411,6 +412,11 @@ impl App {
                 }
                 self.state.apply_outcome(&outcome);
                 self.refresh_toolbar();
+            }
+            UiRequest::RecordingStarted { .. }
+                if !accepts(self.exit_pending, Incoming::Recording) =>
+            {
+                // Dropping the command channel makes the bridge cancel it.
             }
             UiRequest::RecordingStarted { region, monitor, max, commands } => {
                 // If the panel cannot open, `commands` is dropped and the

@@ -15,7 +15,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 ### Changed
 - "Sound on capture" is now "In-app sounds".
 
-
+## [0.2.0] - 2026-10-25
 
 ### Added
 - Notification area icon (on by default): closing the toolbar hides it; the icon's menu offers every capture, Options and Exit.

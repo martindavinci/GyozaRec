@@ -131,7 +131,9 @@ impl RecordingSession {
     }
 
     fn rebuild(&mut self, fonts: &Fonts) {
-        self.ui = build_panel_ui(self.elapsed, self.max, self.paused, fonts);
+        let mut ui = build_panel_ui(self.elapsed, self.max, self.paused, fonts);
+        ui.carry_state_from(&self.ui);
+        self.ui = ui;
         self.panel.window.request_redraw();
     }
 

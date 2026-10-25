@@ -105,6 +105,13 @@ impl Ui {
         Ui { widgets, hover: None, pressed: None }
     }
 
+    /// Keeps the hover and press of `old` for widgets that still exist, so a
+    /// rebuild between press and release does not lose the click.
+    pub fn carry_state_from(&mut self, old: &Ui) {
+        let exists = |id: Option<u32>| id.filter(|id| self.widget(*id).is_some());
+        (self.hover, self.pressed) = (exists(old.hover), exists(old.pressed));
+    }
+
     pub fn widget_mut(&mut self, id: u32) -> Option<&mut Widget> {
         self.widgets.iter_mut().find(|w| w.id == id)
     }
@@ -257,6 +264,20 @@ mod tests {
 
     fn btn(l: &str) -> WidgetKind {
         WidgetKind::Button { label: l.into(), dropdown: false }
+    }
+
+    #[test]
+    fn a_click_survives_a_rebuild_between_press_and_release() {
+        let f = Fonts::embedded();
+        let row =
+            || layout_row(vec![(1, btn("Stop")), (2, btn("Cancel"))], 0.0, 0.0, 6.0, &f, &GYOZA);
+        let mut old = Ui::new(row());
+        let (x, y) = (old.widgets[0].rect.x + 2.0, old.widgets[0].rect.y + 2.0);
+        old.pointer_moved(x, y);
+        old.pointer_down(x, y);
+        let mut new = Ui::new(row());
+        new.carry_state_from(&old);
+        assert_eq!(new.pointer_up(x, y), Some(1));
     }
 
     #[test]

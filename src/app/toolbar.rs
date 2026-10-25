@@ -97,7 +97,9 @@ impl Toolbar {
 
     /// Rebuilds widgets from `state` and resizes the window to fit them.
     pub fn rebuild(&mut self, state: &ToolbarState, fonts: &Fonts) {
-        self.ui = build_ui(state, fonts);
+        let mut ui = build_ui(state, fonts);
+        ui.carry_state_from(&self.ui);
+        self.ui = ui;
         let logical = logical_size(&self.ui);
         if logical != self.logical {
             self.logical = logical;

@@ -206,7 +206,9 @@ impl OptionsWindow {
     }
 
     fn rebuild(&mut self) {
-        self.ui = build_ui(&self.form, self.texts, &self.fonts);
+        let mut ui = build_ui(&self.form, self.texts, &self.fonts);
+        ui.carry_state_from(&self.ui);
+        self.ui = ui;
         let logical = logical_size(&self.ui);
         if logical != self.logical {
             self.logical = logical;

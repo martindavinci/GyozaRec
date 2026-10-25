@@ -47,6 +47,7 @@ pub fn failure_text(failure: &Failure, texts: &Texts) -> String {
         Failure::User(UserError::NoMonitor) => texts.err_no_monitor.into(),
         Failure::User(UserError::NoFrames) => texts.err_no_frames.into(),
         Failure::User(UserError::RecordingFailed) => texts.err_recording_failed.into(),
+        Failure::User(UserError::CaptureFailed) => texts.err_capture_failed.into(),
         Failure::User(UserError::InvalidVideoSize { width, height }) => texts
             .err_video_size
             .replace("{w}", &width.to_string())

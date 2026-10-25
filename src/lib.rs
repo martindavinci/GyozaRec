@@ -1,6 +1,7 @@
 pub mod bridge;
 pub mod capture;
 pub mod clock;
+pub mod crash;
 mod error;
 pub mod geometry;
 pub mod i18n;

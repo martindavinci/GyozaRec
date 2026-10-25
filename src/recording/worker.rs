@@ -43,6 +43,11 @@ impl RecordingWorker {
         RecordingWorker { handle, control, clock, started, pauses, output }
     }
 
+    #[cfg(test)]
+    pub fn control(&self) -> Arc<AtomicU8> {
+        self.control.clone()
+    }
+
     /// Recorded time so far, without pauses.
     pub fn elapsed(&self) -> Duration {
         let pauses = self.pauses.lock().unwrap_or_else(|e| e.into_inner());
@@ -148,6 +153,42 @@ mod tests {
             w.wait(),
             RecordingResult { outcome: RecordingOutcome::Saved, path: Some(out), error: None }
         );
+    }
+
+    #[test]
+    fn worker_pause_and_resume_switch_the_control_flag() {
+        use crate::recording::{PAUSE, RUN, STOP};
+        use std::sync::Mutex;
+        use std::sync::atomic::Ordering;
+        use std::sync::mpsc;
+        let (entered_tx, entered) = mpsc::channel::<()>();
+        let (release, release_rx) = mpsc::channel::<()>();
+        let (entered_tx, release_rx) = (Mutex::new(entered_tx), Mutex::new(release_rx));
+        let grabber = FakeGrabber::with_hook(move |n| {
+            if n == 1 {
+                entered_tx.lock().unwrap().send(()).unwrap();
+                release_rx.lock().unwrap().recv().unwrap();
+            }
+        });
+        let d = tempdir().unwrap();
+        let w = RecordingWorker::spawn(
+            Arc::new(grabber),
+            Arc::new(FakeClock::default()),
+            LoopConfig { max_duration: Duration::from_secs(60), ..cfg() },
+            Box::new(VecSink::default()),
+            d.path().join("a.gif"),
+        );
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        let control = w.control();
+        w.pause();
+        assert_eq!(control.load(Ordering::SeqCst), PAUSE);
+        w.resume();
+        assert_eq!(control.load(Ordering::SeqCst), RUN);
+        control.store(STOP, Ordering::SeqCst);
+        w.pause();
+        assert_eq!(control.load(Ordering::SeqCst), STOP, "pause must not undo a stop");
+        release.send(()).unwrap();
+        assert_eq!(w.wait().outcome, RecordingOutcome::Saved);
     }
 
     #[test]

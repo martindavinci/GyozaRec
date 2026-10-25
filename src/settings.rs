@@ -109,7 +109,10 @@ impl SettingsStore {
     pub fn load(&self) -> AppSettings {
         fs::read_to_string(&self.path)
             .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .and_then(|text| {
+                // Some editors save UTF-8 with a byte order mark.
+                serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{FEFF}')).ok()
+            })
             .and_then(|mut value| {
                 migrate_legacy_mode(&mut value);
                 serde_json::from_value::<AppSettings>(value).ok()
@@ -167,6 +170,14 @@ mod tests {
             SettingsStore::new(d.path().join("s.json"), cap()).load(),
             AppSettings::defaults(&cap())
         );
+    }
+
+    #[test]
+    fn settings_with_utf8_bom_still_load() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, "\u{FEFF}{ \"gif_fps\": 15 }").unwrap();
+        assert_eq!(SettingsStore::new(p, cap()).load().gif_fps, 15);
     }
 
     #[test]

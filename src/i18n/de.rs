@@ -40,4 +40,6 @@ pub(super) const TEXTS: Texts = Texts {
     err_video_size: "ungültige Videogröße {w}×{h} (die Seiten müssen gerade sein)",
     err_recording_failed: "die Aufnahme ist fehlgeschlagen",
     err_capture_thread: "der Aufnahme-Thread reagiert nicht",
+    err_capture_failed: "die Aufnahme wurde unerwartet abgebrochen",
+    crash_message: "GyozaRec wurde wegen eines Fehlers beendet. Details wurden in {path} gespeichert",
 };

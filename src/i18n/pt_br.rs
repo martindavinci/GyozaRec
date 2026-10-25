@@ -33,4 +33,6 @@ pub(super) const TEXTS: Texts = Texts {
     err_video_size: "tamanho de vídeo inválido {w}×{h} (os lados precisam ser pares)",
     err_recording_failed: "a gravação falhou",
     err_capture_thread: "a thread de captura não está respondendo",
+    err_capture_failed: "a captura parou inesperadamente",
+    crash_message: "O GyozaRec foi fechado por causa de um erro. Os detalhes foram salvos em {path}",
 };

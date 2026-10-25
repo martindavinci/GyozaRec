@@ -55,6 +55,8 @@ impl Drop for MfSession {
 struct Writer {
     writer: Option<IMFSinkWriter>,
     stream: u32,
+    /// The recording thread that opened it; every later call must come from there.
+    thread: std::thread::ThreadId,
     // Declared last: dropped after the writer is released.
     _session: MfSession,
 }
@@ -104,11 +106,21 @@ impl Writer {
             input.SetUINT32(&MF_MT_DEFAULT_STRIDE, size.width as u32 * 4)?; // top-down
             writer.SetInputMediaType(stream, &input, None)?;
             writer.BeginWriting()?;
-            Ok(Writer { writer: Some(writer), stream, _session: session })
+            Ok(Writer {
+                writer: Some(writer),
+                stream,
+                thread: std::thread::current().id(),
+                _session: session,
+            })
         }
     }
 
     fn write(&self, frame: &PixelBuffer, t: Duration, fps: u32) -> crate::Result<()> {
+        debug_assert_eq!(
+            std::thread::current().id(),
+            self.thread,
+            "MP4 writer used off its thread"
+        );
         let writer = self
             .writer
             .as_ref()
@@ -132,6 +144,11 @@ impl Writer {
     }
 
     fn finalize(&mut self) -> crate::Result<()> {
+        debug_assert_eq!(
+            std::thread::current().id(),
+            self.thread,
+            "MP4 writer used off its thread"
+        );
         if let Some(writer) = self.writer.take() {
             // SAFETY: finalizing a writer that began writing.
             unsafe { writer.Finalize()? };

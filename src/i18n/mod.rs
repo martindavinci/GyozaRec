@@ -156,6 +156,9 @@ pub struct Texts {
     pub err_video_size: &'static str,
     pub err_recording_failed: &'static str,
     pub err_capture_thread: &'static str,
+    pub err_capture_failed: &'static str,
+    /// Shown when the app ends on an error; `{path}` is the crash log.
+    pub crash_message: &'static str,
 }
 
 #[cfg(test)]
@@ -236,6 +239,8 @@ mod tests {
                 t.err_video_size,
                 t.err_recording_failed,
                 t.err_capture_thread,
+                t.err_capture_failed,
+                t.crash_message,
             ];
             assert!(
                 all.iter()
@@ -243,6 +248,10 @@ mod tests {
                     .chain(&t.formats)
                     .chain(&t.delays)
                     .all(|s| !s.trim().is_empty()),
+                "{lang:?}"
+            );
+            assert!(
+                t.crash_message.contains("{path}") && !t.err_capture_failed.is_empty(),
                 "{lang:?}"
             );
             assert!(

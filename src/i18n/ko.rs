@@ -33,4 +33,6 @@ pub(super) const TEXTS: Texts = Texts {
     err_video_size: "잘못된 동영상 크기 {w}×{h} (변의 길이는 짝수여야 합니다)",
     err_recording_failed: "녹화에 실패했습니다",
     err_capture_thread: "캡처 스레드가 응답하지 않습니다",
+    err_capture_failed: "캡처가 예기치 않게 중지되었습니다",
+    crash_message: "오류로 인해 GyozaRec이 종료되었습니다. 자세한 내용은 {path}에 저장되었습니다",
 };

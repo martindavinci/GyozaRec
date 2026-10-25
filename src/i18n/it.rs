@@ -33,4 +33,6 @@ pub(super) const TEXTS: Texts = Texts {
     err_video_size: "dimensioni video non valide {w}×{h} (servono lati pari)",
     err_recording_failed: "registrazione non riuscita",
     err_capture_thread: "il thread di cattura non risponde",
+    err_capture_failed: "la cattura si è interrotta in modo imprevisto",
+    crash_message: "GyozaRec si è chiuso per un errore. I dettagli sono stati salvati in {path}",
 };

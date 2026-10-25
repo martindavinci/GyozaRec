@@ -33,6 +33,8 @@ pub enum UserError {
     InvalidVideoSize { width: i32, height: i32 },
     #[error("recording failed")]
     RecordingFailed,
+    #[error("the capture stopped unexpectedly")]
+    CaptureFailed,
 }
 
 /// What went wrong, as carried to the UI: known failures are translated

@@ -135,7 +135,12 @@ impl CaptureThread {
             .name("gyozarec-capture".into())
             .spawn(move || {
                 for settings in queue {
-                    let outcome = coordinator.capture(&settings);
+                    let run = std::panic::AssertUnwindSafe(|| coordinator.capture(&settings));
+                    let outcome = std::panic::catch_unwind(run).unwrap_or_else(|_| {
+                        // The panic hook has logged it; bring the toolbar back.
+                        sender.send(UiRequest::ShowToolbar);
+                        CaptureOutcome::failed(crate::UserError::CaptureFailed, false)
+                    });
                     if !sender.send(UiRequest::CaptureFinished(outcome)) {
                         break;
                     }
@@ -234,6 +239,26 @@ mod tests {
             ui.record(job(d.path(), 3600)).outcome,
             crate::recording::RecordingOutcome::Canceled
         );
+    }
+
+    #[test]
+    fn capture_thread_survives_a_panicking_capture() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 10, 10)));
+        h.coordinator.grabber = std::sync::Arc::new(crate::testing::FakeGrabber::with_hook(|_| {
+            panic!("grabber exploded")
+        }));
+        let (settings, log) = (h.settings(), h.log.clone());
+        let sender = FakeUiSender::with_log(log.clone());
+        let done = sender.finished_signal();
+        let t = CaptureThread::spawn(h.coordinator, sender);
+        for _ in 0..2 {
+            assert!(t.request(settings.clone()));
+            let o = done.recv_timeout(Duration::from_secs(5)).expect("an answer after a panic");
+            assert_eq!(o.kind, CaptureOutcomeKind::Failed);
+            assert_eq!(o.error, Some(crate::Failure::User(crate::UserError::CaptureFailed)));
+        }
+        let ev = log.lock().unwrap().clone();
+        assert!(ev.contains(&"ui:show".to_string()), "toolbar must come back: {ev:?}");
     }
 
     #[test]

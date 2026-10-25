@@ -33,4 +33,6 @@ pub(super) const TEXTS: Texts = Texts {
     err_video_size: "invalid video size {w}×{h} (sides must be even)",
     err_recording_failed: "recording failed",
     err_capture_thread: "the capture thread is not responding",
+    err_capture_failed: "the capture stopped unexpectedly",
+    crash_message: "GyozaRec stopped because of an error. Details were saved to {path}",
 };

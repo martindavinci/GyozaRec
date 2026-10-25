@@ -33,4 +33,6 @@ pub(super) const TEXTS: Texts = Texts {
     err_video_size: "无效的视频尺寸 {w}×{h}（边长必须为偶数）",
     err_recording_failed: "录制失败",
     err_capture_thread: "捕获线程无响应",
+    err_capture_failed: "捕获意外停止",
+    crash_message: "GyozaRec 因错误而退出。详细信息已保存到 {path}",
 };

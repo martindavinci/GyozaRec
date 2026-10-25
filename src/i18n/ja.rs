@@ -33,4 +33,6 @@ pub(super) const TEXTS: Texts = Texts {
     err_video_size: "動画サイズ {w}×{h} は無効です (辺の長さは偶数にしてください)",
     err_recording_failed: "録画に失敗しました",
     err_capture_thread: "キャプチャ スレッドが応答していません",
+    err_capture_failed: "キャプチャが予期せず停止しました",
+    crash_message: "エラーのため GyozaRec が終了しました。詳細は {path} に保存されました",
 };

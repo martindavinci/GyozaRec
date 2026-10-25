@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use winit::event_loop::EventLoop;
 
 fn main() {
+    install_crash_log();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let options = StartupOptions::parse(&args);
     let user = std::env::var("USERNAME")
@@ -44,4 +45,15 @@ fn main() {
     if let Err(err) = event_loop.run_app(&mut app) {
         eprintln!("event loop error: {err}");
     }
+}
+
+/// Panics go to `crash.log` next to the settings, in the interface language.
+fn install_crash_log() {
+    use gyozarec::paths::AppPaths;
+    let paths = AppPaths::current();
+    let settings = gyozarec::settings::SettingsStore::from_paths(&paths).load();
+    let system = gyozarec::platform::system_ui_languages();
+    let language = gyozarec::i18n::resolve(settings.language(), &system);
+    let log_dir = paths.settings_file.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    gyozarec::crash::install(log_dir, language.texts().crash_message);
 }

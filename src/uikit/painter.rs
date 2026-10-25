@@ -292,11 +292,160 @@ impl Painter {
         }
     }
 
+    /// Paints on a copy of `img`, one logical unit per pixel. Captures are
+    /// opaque, so premultiplied RGBA is BGRA with red and blue swapped.
+    pub fn from_buffer(img: &crate::pixels::PixelBuffer) -> Painter {
+        Painter { pixmap: pixmap_of(img), scale: 1.0 }
+    }
+
+    /// The painted pixels as an opaque BGRA buffer placed at `origin`.
+    pub fn into_buffer(self, origin: PixelPoint) -> crate::pixels::PixelBuffer {
+        let (w, h) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
+        let mut bgra = self.pixmap.take();
+        for px in bgra.as_chunks_mut::<4>().0 {
+            px.swap(0, 2);
+            px[3] = 255;
+        }
+        let bounds = crate::geometry::PixelRect::new(origin.x, origin.y, w, h);
+        crate::pixels::PixelBuffer::new(bounds, bgra)
+    }
+
+    fn paint(color: Color, alpha: u8) -> Paint<'static> {
+        let (r, g, b) = color.rgb();
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(r, g, b, alpha);
+        paint.anti_alias = true;
+        paint
+    }
+
+    /// A free-hand line with round ends and joins; a single point is a dot.
+    pub fn stroke_polyline(&mut self, points: &[(f32, f32)], width: f32, color: Color, alpha: u8) {
+        let s = self.scale;
+        let paint = Painter::paint(color, alpha);
+        let Some(&(x0, y0)) = points.first() else { return };
+        if points.len() == 1 {
+            if let Some(dot) = PathBuilder::from_circle(x0 * s, y0 * s, (width * s / 2.0).max(0.5))
+            {
+                self.pixmap.fill_path(&dot, &paint, FillRule::Winding, Transform::identity(), None);
+            }
+            return;
+        }
+        let mut pb = PathBuilder::new();
+        pb.move_to(x0 * s, y0 * s);
+        for &(x, y) in &points[1..] {
+            pb.line_to(x * s, y * s);
+        }
+        let Some(path) = pb.finish() else { return };
+        let stroke = Stroke {
+            width: width * s,
+            line_cap: LineCap::Round,
+            line_join: tiny_skia::LineJoin::Round,
+            ..Stroke::default()
+        };
+        self.pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
+    /// The outline of `rect`, centered on its edges.
+    pub fn stroke_rect(&mut self, rect: RectF, width: f32, color: Color) {
+        let s = self.scale;
+        let Some(r) = tiny_skia::Rect::from_xywh(rect.x * s, rect.y * s, rect.w * s, rect.h * s)
+        else {
+            return;
+        };
+        let path = PathBuilder::from_rect(r);
+        let stroke = Stroke { width: width * s, ..Stroke::default() };
+        let paint = Painter::paint(color, 255);
+        self.pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
+    /// A thin dashed outline, for a selection in progress.
+    pub fn dashed_rect(&mut self, rect: RectF, color: Color) {
+        let s = self.scale;
+        let Some(r) = tiny_skia::Rect::from_xywh(rect.x * s, rect.y * s, rect.w * s, rect.h * s)
+        else {
+            return;
+        };
+        let path = PathBuilder::from_rect(r);
+        let stroke = Stroke {
+            width: 1.5 * s,
+            dash: tiny_skia::StrokeDash::new(vec![6.0 * s, 4.0 * s], 0.0),
+            ..Stroke::default()
+        };
+        let paint = Painter::paint(color, 255);
+        self.pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
+    /// Replaces each `block`-sized square of `rect` with its average color.
+    pub fn pixelate(&mut self, rect: RectF, block: f32) {
+        let s = self.scale;
+        let (w, h) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
+        let x0 = ((rect.x * s).round() as i32).clamp(0, w);
+        let y0 = ((rect.y * s).round() as i32).clamp(0, h);
+        let x1 = ((rect.right() * s).round() as i32).clamp(0, w);
+        let y1 = ((rect.bottom() * s).round() as i32).clamp(0, h);
+        let step = ((block * s).round() as i32).max(1);
+        let pixels = self.pixmap.pixels_mut();
+        for by in (y0..y1).step_by(step as usize) {
+            for bx in (x0..x1).step_by(step as usize) {
+                let (ex, ey) = ((bx + step).min(x1), (by + step).min(y1));
+                let mut sum = [0u32; 4];
+                for y in by..ey {
+                    for x in bx..ex {
+                        let p = pixels[(y * w + x) as usize];
+                        sum[0] += u32::from(p.red());
+                        sum[1] += u32::from(p.green());
+                        sum[2] += u32::from(p.blue());
+                        sum[3] += u32::from(p.alpha());
+                    }
+                }
+                let n = ((ex - bx) * (ey - by)).max(1) as u32;
+                let [r, g, b, a] = sum.map(|c| (c / n) as u8);
+                let Some(avg) = PremultipliedColorU8::from_rgba(r.min(a), g.min(a), b.min(a), a)
+                else {
+                    continue;
+                };
+                for y in by..ey {
+                    for x in bx..ex {
+                        pixels[(y * w + x) as usize] = avg;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Draws `img` stretched over `dest` with bilinear filtering.
+    pub fn image(&mut self, img: &crate::pixels::PixelBuffer, dest: RectF) {
+        let s = self.scale;
+        let src = pixmap_of(img);
+        let (sx, sy) = (dest.w * s / src.width() as f32, dest.h * s / src.height() as f32);
+        let transform = Transform::from_scale(sx, sy).post_translate(dest.x * s, dest.y * s);
+        let paint = tiny_skia::PixmapPaint {
+            quality: tiny_skia::FilterQuality::Bilinear,
+            ..Default::default()
+        };
+        self.pixmap.draw_pixmap(0, 0, src.as_ref(), &paint, transform, None);
+    }
+
     pub fn to_softbuffer(&self, out: &mut [u32]) {
         for (dst, p) in out.iter_mut().zip(self.pixmap.pixels()) {
             *dst = pack(*p);
         }
     }
+}
+
+/// An opaque BGRA buffer as a premultiplied RGBA pixmap.
+fn pixmap_of(img: &crate::pixels::PixelBuffer) -> Pixmap {
+    let (w, h) = (img.width().max(1) as u32, img.height().max(1) as u32);
+    let mut rgba = img.bgra.clone();
+    for px in rgba.as_chunks_mut::<4>().0 {
+        px.swap(0, 2);
+        px[3] = 255;
+    }
+    if rgba.len() != (w * h * 4) as usize {
+        return Pixmap::new(w, h).expect("non-empty pixmap");
+    }
+    Pixmap::from_vec(rgba, tiny_skia::IntSize::from_wh(w, h).expect("non-empty size"))
+        .expect("pixmap of the buffer size")
 }
 
 fn pack(p: PremultipliedColorU8) -> u32 {

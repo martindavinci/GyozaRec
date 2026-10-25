@@ -5,6 +5,7 @@ pub mod capture;
 pub mod clock;
 pub mod convert;
 pub mod crash;
+pub mod editor;
 mod error;
 pub mod geometry;
 pub mod i18n;

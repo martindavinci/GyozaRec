@@ -3,9 +3,11 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Manual runs only build the packages (artifacts); they never publish.
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -17,15 +19,20 @@ jobs:
           - os: windows-2022
           # phase 2: macos-latest · phase 3: ubuntu-22.04
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - name: Tag matches version
-        run: cargo xtask check-tag ${{ github.ref_name }}
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: cargo xtask check-tag "$env:TAG"
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-packager
+          tool: cargo-packager@0.11.8
       - name: Installer and portable zip
         run: cargo xtask dist
       - uses: actions/upload-artifact@v4
@@ -38,7 +45,10 @@ jobs:
 
   publish:
     needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -48,6 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
         run: >
-          gh release create "${{ github.ref_name }}" dist/*
-          --draft --title "GyozaRec ${{ github.ref_name }}" --generate-notes
+          gh release create "$TAG" dist/*
+          --draft --title "GyozaRec $TAG" --generate-notes

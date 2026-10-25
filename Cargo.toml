@@ -2,6 +2,7 @@
 [package]
 name = "gyozarec"
 version = "0.1.0"
+authors = ["Martin DaVinci"]
 edition = "2024"
 rust-version = "1.93"
 license = "GPL-3.0-or-later"

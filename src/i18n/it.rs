@@ -59,5 +59,9 @@ pub(super) const TEXTS: Texts = Texts {
     err_recording_failed: "registrazione non riuscita",
     err_capture_thread: "il thread di cattura non risponde",
     err_capture_failed: "la cattura si è interrotta in modo imprevisto",
+    err_video_unreadable: "impossibile leggere questo video",
+    convert_video: "Converti un video in GIF…",
+    converting: "Conversione in GIF… {percent}%",
+    conversion_canceled: "Conversione annullata",
     crash_message: "GyozaRec si è chiuso per un errore. I dettagli sono stati salvati in {path}",
 };

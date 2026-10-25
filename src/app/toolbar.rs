@@ -22,6 +22,7 @@ const ID_OPTIONS: u32 = 4;
 const ID_STATUS: u32 = 5;
 const ID_FOLDER: u32 = 6;
 const ID_FORMAT: u32 = 7;
+const ID_CANCEL_CONVERT: u32 = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolbarAction {
@@ -31,6 +32,7 @@ pub enum ToolbarAction {
     DelayMenu,
     Options,
     OpenFolder,
+    CancelConversion,
 }
 
 pub struct Toolbar {
@@ -64,7 +66,9 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let row1_bottom = widgets.iter().map(|w| w.rect.bottom()).fold(0.0, f32::max);
     let color = if state.status_is_error { GYOZA.error } else { GYOZA.text };
     let mut row2 = vec![(ID_STATUS, WidgetKind::Label { text: state.status.clone(), color })];
-    if state.last_saved.is_some() {
+    if state.converting.is_some() {
+        row2.push((ID_CANCEL_CONVERT, WidgetKind::Link { text: texts.cancel.into() }));
+    } else if state.last_saved.is_some() {
         row2.push((ID_FOLDER, WidgetKind::Link { text: texts.open_folder.into() }));
     }
     widgets.extend(layout_row(row2, PAD, row1_bottom + 8.0, 12.0, fonts, &GYOZA));
@@ -167,6 +171,7 @@ impl Toolbar {
                     ID_DELAY => Some(ToolbarAction::DelayMenu),
                     ID_OPTIONS => Some(ToolbarAction::Options),
                     ID_FOLDER => Some(ToolbarAction::OpenFolder),
+                    ID_CANCEL_CONVERT => Some(ToolbarAction::CancelConversion),
                     _ => None,
                 };
             }

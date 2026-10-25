@@ -179,6 +179,11 @@ pub struct Texts {
     pub err_recording_failed: &'static str,
     pub err_capture_thread: &'static str,
     pub err_capture_failed: &'static str,
+    pub err_video_unreadable: &'static str,
+    pub convert_video: &'static str,
+    /// `{percent}` is the progress, 0 to 100.
+    pub converting: &'static str,
+    pub conversion_canceled: &'static str,
     /// Shown when the app ends on an error; `{path}` is the crash log.
     pub crash_message: &'static str,
 }
@@ -268,6 +273,10 @@ mod tests {
                 t.err_capture_thread,
                 t.err_capture_failed,
                 t.crash_message,
+                t.err_video_unreadable,
+                t.convert_video,
+                t.converting,
+                t.conversion_canceled,
             ];
             assert!(
                 all.iter()

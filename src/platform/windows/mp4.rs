@@ -23,12 +23,12 @@ use windows::core::HSTRING;
 const HNS_PER_SECOND: i64 = 10_000_000;
 
 /// COM + Media Foundation started on the current thread; undone on drop.
-struct MfSession {
+pub(super) struct MfSession {
     com: bool,
 }
 
 impl MfSession {
-    fn start() -> crate::Result<MfSession> {
+    pub(super) fn start() -> crate::Result<MfSession> {
         // SAFETY: plain COM/MF initialization for this thread, balanced in Drop.
         unsafe {
             let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();

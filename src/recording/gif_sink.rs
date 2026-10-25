@@ -108,6 +108,20 @@ impl GifSink {
     }
 }
 
+impl GifSink {
+    /// Finishes with the last frame lasting until `end`; one frame period when
+    /// `end` is not after it.
+    pub fn finish_at(&mut self, end: Duration) -> crate::Result<()> {
+        let Some((last, last_t)) = self.pending.take() else {
+            return Err(crate::UserError::NoFrames.into());
+        };
+        let nominal = Duration::from_secs(1) / self.fps.max(1);
+        let length = if end > last_t { end - last_t } else { nominal };
+        self.send(last, centiseconds(length))?;
+        self.join()
+    }
+}
+
 /// A cancelled recording drops the sink without `finish`: the encoder still
 /// has to let go of the file before it is deleted.
 impl Drop for GifSink {
@@ -175,12 +189,7 @@ impl FrameSink for GifSink {
     }
 
     fn finish(&mut self) -> crate::Result<()> {
-        let Some((last, _)) = self.pending.take() else {
-            return Err(crate::UserError::NoFrames.into());
-        };
-        let nominal = Duration::from_secs(1) / self.fps.max(1);
-        self.send(last, centiseconds(nominal))?;
-        self.join()
+        self.finish_at(Duration::ZERO)
     }
 }
 
@@ -259,6 +268,17 @@ mod tests {
             out.push((f.left, f.top, f.width, f.height));
         }
         out
+    }
+
+    #[test]
+    fn finish_at_sets_the_last_delay() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("a.gif");
+        let mut s = GifSink::create(&p, PixelSize { width: 20, height: 20 }, 800, 10).unwrap();
+        s.push(&shade(20, 20, 0), Duration::ZERO).unwrap();
+        s.push(&shade(20, 20, 1), Duration::from_millis(100)).unwrap();
+        s.finish_at(Duration::from_millis(150)).unwrap();
+        assert_eq!(frames(&p).2, vec![10, 5]);
     }
 
     #[test]

@@ -11,6 +11,7 @@ use gyozarec::bridge::{
 };
 use gyozarec::capture::{CaptureCoordinator, CursorLocator, ScreenGrabber};
 use gyozarec::clock::{Clock, SystemClock};
+use gyozarec::convert::{ConvertEnd, ConvertJob, convert_to_gif, gif_path_for};
 use gyozarec::i18n::{Language, resolve};
 use gyozarec::instance::InstanceCommand;
 use gyozarec::paths::AppPaths;
@@ -36,6 +37,7 @@ use options::{OptionsResult, OptionsWindow, ShortcutLine};
 use overlay::OverlaySession;
 use recording::RecordingSession;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use toolbar::{Toolbar, ToolbarAction};
 use tray::TrayCommand;
@@ -53,6 +55,9 @@ pub fn window_icon() -> Option<winit::window::Icon> {
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
 
+/// Format menu item that converts a video to GIF.
+const CONVERT_MENU_ID: &str = "convert";
+
 /// Events delivered to the UI thread through the event loop proxy.
 pub enum AppEvent {
     Ui(UiRequest),
@@ -62,6 +67,21 @@ pub enum AppEvent {
     Shortcut(u32),
     /// Left click on the notification icon.
     TrayClick,
+    Convert(ConvertEvent),
+}
+
+/// News from the video conversion thread.
+pub enum ConvertEvent {
+    Progress(u8),
+    Done(PathBuf),
+    Failed(gyozarec::Failure),
+    Canceled,
+}
+
+/// A video being turned into a GIF on its own thread.
+struct Conversion {
+    cancel: Arc<AtomicBool>,
+    handle: std::thread::JoinHandle<()>,
 }
 
 /// Sends coordinator requests into the event loop.
@@ -97,6 +117,8 @@ pub struct App {
     toolbar_hidden: bool,
     /// Quit as soon as the running capture has ended.
     exit_pending: bool,
+    proxy: EventLoopProxy<AppEvent>,
+    conversion: Option<Conversion>,
 }
 
 impl App {
@@ -144,7 +166,7 @@ impl App {
                 }
             },
         ));
-        let tray_proxy = Mutex::new(proxy);
+        let tray_proxy = Mutex::new(proxy.clone());
         tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
             if let tray_icon::TrayIconEvent::Click {
                 button: tray_icon::MouseButton::Left,
@@ -173,6 +195,8 @@ impl App {
             shortcuts: Shortcuts::default(),
             toolbar_hidden: false,
             exit_pending: false,
+            proxy,
+            conversion: None,
         }
     }
 
@@ -238,8 +262,79 @@ impl App {
         }
     }
 
+    /// Asks for a video and turns it into a GIF next to it, with the GIF options.
+    fn start_conversion(&mut self) {
+        if !self.state.can_convert() || self.options.is_some() {
+            return;
+        }
+        let texts = self.state.texts();
+        let Some(source) = rfd::FileDialog::new()
+            .set_title(texts.convert_video)
+            .add_filter("MP4", &["mp4"])
+            .pick_file()
+        else {
+            return;
+        };
+        let s = &self.state.settings;
+        let job = ConvertJob {
+            target: gif_path_for(&source),
+            source,
+            fps: s.gif_fps,
+            max_long_side: s.gif_max_long_side,
+            max_duration: std::time::Duration::from_secs(u64::from(s.gif_max_seconds)),
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (flag, proxy) = (cancel.clone(), self.proxy.clone());
+        let send = move |event| {
+            let _ = proxy.send_event(AppEvent::Convert(event));
+        };
+        let spawned =
+            std::thread::Builder::new().name("gyozarec-convert".into()).spawn(move || {
+                let mut shown = None;
+                let end =
+                    convert_to_gif(&gyozarec::platform::MfVideoReader, &job, &flag, &mut |p| {
+                        let percent = (p * 100.0) as u8;
+                        if shown.replace(percent) != Some(percent) {
+                            send(ConvertEvent::Progress(percent));
+                        }
+                    });
+                send(match end {
+                    Ok(ConvertEnd::Done) => ConvertEvent::Done(job.target),
+                    Ok(ConvertEnd::Canceled) => ConvertEvent::Canceled,
+                    Err(err) => ConvertEvent::Failed(gyozarec::Failure::from(&err)),
+                });
+            });
+        if let Ok(handle) = spawned {
+            self.conversion = Some(Conversion { cancel, handle });
+            self.state.conversion_progress(0);
+            self.refresh_toolbar();
+        }
+    }
+
+    fn on_conversion(&mut self, event: ConvertEvent) {
+        match event {
+            ConvertEvent::Progress(percent) => self.state.conversion_progress(percent),
+            end => {
+                if let Some(c) = self.conversion.take() {
+                    let _ = c.handle.join();
+                }
+                match end {
+                    ConvertEvent::Done(path) => self.state.conversion_done(path),
+                    ConvertEvent::Failed(failure) => self.state.conversion_failed(&failure),
+                    _ => self.state.conversion_canceled(),
+                }
+            }
+        }
+        self.refresh_toolbar();
+    }
+
     /// Quits now, or as soon as the running capture has been cancelled.
     fn request_exit(&mut self, event_loop: &ActiveEventLoop) {
+        // A half-written GIF is deleted by the conversion itself.
+        if let Some(c) = self.conversion.take() {
+            c.cancel.store(true, Ordering::SeqCst);
+            let _ = c.handle.join();
+        }
         let selecting = self.overlay.as_ref().is_some_and(|o| !o.is_finished());
         let stage = stage(self.state.busy, selecting, self.recording.is_some());
         match exit_plan(stage) {
@@ -311,6 +406,16 @@ impl App {
         for (id, label, checked) in items {
             let _ = menu.append(&CheckMenuItem::with_id(id, label, true, checked, None));
         }
+        if action == ToolbarAction::FormatMenu {
+            let _ = menu.append(&muda::PredefinedMenuItem::separator());
+            let convert = muda::MenuItem::with_id(
+                CONVERT_MENU_ID,
+                texts.convert_video,
+                self.state.can_convert(),
+                None,
+            );
+            let _ = menu.append(&convert);
+        }
         let anchor = t.menu_anchor(action);
         let position =
             muda::dpi::Position::Physical(muda::dpi::PhysicalPosition::new(anchor.x, anchor.y));
@@ -379,6 +484,7 @@ impl App {
         if let Some(command) = tray::command(id) {
             match command {
                 TrayCommand::Quick(action) => self.start_quick(action),
+                TrayCommand::Convert => self.start_conversion(),
                 TrayCommand::Show => self.activate(),
                 TrayCommand::Options => {
                     self.activate();
@@ -392,6 +498,10 @@ impl App {
             if let Some(o) = &mut self.options {
                 o.on_menu(id);
             }
+            return;
+        }
+        if id == CONVERT_MENU_ID {
+            self.start_conversion();
             return;
         }
         let index = |prefix: &str| id.strip_prefix(prefix).and_then(|v| v.parse::<usize>().ok());
@@ -519,6 +629,7 @@ impl ApplicationHandler<AppEvent> for App {
                 }
             }
             AppEvent::TrayClick => self.activate(),
+            AppEvent::Convert(event) => self.on_conversion(event),
             AppEvent::Instance(InstanceCommand::Quick(action)) => self.start_quick(action),
             AppEvent::Instance(InstanceCommand::Activate) => self.activate(),
         }
@@ -571,6 +682,11 @@ impl ApplicationHandler<AppEvent> for App {
                 | ToolbarAction::DelayMenu),
             ) => self.show_menu(action),
             Some(ToolbarAction::OpenFolder) => self.open_folder(),
+            Some(ToolbarAction::CancelConversion) => {
+                if let Some(c) = &self.conversion {
+                    c.cancel.store(true, Ordering::SeqCst);
+                }
+            }
             Some(ToolbarAction::Options) => self.open_options(event_loop),
             None => {}
         }

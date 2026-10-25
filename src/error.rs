@@ -35,6 +35,8 @@ pub enum UserError {
     RecordingFailed,
     #[error("the capture stopped unexpectedly")]
     CaptureFailed,
+    #[error("this video can't be read")]
+    VideoUnreadable,
 }
 
 /// What went wrong, as carried to the UI: known failures are translated

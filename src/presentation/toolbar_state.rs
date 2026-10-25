@@ -66,6 +66,7 @@ pub fn failure_text(failure: &Failure, texts: &Texts) -> String {
         Failure::User(UserError::NoFrames) => texts.err_no_frames.into(),
         Failure::User(UserError::RecordingFailed) => texts.err_recording_failed.into(),
         Failure::User(UserError::CaptureFailed) => texts.err_capture_failed.into(),
+        Failure::User(UserError::VideoUnreadable) => texts.err_video_unreadable.into(),
         Failure::User(UserError::InvalidVideoSize { width, height }) => texts
             .err_video_size
             .replace("{w}", &width.to_string())
@@ -110,6 +111,8 @@ pub struct ToolbarState {
     shown_outcome: Option<CaptureOutcome>,
     /// The status line still shows the starting hint.
     showing_hint: bool,
+    /// Progress of the running video conversion, in percent.
+    pub converting: Option<u8>,
 }
 
 impl ToolbarState {
@@ -123,6 +126,7 @@ impl ToolbarState {
             busy: false,
             shown_outcome: None,
             showing_hint: true,
+            converting: None,
         };
         state.status = state.hint();
         state
@@ -143,7 +147,9 @@ impl ToolbarState {
     /// Switches language; the status follows unless it is free text.
     pub fn set_language(&mut self, language: Language) {
         self.language = language;
-        if let Some(o) = &self.shown_outcome {
+        if let Some(percent) = self.converting {
+            self.conversion_progress(percent);
+        } else if let Some(o) = &self.shown_outcome {
             let (text, _) = format_status(o, &self.status, self.texts());
             self.status = text;
         } else if self.showing_hint {
@@ -166,6 +172,35 @@ impl ToolbarState {
             self.shown_outcome = Some(o.clone());
             self.showing_hint = false;
         }
+    }
+
+    /// Only one video is converted at a time.
+    pub fn can_convert(&self) -> bool {
+        self.converting.is_none()
+    }
+
+    pub fn conversion_progress(&mut self, percent: u8) {
+        self.converting = Some(percent.min(100));
+        self.status = self.texts().converting.replace("{percent}", &percent.min(100).to_string());
+        self.status_is_error = false;
+        self.shown_outcome = None;
+        self.showing_hint = false;
+    }
+
+    pub fn conversion_done(&mut self, path: PathBuf) {
+        self.converting = None;
+        self.apply_outcome(&CaptureOutcome::saved(path, false));
+    }
+
+    pub fn conversion_failed(&mut self, failure: &Failure) {
+        self.converting = None;
+        self.apply_outcome(&CaptureOutcome::failed(failure.clone(), false));
+    }
+
+    pub fn conversion_canceled(&mut self) {
+        self.converting = None;
+        self.status = self.texts().conversion_canceled.to_string();
+        self.status_is_error = false;
     }
 
     pub fn set_error(&mut self, msg: &str) {
@@ -198,6 +233,34 @@ mod tests {
         assert_eq!(DELAYS, [0, 1, 2, 3, 4, 5]);
         assert_eq!(delay_label(5, Language::En.texts()), "5 seconds");
         assert_eq!(delay_label(0, it), "Nessun ritardo");
+    }
+
+    #[test]
+    fn converting_shows_the_percent_and_blocks_a_second_conversion() {
+        let mut s = ToolbarState::new(AppSettings::default(), Language::En);
+        assert!(s.can_convert());
+        s.conversion_progress(42);
+        assert_eq!(s.status, "Converting to GIF… 42%");
+        assert!(!s.can_convert());
+        s.set_language(Language::It);
+        assert_eq!(s.status, "Conversione in GIF… 42%");
+        s.conversion_canceled();
+        assert_eq!(s.status, "Conversione annullata");
+        assert!(s.can_convert());
+    }
+
+    #[test]
+    fn conversion_done_offers_the_folder() {
+        let mut s = ToolbarState::new(AppSettings::default(), Language::En);
+        s.conversion_progress(99);
+        s.conversion_done(PathBuf::from("C:/v/clip.gif"));
+        assert_eq!(s.status, "Saved: clip.gif");
+        assert_eq!(s.last_saved, Some(PathBuf::from("C:/v/clip.gif")));
+        assert!(s.can_convert());
+        s.conversion_progress(10);
+        s.conversion_failed(&Failure::User(UserError::VideoUnreadable));
+        assert_eq!(s.status, "Error: this video can't be read");
+        assert!(s.status_is_error && s.can_convert());
     }
 
     #[test]

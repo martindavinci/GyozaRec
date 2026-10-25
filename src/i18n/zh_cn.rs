@@ -54,5 +54,9 @@ pub(super) const TEXTS: Texts = Texts {
     err_recording_failed: "录制失败",
     err_capture_thread: "捕获线程无响应",
     err_capture_failed: "捕获意外停止",
+    err_video_unreadable: "无法读取此视频",
+    convert_video: "将视频转换为 GIF…",
+    converting: "正在转换为 GIF… {percent}%",
+    conversion_canceled: "已取消转换",
     crash_message: "GyozaRec 因错误而退出。详细信息已保存到 {path}",
 };

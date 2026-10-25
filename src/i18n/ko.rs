@@ -54,5 +54,9 @@ pub(super) const TEXTS: Texts = Texts {
     err_recording_failed: "녹화에 실패했습니다",
     err_capture_thread: "캡처 스레드가 응답하지 않습니다",
     err_capture_failed: "캡처가 예기치 않게 중지되었습니다",
+    err_video_unreadable: "이 동영상을 읽을 수 없습니다",
+    convert_video: "동영상을 GIF로 변환…",
+    converting: "GIF로 변환 중… {percent}%",
+    conversion_canceled: "변환이 취소되었습니다",
     crash_message: "오류로 인해 GyozaRec이 종료되었습니다. 자세한 내용은 {path}에 저장되었습니다",
 };

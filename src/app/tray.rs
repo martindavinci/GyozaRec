@@ -10,11 +10,13 @@ pub const MENU_PREFIX: &str = "tray:";
 pub const SHOW: &str = "tray:show";
 pub const OPTIONS: &str = "tray:options";
 pub const EXIT: &str = "tray:exit";
+pub const CONVERT: &str = "tray:convert";
 
 /// What a tray menu id asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayCommand {
     Quick(QuickAction),
+    Convert,
     Show,
     Options,
     Exit,
@@ -25,6 +27,7 @@ pub fn command(menu_id: &str) -> Option<TrayCommand> {
         SHOW => Some(TrayCommand::Show),
         OPTIONS => Some(TrayCommand::Options),
         EXIT => Some(TrayCommand::Exit),
+        CONVERT => Some(TrayCommand::Convert),
         other => {
             let name = other.strip_prefix(MENU_PREFIX)?;
             QuickAction::from_name(name).map(TrayCommand::Quick)
@@ -55,6 +58,7 @@ pub fn create(texts: &Texts) -> Option<TrayIcon> {
     for item in &items {
         menu.append(item).ok()?;
     }
+    menu.append(&MenuItem::with_id(CONVERT, texts.convert_video, true, None)).ok()?;
     menu.append(&PredefinedMenuItem::separator()).ok()?;
     menu.append(&MenuItem::with_id(SHOW, texts.tray_show, true, None)).ok()?;
     menu.append(&MenuItem::with_id(OPTIONS, texts.options, true, None)).ok()?;
@@ -82,6 +86,7 @@ mod tests {
         assert_eq!(command(SHOW), Some(TrayCommand::Show));
         assert_eq!(command(OPTIONS), Some(TrayCommand::Options));
         assert_eq!(command(EXIT), Some(TrayCommand::Exit));
+        assert_eq!(command(CONVERT), Some(TrayCommand::Convert));
         assert_eq!(command("tray:nope"), None);
         assert_eq!(command("area:1"), None);
     }

@@ -61,5 +61,9 @@ pub(super) const TEXTS: Texts = Texts {
     err_recording_failed: "die Aufnahme ist fehlgeschlagen",
     err_capture_thread: "der Aufnahme-Thread reagiert nicht",
     err_capture_failed: "die Aufnahme wurde unerwartet abgebrochen",
+    err_video_unreadable: "dieses Video kann nicht gelesen werden",
+    convert_video: "Video in GIF umwandeln…",
+    converting: "Umwandlung in GIF… {percent} %",
+    conversion_canceled: "Umwandlung abgebrochen",
     crash_message: "GyozaRec wurde wegen eines Fehlers beendet. Details wurden in {path} gespeichert",
 };

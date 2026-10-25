@@ -54,5 +54,9 @@ pub(super) const TEXTS: Texts = Texts {
     err_recording_failed: "録画に失敗しました",
     err_capture_thread: "キャプチャ スレッドが応答していません",
     err_capture_failed: "キャプチャが予期せず停止しました",
+    err_video_unreadable: "この動画を読み込めません",
+    convert_video: "動画を GIF に変換…",
+    converting: "GIF に変換中… {percent}%",
+    conversion_canceled: "変換を取り消しました",
     crash_message: "エラーのため GyozaRec が終了しました。詳細は {path} に保存されました",
 };

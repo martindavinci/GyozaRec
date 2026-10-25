@@ -53,7 +53,7 @@ Requires Windows 10 (version 2004 or later) or Windows 11, 64-bit. macOS and Lin
 
 ## Building
 
-You need stable Rust (1.93 or later) with the MSVC toolchain.
+You need Rust 1.99 or later with the MSVC toolchain; `rust-toolchain.toml` selects the exact version used for releases.
 
 ```
 cargo build --release

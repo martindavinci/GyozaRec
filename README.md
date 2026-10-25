@@ -42,7 +42,7 @@ The interface is available in English, Spanish, French, German, Italian, Brazili
 
 ## Download
 
-From the repository's Releases page:
+From the [Releases page](https://github.com/martindavinci/GyozaRec/releases/latest):
 
 | Package | What it does |
 |---|---|

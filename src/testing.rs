@@ -27,9 +27,15 @@ pub type EventLog = Arc<Mutex<Vec<String>>>;
 pub struct VecSink {
     times: Arc<Mutex<Vec<Duration>>>,
     finished: Arc<std::sync::atomic::AtomicBool>,
+    /// (start frame, sample count) of every audio push.
+    audio: Arc<Mutex<Vec<(u64, usize)>>>,
 }
 
 impl VecSink {
+    pub fn audio(&self) -> Vec<(u64, usize)> {
+        self.audio.lock().unwrap().clone()
+    }
+
     pub fn times(&self) -> Vec<Duration> {
         self.times.lock().unwrap().clone()
     }
@@ -47,6 +53,11 @@ impl crate::recording::FrameSink for VecSink {
 
     fn finish(&mut self) -> crate::Result<()> {
         self.finished.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn push_audio(&mut self, samples: &[i16], start_frame: u64) -> crate::Result<()> {
+        self.audio.lock().unwrap().push((start_frame, samples.len()));
         Ok(())
     }
 }

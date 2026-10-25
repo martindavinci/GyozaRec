@@ -3,7 +3,7 @@
 
 use super::{
     CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, PauseClock, RUN, RecordingOutcome,
-    RecordingResult, STOP, run_capture_loop,
+    RecordingResult, STOP, run_capture_loop_with_audio,
 };
 use crate::capture::ScreenGrabber;
 use crate::clock::Clock;
@@ -27,8 +27,19 @@ impl RecordingWorker {
         grabber: Arc<dyn ScreenGrabber>,
         clock: Arc<dyn Clock>,
         cfg: LoopConfig,
+        sink: Box<dyn FrameSink>,
+        output: PathBuf,
+    ) -> RecordingWorker {
+        RecordingWorker::spawn_with_audio(grabber, clock, cfg, sink, output, None)
+    }
+
+    pub fn spawn_with_audio(
+        grabber: Arc<dyn ScreenGrabber>,
+        clock: Arc<dyn Clock>,
+        cfg: LoopConfig,
         mut sink: Box<dyn FrameSink>,
         output: PathBuf,
+        audio: Option<crate::audio::AudioFeed>,
     ) -> RecordingWorker {
         let control = Arc::new(AtomicU8::new(super::RUN));
         let started = clock.elapsed();
@@ -37,7 +48,14 @@ impl RecordingWorker {
             .name("gyozarec-recording".into())
             .spawn(move || {
                 // The sink (and its open file) is dropped when this returns.
-                run_capture_loop(&*grabber, &mut *sink, &*loop_clock, &cfg, &loop_control)
+                run_capture_loop_with_audio(
+                    &*grabber,
+                    &mut *sink,
+                    &*loop_clock,
+                    &cfg,
+                    &loop_control,
+                    audio,
+                )
             })
             .expect("spawn recording thread");
         let pauses = Mutex::new(PauseClock::default());

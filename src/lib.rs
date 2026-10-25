@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+pub mod audio;
 pub mod autostart;
 pub mod bridge;
 pub mod capture;

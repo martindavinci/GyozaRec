@@ -27,7 +27,7 @@ use gyozarec::quick::{QuickAction, apply, can_start};
 use gyozarec::settings::SettingsStore;
 use gyozarec::shortcuts::{
     ClosePolicy, ExitPlan, Incoming, PRINT_SCREEN, SHORTCUTS, Shortcuts, accepts, close_policy,
-    exit_plan, stage, wanted,
+    effective, exit_plan, rollback, stage,
 };
 use gyozarec::uikit::painter::Fonts;
 use hotkeys::HotkeyRegistrar;
@@ -200,7 +200,7 @@ impl App {
     }
 
     fn sync_shortcuts(&mut self) {
-        self.shortcuts.apply(wanted(&self.state.settings), &mut self.hotkeys);
+        self.shortcuts.apply(effective(&self.state.settings), &mut self.hotkeys);
     }
 
     /// Shortcuts and their availability, for Options.
@@ -212,15 +212,15 @@ impl App {
             .iter()
             .zip(texts.quick_actions)
             .map(|(b, label)| ShortcutLine {
+                id: b.id,
                 label,
-                keys: b.keys,
                 print_screen: false,
                 available: available(b.id),
             })
             .collect();
         lines.push(ShortcutLine {
+            id: PRINT_SCREEN.id,
             label: texts.quick_actions[0],
-            keys: "Print Screen",
             print_screen: true,
             available: available(PRINT_SCREEN.id),
         });
@@ -333,11 +333,19 @@ impl App {
         match result {
             OptionsResult::Open => return,
             OptionsResult::Accepted(form) => {
+                let old = self.state.settings.clone();
                 self.state.settings = form.to_settings(&self.state.settings, &self.capture_dir);
-                self.save_settings();
                 self.apply_language();
                 self.sync_tray();
-                self.sync_shortcuts();
+                // A changed shortcut Windows refuses keeps its previous keys.
+                let results =
+                    self.shortcuts.apply(effective(&self.state.settings), &mut self.hotkeys);
+                let refused: Vec<&str> =
+                    results.iter().filter(|(_, r)| r.is_err()).map(|(id, _)| *id).collect();
+                if rollback(&mut self.state.settings, &old, &refused) {
+                    self.sync_shortcuts();
+                }
+                self.save_settings();
                 self.sync_autostart();
                 self.refresh_toolbar();
             }

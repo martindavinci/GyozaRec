@@ -24,6 +24,10 @@ pub struct AppSettings {
     pub keep_in_tray: bool,
     pub start_with_windows: bool,
     pub shortcuts_enabled: bool,
+    /// Binding id → keys, only for shortcuts the user changed.
+    pub shortcut_keys: std::collections::BTreeMap<String, String>,
+    /// Binding ids switched off one by one.
+    pub shortcuts_disabled: std::collections::BTreeSet<String>,
     pub print_screen_captures: bool,
     /// 50–100.
     pub jpeg_quality: u8,
@@ -54,6 +58,8 @@ impl Default for AppSettings {
             keep_in_tray: true,
             start_with_windows: false,
             shortcuts_enabled: false,
+            shortcut_keys: Default::default(),
+            shortcuts_disabled: Default::default(),
             print_screen_captures: false,
             jpeg_quality: 90,
             gif_fps: 10,
@@ -186,6 +192,16 @@ mod tests {
             SettingsStore::new(d.path().join("s.json"), cap()).load(),
             AppSettings::defaults(&cap())
         );
+    }
+
+    #[test]
+    fn legacy_settings_have_default_shortcuts() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "shortcuts_enabled": true }"#).unwrap();
+        let s = SettingsStore::new(p, cap()).load();
+        assert!(s.shortcut_keys.is_empty() && s.shortcuts_disabled.is_empty());
+        assert_eq!(crate::shortcuts::effective(&s).len(), 4);
     }
 
     #[test]

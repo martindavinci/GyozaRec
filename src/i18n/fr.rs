@@ -26,6 +26,11 @@ pub(super) const TEXTS: Texts = Texts {
     print_screen_hint: "Désactivez le raccourci de capture de Windows pour Impr. écran dans Paramètres › Accessibilité › Clavier.",
     shortcuts_title: "Raccourcis",
     shortcut_unavailable: "utilisé par une autre application",
+    press_new_keys: "Appuyez sur les nouvelles touches…",
+    reset_shortcuts: "Réinitialiser les raccourcis",
+    shortcut_invalid: "ajoutez Ctrl, Alt, Maj ou Win",
+    shortcut_duplicate: "déjà utilisé par un autre raccourci",
+    shortcut_unsupported: "cette touche ne peut pas être utilisée",
     tray_show: "Afficher GyozaRec",
     tray_exit: "Quitter",
     quick_actions: [

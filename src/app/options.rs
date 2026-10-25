@@ -13,7 +13,7 @@ use muda::{CheckMenuItem, ContextMenu, Menu};
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowButtons, WindowId};
 
@@ -91,11 +91,42 @@ fn language_label(language: Option<Language>, texts: &Texts) -> &'static str {
 /// One global shortcut as listed in Options.
 #[derive(Clone, Debug)]
 pub struct ShortcutLine {
+    pub id: &'static str,
     pub label: &'static str,
-    pub keys: &'static str,
     pub print_screen: bool,
     /// `false` when another app owns the keys.
     pub available: bool,
+}
+
+/// Editing state of the shortcut list.
+#[derive(Default)]
+struct ShortcutEdit {
+    /// Line waiting for the user to press new keys.
+    capturing: Option<&'static str>,
+    /// Why the last keys pressed for a line were refused.
+    errors: std::collections::HashMap<&'static str, &'static str>,
+}
+
+const ID_SHORTCUT_CHECK: u32 = 500;
+const ID_SHORTCUT_KEYS: u32 = 520;
+const ID_RESET_SHORTCUTS: u32 = 540;
+
+/// The keys a line uses in the form being edited.
+fn form_keys(form: &OptionsForm, id: &str) -> String {
+    form.shortcut_keys
+        .get(id)
+        .cloned()
+        .or_else(|| gyozarec::shortcuts::default_keys(id).map(str::to_string))
+        .unwrap_or_default()
+}
+
+fn key_error_text(e: gyozarec::shortcuts::KeyError, texts: &Texts) -> &'static str {
+    use gyozarec::shortcuts::KeyError;
+    match e {
+        KeyError::NoModifier => texts.shortcut_invalid,
+        KeyError::Duplicate => texts.shortcut_duplicate,
+        KeyError::Reserved | KeyError::Unparsable => texts.shortcut_unsupported,
+    }
 }
 
 /// Greedy word wrap on spaces, so long translated hints stay readable.
@@ -127,6 +158,8 @@ pub struct OptionsWindow {
     texts: &'static Texts,
     ui_language: Language,
     shortcuts: Vec<ShortcutLine>,
+    edit: ShortcutEdit,
+    modifiers: ModifiersState,
     /// Own fonts, so the native name of any chosen language can be drawn.
     fonts: Fonts,
     ui: Ui,
@@ -143,7 +176,13 @@ fn fonts_for(ui_language: Language, form: &OptionsForm) -> Fonts {
     Fonts::for_languages(&[ui_language, form.language.unwrap_or(ui_language)])
 }
 
-fn build_ui(form: &OptionsForm, texts: &Texts, shortcuts: &[ShortcutLine], fonts: &Fonts) -> Ui {
+fn build_ui(
+    form: &OptionsForm,
+    texts: &Texts,
+    shortcuts: &[ShortcutLine],
+    edit: &ShortcutEdit,
+    fonts: &Fonts,
+) -> Ui {
     let mut widgets: Vec<Widget> = Vec::new();
     let mut y = PAD;
     let push_row =
@@ -172,6 +211,13 @@ fn build_ui(form: &OptionsForm, texts: &Texts, shortcuts: &[ShortcutLine], fonts
     for (id, text, checked) in checks {
         let check = WidgetKind::Check { label: text.into(), checked };
         push_row(vec![(id, check)], PAD, &mut widgets, &mut y);
+    }
+    // The Print Screen hint sits under its checkbox, in the left column.
+    if form.print_screen_captures {
+        for (i, line) in wrap(texts.print_screen_hint, HINT_WIDTH, fonts).into_iter().enumerate() {
+            let kind = WidgetKind::Label { text: line, color: GYOZA.disabled_text };
+            push_row(vec![(450 + i as u32, kind)], PAD + 26.0, &mut widgets, &mut y);
+        }
     }
     let left_bottom = y;
 
@@ -203,33 +249,63 @@ fn build_ui(form: &OptionsForm, texts: &Texts, shortcuts: &[ShortcutLine], fonts
         widgets.extend(button);
     }
 
-    let listed: Vec<&ShortcutLine> = shortcuts
-        .iter()
-        .filter(
-            |l| if l.print_screen { form.print_screen_captures } else { form.shortcuts_enabled },
-        )
-        .collect();
-    let mut next_id = 400;
-    let mut text_row = |text: String, color, widgets: &mut Vec<Widget>, y: &mut f32| {
-        next_id += 1;
-        let kind = WidgetKind::Label { text, color };
-        push_row(vec![(next_id, kind)], right_x, widgets, y);
-    };
+    let listed: Vec<(usize, &ShortcutLine)> =
+        shortcuts
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| {
+                if l.print_screen { form.print_screen_captures } else { form.shortcuts_enabled }
+            })
+            .collect();
     if !listed.is_empty() {
         y += ROW_GAP;
-        text_row(texts.shortcuts_title.into(), GYOZA.text, &mut widgets, &mut y);
-        for l in listed {
-            let mut text = format!("{} — {}", l.label, l.keys);
-            if !l.available {
-                text = format!("{text} ({})", texts.shortcut_unavailable);
-            }
-            let color = if l.available { GYOZA.text } else { GYOZA.error };
-            text_row(text, color, &mut widgets, &mut y);
+        let mut title = vec![(400, label(texts.shortcuts_title))];
+        if form.shortcuts_enabled {
+            let reset = WidgetKind::Button { label: texts.reset_shortcuts.into(), dropdown: false };
+            title.push((ID_RESET_SHORTCUTS, reset));
         }
-    }
-    if form.print_screen_captures {
-        for line in wrap(texts.print_screen_hint, HINT_WIDTH, fonts) {
-            text_row(line, GYOZA.disabled_text, &mut widgets, &mut y);
+        push_row(title, right_x, &mut widgets, &mut y);
+        // Key buttons line up in a column after the longest label.
+        let check_w = listed
+            .iter()
+            .map(|(_, l)| measure_text(fonts, l.label, GYOZA.font_px, false).0 + 22.0)
+            .fold(0.0, f32::max);
+        let keys_x = right_x + check_w + 12.0;
+        for (i, l) in listed {
+            let enabled = !form.shortcuts_disabled.contains(l.id);
+            let check = WidgetKind::Check { label: l.label.into(), checked: enabled };
+            let keys = if edit.capturing == Some(l.id) {
+                texts.press_new_keys.to_string()
+            } else {
+                form_keys(form, l.id)
+            };
+            let mut items = vec![(
+                ID_SHORTCUT_KEYS + i as u32,
+                WidgetKind::Button { label: keys, dropdown: false },
+            )];
+            let note = edit
+                .errors
+                .get(l.id)
+                .copied()
+                .or_else(|| (!l.available && enabled).then_some(texts.shortcut_unavailable));
+            if let Some(note) = note {
+                let kind = WidgetKind::Label { text: note.into(), color: GYOZA.error };
+                items.push((460 + i as u32, kind));
+            }
+            let right = layout_row(items, keys_x, y, 10.0, fonts, &GYOZA);
+            let row_h = right[0].rect.h;
+            let mut left = layout_row(
+                vec![(ID_SHORTCUT_CHECK + i as u32, check)],
+                right_x,
+                y,
+                0.0,
+                fonts,
+                &GYOZA,
+            );
+            left[0].rect.y = y + (row_h - left[0].rect.h) / 2.0;
+            y += row_h + ROW_GAP;
+            widgets.extend(left);
+            widgets.extend(right);
         }
     }
     let mut y = y.max(left_bottom);
@@ -256,7 +332,7 @@ impl OptionsWindow {
     ) -> Option<OptionsWindow> {
         let texts = ui_language.texts();
         let fonts = fonts_for(ui_language, &form);
-        let ui = build_ui(&form, texts, &shortcuts, &fonts);
+        let ui = build_ui(&form, texts, &shortcuts, &ShortcutEdit::default(), &fonts);
         let logical = logical_size(&ui);
         let attrs = Window::default_attributes()
             .with_title(texts.options)
@@ -272,6 +348,8 @@ impl OptionsWindow {
             texts,
             ui_language,
             shortcuts,
+            edit: ShortcutEdit::default(),
+            modifiers: ModifiersState::empty(),
             fonts,
             ui,
             logical,
@@ -293,7 +371,7 @@ impl OptionsWindow {
     }
 
     fn rebuild(&mut self) {
-        let mut ui = build_ui(&self.form, self.texts, &self.shortcuts, &self.fonts);
+        let mut ui = build_ui(&self.form, self.texts, &self.shortcuts, &self.edit, &self.fonts);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
         let logical = logical_size(&self.ui);
@@ -385,7 +463,88 @@ impl OptionsWindow {
         }
     }
 
+    /// Takes the keys pressed while a line waits for new ones.
+    fn capture_keys(&mut self, event: &KeyEvent) {
+        let Some(id) = self.edit.capturing else { return };
+        match &event.logical_key {
+            Key::Named(NamedKey::Escape) => {}
+            Key::Named(NamedKey::Backspace) => {
+                self.form.shortcut_keys.remove(id);
+            }
+            _ => {
+                let Some(name) = super::hotkeys::key_name(&event.physical_key) else {
+                    return; // a modifier alone: keep waiting
+                };
+                let m = self.modifiers;
+                let mut parts: Vec<&str> = [
+                    (m.control_key(), "Ctrl"),
+                    (m.alt_key(), "Alt"),
+                    (m.shift_key(), "Shift"),
+                    (m.super_key(), "Super"),
+                ]
+                .iter()
+                .filter(|(on, _)| *on)
+                .map(|(_, name)| *name)
+                .collect();
+                parts.push(name);
+                let others: Vec<(&str, String)> = self
+                    .shortcuts
+                    .iter()
+                    .filter(|l| l.id != id)
+                    .map(|l| (l.id, form_keys(&self.form, l.id)))
+                    .collect();
+                match gyozarec::shortcuts::validate(
+                    &parts.join("+"),
+                    &others,
+                    super::hotkeys::parses,
+                ) {
+                    Ok(keys) => {
+                        let default = gyozarec::shortcuts::default_keys(id)
+                            .and_then(gyozarec::shortcuts::normalize);
+                        if default.as_deref() == Some(keys.as_str()) {
+                            self.form.shortcut_keys.remove(id);
+                        } else {
+                            self.form.shortcut_keys.insert(id.to_string(), keys);
+                        }
+                    }
+                    Err(e) => {
+                        self.edit.errors.insert(id, key_error_text(e, self.texts));
+                    }
+                }
+            }
+        }
+        self.edit.capturing = None;
+        self.rebuild();
+    }
+
     fn click(&mut self, id: u32) -> OptionsResult {
+        let line = |base: u32| {
+            id.checked_sub(base)
+                .filter(|i| (*i as usize) < self.shortcuts.len())
+                .map(|i| i as usize)
+        };
+        if let Some(i) = line(ID_SHORTCUT_CHECK).filter(|_| id < ID_SHORTCUT_KEYS) {
+            let sid = self.shortcuts[i].id.to_string();
+            if !self.form.shortcuts_disabled.remove(&sid) {
+                self.form.shortcuts_disabled.insert(sid);
+            }
+            self.rebuild();
+            return OptionsResult::Open;
+        }
+        if let Some(i) = line(ID_SHORTCUT_KEYS).filter(|_| id < ID_RESET_SHORTCUTS) {
+            let sid = self.shortcuts[i].id;
+            self.edit.errors.remove(sid);
+            self.edit.capturing = Some(sid);
+            self.rebuild();
+            return OptionsResult::Open;
+        }
+        if id == ID_RESET_SHORTCUTS {
+            self.form.shortcut_keys.clear();
+            self.form.shortcuts_disabled.clear();
+            self.edit = ShortcutEdit::default();
+            self.rebuild();
+            return OptionsResult::Open;
+        }
         match id {
             ID_OK => return OptionsResult::Accepted(self.form.clone()),
             ID_CANCEL => return OptionsResult::Canceled,
@@ -434,6 +593,12 @@ impl OptionsWindow {
                     return self.click(id);
                 }
             }
+            WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
+            WindowEvent::KeyboardInput { event, .. }
+                if event.state == ElementState::Pressed && self.edit.capturing.is_some() =>
+            {
+                self.capture_keys(event);
+            }
             WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state, .. }, .. }
                 if *state == ElementState::Pressed =>
             {
@@ -474,18 +639,66 @@ mod layout_tests {
         };
         for lang in Language::ALL {
             let texts = lang.texts();
+            let ids = ["image", "image-full", "record", "record-full", "print-screen"];
             let lines: Vec<ShortcutLine> = (0..5)
                 .map(|i| ShortcutLine {
+                    id: ids[i],
                     label: texts.quick_actions[i % 4],
-                    keys: "Ctrl+Shift+F10",
                     print_screen: i == 4,
                     available: false,
                 })
                 .collect();
             let fonts = fonts_for(lang, &form);
-            let (w, h) = logical_size(&build_ui(&form, texts, &lines, &fonts));
+            let edit = ShortcutEdit::default();
+            let (w, h) = logical_size(&build_ui(&form, texts, &lines, &edit, &fonts));
             assert!(h <= 560.0, "{lang:?}: {h} logical pixels high");
             assert!(w <= 1000.0, "{lang:?}: {w} logical pixels wide");
         }
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use gyozarec::uikit::painter::Painter;
+
+    /// Draws Options offscreen into `%TEMP%\gyozarec-options.png` with the
+    /// shortcut list open, one line waiting for keys and one refused.
+    #[test]
+    #[ignore = "desktop"]
+    fn render_options_preview() {
+        let mut form = OptionsForm {
+            shortcuts_enabled: true,
+            print_screen_captures: true,
+            ..OptionsForm::from_settings(&gyozarec::settings::AppSettings::default())
+        };
+        form.shortcut_keys.insert("record".into(), "Ctrl+Alt+R".into());
+        form.shortcuts_disabled.insert("image-full".into());
+        let texts = Language::En.texts();
+        let ids = ["image", "image-full", "record", "record-full", "print-screen"];
+        let lines: Vec<ShortcutLine> = (0..5)
+            .map(|i| ShortcutLine {
+                id: ids[i],
+                label: texts.quick_actions[i % 4],
+                print_screen: i == 4,
+                available: i != 3,
+            })
+            .collect();
+        let mut edit = ShortcutEdit { capturing: Some("image"), ..Default::default() };
+        edit.errors.insert("print-screen", texts.shortcut_duplicate);
+        let fonts = fonts_for(Language::En, &form);
+        let ui = build_ui(&form, texts, &lines, &edit, &fonts);
+        let (w, h) = logical_size(&ui);
+        let size = gyozarec::geometry::PixelSize { width: w as i32, height: h as i32 };
+        let mut painter = Painter::new(size, 1.0);
+        painter.clear(GYOZA.bg);
+        ui.paint(&mut painter, &fonts, &GYOZA);
+        let mut pixels = vec![0u32; (size.width * size.height) as usize];
+        painter.to_softbuffer(&mut pixels);
+        let img = image::RgbImage::from_fn(w as u32, h as u32, |x, y| {
+            let c = pixels[(y * w as u32 + x) as usize];
+            image::Rgb([(c >> 16) as u8, (c >> 8) as u8, c as u8])
+        });
+        img.save(std::env::temp_dir().join("gyozarec-options.png")).unwrap();
     }
 }

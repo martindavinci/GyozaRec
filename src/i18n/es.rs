@@ -26,6 +26,11 @@ pub(super) const TEXTS: Texts = Texts {
     print_screen_hint: "Desactiva el atajo de captura de Windows para Impr Pant en Configuración › Accesibilidad › Teclado.",
     shortcuts_title: "Atajos",
     shortcut_unavailable: "en uso por otra aplicación",
+    press_new_keys: "Pulsa las nuevas teclas…",
+    reset_shortcuts: "Restablecer atajos",
+    shortcut_invalid: "añade Ctrl, Alt, Mayús o Win",
+    shortcut_duplicate: "ya lo usa otro atajo",
+    shortcut_unsupported: "esta tecla no se puede usar",
     tray_show: "Mostrar GyozaRec",
     tray_exit: "Salir",
     quick_actions: [

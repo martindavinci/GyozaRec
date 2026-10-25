@@ -26,6 +26,11 @@ pub(super) const TEXTS: Texts = Texts {
     print_screen_hint: "Disattiva la scorciatoia di cattura di Windows per Stamp in Impostazioni › Accessibilità › Tastiera.",
     shortcuts_title: "Scorciatoie",
     shortcut_unavailable: "in uso da un'altra app",
+    press_new_keys: "Premi i nuovi tasti…",
+    reset_shortcuts: "Ripristina scorciatoie",
+    shortcut_invalid: "aggiungi Ctrl, Alt, Maiusc o Win",
+    shortcut_duplicate: "già usata da un'altra scorciatoia",
+    shortcut_unsupported: "questo tasto non si può usare",
     tray_show: "Mostra GyozaRec",
     tray_exit: "Esci",
     quick_actions: [

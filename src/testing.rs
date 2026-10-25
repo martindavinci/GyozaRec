@@ -69,7 +69,7 @@ pub struct FakeUiSender {
     closed: bool,
     finished: Mutex<Option<std::sync::mpsc::Sender<CaptureOutcome>>>,
     /// Sent back as soon as a recording starts.
-    answer: Option<RecordingCommand>,
+    answer: Vec<RecordingCommand>,
     /// Kept alive like the real panel does while recording.
     held: Mutex<Option<std::sync::mpsc::Sender<RecordingCommand>>>,
 }
@@ -81,7 +81,7 @@ impl Default for FakeUiSender {
             select_reply: None,
             closed: false,
             finished: Mutex::new(None),
-            answer: None,
+            answer: Vec::new(),
             held: Mutex::new(None),
         }
     }
@@ -89,7 +89,12 @@ impl Default for FakeUiSender {
 
 impl FakeUiSender {
     pub fn answering(command: RecordingCommand) -> Self {
-        Self { answer: Some(command), ..Self::default() }
+        Self::answering_all(vec![command])
+    }
+
+    /// Sends these panel commands, in order, as soon as a recording starts.
+    pub fn answering_all(commands: Vec<RecordingCommand>) -> Self {
+        Self { answer: commands, ..Self::default() }
     }
 
     pub fn replying(reply: Option<PixelRect>) -> Self {
@@ -133,8 +138,8 @@ impl UiSender for FakeUiSender {
             }
             UiRequest::RecordingStarted { commands, .. } => {
                 log_event(&log, "ui:rec-start");
-                if let Some(cmd) = self.answer {
-                    let _ = commands.send(cmd);
+                for cmd in &self.answer {
+                    let _ = commands.send(*cmd);
                 }
                 *self.held.lock().unwrap() = Some(commands);
             }
@@ -314,8 +319,12 @@ pub struct FakeSound {
 }
 
 impl SoundPlayer for FakeSound {
-    fn play_capture(&self) {
-        log_event(&Some(self.log.clone()), "sound");
+    fn play(&self, cue: crate::sounds::Cue) {
+        let name = match cue {
+            crate::sounds::Cue::Saved => "sound".to_string(),
+            other => format!("sound:{}", format!("{other:?}").to_lowercase()),
+        };
+        log_event(&Some(self.log.clone()), name);
     }
 }
 

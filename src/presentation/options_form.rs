@@ -42,6 +42,9 @@ pub struct OptionsForm {
     pub include_cursor: bool,
     pub open_folder_after_recording: bool,
     pub open_file_after_capture: bool,
+    pub keep_in_tray: bool,
+    pub shortcuts_enabled: bool,
+    pub print_screen_captures: bool,
     pub gif_fps: u32,
     pub gif_max_seconds: u32,
     pub gif_max_long_side: u32,
@@ -60,6 +63,9 @@ impl OptionsForm {
             include_cursor: s.include_cursor,
             open_folder_after_recording: s.open_folder_after_recording,
             open_file_after_capture: s.open_file_after_capture,
+            keep_in_tray: s.keep_in_tray,
+            shortcuts_enabled: s.shortcuts_enabled,
+            print_screen_captures: s.print_screen_captures,
             gif_fps: s.gif_fps,
             gif_max_seconds: s.gif_max_seconds,
             gif_max_long_side: s.gif_max_long_side,
@@ -78,6 +84,9 @@ impl OptionsForm {
             include_cursor: self.include_cursor,
             open_folder_after_recording: self.open_folder_after_recording,
             open_file_after_capture: self.open_file_after_capture,
+            keep_in_tray: self.keep_in_tray,
+            shortcuts_enabled: self.shortcuts_enabled,
+            print_screen_captures: self.print_screen_captures,
             gif_fps: self.gif_fps,
             gif_max_seconds: self.gif_max_seconds,
             gif_max_long_side: self.gif_max_long_side,
@@ -144,6 +153,22 @@ mod tests {
         let mut f = OptionsForm::from_settings(&AppSettings::defaults(&cap()));
         f.save_folder = PathBuf::new();
         assert_eq!(f.to_settings(&AppSettings::defaults(&cap()), &cap()).save_folder, cap());
+    }
+
+    #[test]
+    fn tray_and_shortcut_options_roundtrip() {
+        let base = AppSettings::defaults(&cap());
+        let mut f = OptionsForm::from_settings(&base);
+        assert_eq!(
+            (f.keep_in_tray, f.shortcuts_enabled, f.print_screen_captures),
+            (true, false, false)
+        );
+        (f.keep_in_tray, f.shortcuts_enabled, f.print_screen_captures) = (false, true, true);
+        let s = f.to_settings(&base, &cap());
+        assert_eq!(
+            (s.keep_in_tray, s.shortcuts_enabled, s.print_screen_captures),
+            (false, true, true)
+        );
     }
 
     #[test]

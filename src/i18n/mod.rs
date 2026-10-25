@@ -142,6 +142,17 @@ pub struct Texts {
     pub include_cursor: &'static str,
     pub open_folder_after_recording: &'static str,
     pub open_file_after_capture: &'static str,
+    pub keep_in_tray: &'static str,
+    pub shortcuts_enabled: &'static str,
+    pub print_screen_captures: &'static str,
+    pub print_screen_hint: &'static str,
+    pub shortcuts_title: &'static str,
+    pub shortcut_unavailable: &'static str,
+    pub tray_show: &'static str,
+    pub tray_exit: &'static str,
+    /// In `shortcuts::SHORTCUTS` order: image, full-screen image, record,
+    /// full-screen recording.
+    pub quick_actions: [&'static str; 4],
     pub discard_question: &'static str,
     pub gif_fps: &'static str,
     pub gif_max_seconds: &'static str,
@@ -256,6 +267,20 @@ mod tests {
             );
             assert!(
                 t.crash_message.contains("{path}") && !t.err_capture_failed.is_empty(),
+                "{lang:?}"
+            );
+            let shortcut_texts = [
+                t.keep_in_tray,
+                t.shortcuts_enabled,
+                t.print_screen_captures,
+                t.print_screen_hint,
+                t.shortcuts_title,
+                t.shortcut_unavailable,
+                t.tray_show,
+                t.tray_exit,
+            ];
+            assert!(
+                shortcut_texts.iter().chain(&t.quick_actions).all(|s| !s.trim().is_empty()),
                 "{lang:?}"
             );
             assert!(

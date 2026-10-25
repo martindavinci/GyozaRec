@@ -15,6 +15,7 @@ pub mod quick;
 pub mod recording;
 pub mod render;
 pub mod settings;
+pub mod shortcuts;
 #[cfg(test)]
 pub(crate) mod testing;
 pub mod uikit;

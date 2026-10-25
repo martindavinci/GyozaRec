@@ -20,6 +20,10 @@ pub struct AppSettings {
     pub open_folder_after_recording: bool,
     /// Open each saved capture in its default app.
     pub open_file_after_capture: bool,
+    /// Closing the toolbar hides it; GyozaRec stays in the notification area.
+    pub keep_in_tray: bool,
+    pub shortcuts_enabled: bool,
+    pub print_screen_captures: bool,
     pub gif_fps: u32,
     pub gif_max_seconds: u32,
     pub gif_max_long_side: u32,
@@ -44,6 +48,9 @@ impl Default for AppSettings {
             include_cursor: true,
             open_folder_after_recording: false,
             open_file_after_capture: false,
+            keep_in_tray: true,
+            shortcuts_enabled: false,
+            print_screen_captures: false,
             gif_fps: 10,
             gif_max_seconds: 15,
             gif_max_long_side: 800,
@@ -172,6 +179,18 @@ mod tests {
         assert_eq!(
             SettingsStore::new(d.path().join("s.json"), cap()).load(),
             AppSettings::defaults(&cap())
+        );
+    }
+
+    #[test]
+    fn legacy_settings_get_tray_on_and_shortcuts_off() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "gif_fps": 15 }"#).unwrap();
+        let s = SettingsStore::new(p, cap()).load();
+        assert_eq!(
+            (s.keep_in_tray, s.shortcuts_enabled, s.print_screen_captures),
+            (true, false, false)
         );
     }
 

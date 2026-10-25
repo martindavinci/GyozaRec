@@ -155,6 +155,11 @@ impl RecordingSession {
         self.surface(id).is_some()
     }
 
+    /// Discards the recording without asking (used when quitting).
+    pub fn cancel(&self) {
+        let _ = self.commands.send(RecordingCommand::Cancel);
+    }
+
     pub fn surface(&self, id: WindowId) -> Option<&WindowSurface> {
         std::iter::once(&self.panel).chain(self.frame.as_ref()).find(|s| s.window.id() == id)
     }

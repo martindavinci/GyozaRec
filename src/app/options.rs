@@ -26,6 +26,11 @@ const ID_SOUND: u32 = 3;
 const ID_CURSOR: u32 = 4;
 const ID_OPEN_FOLDER: u32 = 5;
 const ID_OPEN_FILE: u32 = 6;
+const ID_TRAY: u32 = 7;
+const ID_SHORTCUTS: u32 = 8;
+const ID_PRINT_SCREEN: u32 = 9;
+/// Widest hint line before wrapping, in logical pixels.
+const HINT_WIDTH: f32 = 340.0;
 const ID_LANGUAGE: u32 = 15;
 const ID_OK: u32 = 20;
 const ID_CANCEL: u32 = 21;
@@ -77,6 +82,32 @@ fn language_label(language: Option<Language>, texts: &Texts) -> &'static str {
     language.map_or(texts.automatic, Language::native_name)
 }
 
+/// One global shortcut as listed in Options.
+#[derive(Clone, Debug)]
+pub struct ShortcutLine {
+    pub label: &'static str,
+    pub keys: &'static str,
+    pub print_screen: bool,
+    /// `false` when another app owns the keys.
+    pub available: bool,
+}
+
+/// Greedy word wrap on spaces, so long translated hints stay readable.
+fn wrap(text: &str, max: f32, fonts: &Fonts) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split(' ') {
+        let candidate = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
+        if !line.is_empty() && measure_text(fonts, &candidate, GYOZA.font_px, false).0 > max {
+            lines.push(std::mem::replace(&mut line, word.to_string()));
+        } else {
+            line = candidate;
+        }
+    }
+    lines.push(line);
+    lines
+}
+
 /// What the app should do after an event in the Options window.
 pub enum OptionsResult {
     Open,
@@ -89,6 +120,7 @@ pub struct OptionsWindow {
     form: OptionsForm,
     texts: &'static Texts,
     ui_language: Language,
+    shortcuts: Vec<ShortcutLine>,
     /// Own fonts, so the native name of any chosen language can be drawn.
     fonts: Fonts,
     ui: Ui,
@@ -105,7 +137,7 @@ fn fonts_for(ui_language: Language, form: &OptionsForm) -> Fonts {
     Fonts::for_languages(&[ui_language, form.language.unwrap_or(ui_language)])
 }
 
-fn build_ui(form: &OptionsForm, texts: &Texts, fonts: &Fonts) -> Ui {
+fn build_ui(form: &OptionsForm, texts: &Texts, shortcuts: &[ShortcutLine], fonts: &Fonts) -> Ui {
     let mut widgets: Vec<Widget> = Vec::new();
     let mut y = PAD;
     let push_row =
@@ -126,10 +158,42 @@ fn build_ui(form: &OptionsForm, texts: &Texts, fonts: &Fonts) -> Ui {
         (ID_CURSOR, texts.include_cursor, form.include_cursor),
         (ID_OPEN_FOLDER, texts.open_folder_after_recording, form.open_folder_after_recording),
         (ID_OPEN_FILE, texts.open_file_after_capture, form.open_file_after_capture),
+        (ID_TRAY, texts.keep_in_tray, form.keep_in_tray),
+        (ID_SHORTCUTS, texts.shortcuts_enabled, form.shortcuts_enabled),
+        (ID_PRINT_SCREEN, texts.print_screen_captures, form.print_screen_captures),
     ];
     for (id, text, checked) in checks {
         let check = WidgetKind::Check { label: text.into(), checked };
         push_row(vec![(id, check)], PAD, &mut widgets, &mut y);
+    }
+
+    let listed: Vec<&ShortcutLine> = shortcuts
+        .iter()
+        .filter(
+            |l| if l.print_screen { form.print_screen_captures } else { form.shortcuts_enabled },
+        )
+        .collect();
+    let mut next_id = 400;
+    let mut text_row = |text: String, color, widgets: &mut Vec<Widget>, y: &mut f32| {
+        next_id += 1;
+        let kind = WidgetKind::Label { text, color };
+        push_row(vec![(next_id, kind)], PAD + 26.0, widgets, y);
+    };
+    if !listed.is_empty() {
+        text_row(texts.shortcuts_title.into(), GYOZA.text, &mut widgets, &mut y);
+        for l in listed {
+            let mut text = format!("{} — {}", l.label, l.keys);
+            if !l.available {
+                text = format!("{text} ({})", texts.shortcut_unavailable);
+            }
+            let color = if l.available { GYOZA.text } else { GYOZA.error };
+            text_row(text, color, &mut widgets, &mut y);
+        }
+    }
+    if form.print_screen_captures {
+        for line in wrap(texts.print_screen_hint, HINT_WIDTH, fonts) {
+            text_row(line, GYOZA.disabled_text, &mut widgets, &mut y);
+        }
     }
 
     let dropdowns: Vec<(u32, &str, String)> = COMBOS
@@ -174,10 +238,11 @@ impl OptionsWindow {
         owner: isize,
         form: OptionsForm,
         ui_language: Language,
+        shortcuts: Vec<ShortcutLine>,
     ) -> Option<OptionsWindow> {
         let texts = ui_language.texts();
         let fonts = fonts_for(ui_language, &form);
-        let ui = build_ui(&form, texts, &fonts);
+        let ui = build_ui(&form, texts, &shortcuts, &fonts);
         let logical = logical_size(&ui);
         let attrs = Window::default_attributes()
             .with_title(texts.options)
@@ -192,6 +257,7 @@ impl OptionsWindow {
             form,
             texts,
             ui_language,
+            shortcuts,
             fonts,
             ui,
             logical,
@@ -213,7 +279,7 @@ impl OptionsWindow {
     }
 
     fn rebuild(&mut self) {
-        let mut ui = build_ui(&self.form, self.texts, &self.fonts);
+        let mut ui = build_ui(&self.form, self.texts, &self.shortcuts, &self.fonts);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
         let logical = logical_size(&self.ui);
@@ -317,6 +383,9 @@ impl OptionsWindow {
                 self.form.open_folder_after_recording = !self.form.open_folder_after_recording
             }
             ID_OPEN_FILE => self.form.open_file_after_capture = !self.form.open_file_after_capture,
+            ID_TRAY => self.form.keep_in_tray = !self.form.keep_in_tray,
+            ID_SHORTCUTS => self.form.shortcuts_enabled = !self.form.shortcuts_enabled,
+            ID_PRINT_SCREEN => self.form.print_screen_captures = !self.form.print_screen_captures,
             id if id == ID_LANGUAGE || COMBOS.iter().any(|(cid, _)| *cid == id) => {
                 self.show_choices(id)
             }

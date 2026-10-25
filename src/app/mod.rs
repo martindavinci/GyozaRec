@@ -1,15 +1,17 @@
+mod hotkeys;
 mod options;
 mod overlay;
 mod recording;
 mod surface;
 mod toolbar;
+mod tray;
 
 use gyozarec::bridge::{
     BridgeRecordingUi, BridgeSelectionUi, BridgeToolbar, CaptureThread, UiRequest, UiSender,
 };
 use gyozarec::capture::{CaptureCoordinator, CursorLocator, ScreenGrabber};
 use gyozarec::clock::{Clock, SystemClock};
-use gyozarec::i18n::resolve;
+use gyozarec::i18n::{Language, resolve};
 use gyozarec::instance::InstanceCommand;
 use gyozarec::paths::AppPaths;
 use gyozarec::platform::{
@@ -22,14 +24,21 @@ use gyozarec::presentation::{
 };
 use gyozarec::quick::{QuickAction, apply, can_start};
 use gyozarec::settings::SettingsStore;
+use gyozarec::shortcuts::{
+    ClosePolicy, ExitPlan, PRINT_SCREEN, SHORTCUTS, Shortcuts, Stage, close_policy, exit_plan,
+    wanted,
+};
 use gyozarec::uikit::painter::Fonts;
+use hotkeys::HotkeyRegistrar;
 use muda::{CheckMenuItem, ContextMenu, Menu, MenuEvent};
-use options::{OptionsResult, OptionsWindow};
+use options::{OptionsResult, OptionsWindow, ShortcutLine};
 use overlay::OverlaySession;
 use recording::RecordingSession;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use toolbar::{Toolbar, ToolbarAction};
+use tray::TrayCommand;
+use tray_icon::TrayIcon;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
@@ -48,6 +57,10 @@ pub enum AppEvent {
     Ui(UiRequest),
     Menu(MenuEvent),
     Instance(InstanceCommand),
+    /// A registered global shortcut was pressed (its hotkey id).
+    Shortcut(u32),
+    /// Left click on the notification icon.
+    TrayClick,
 }
 
 /// Sends coordinator requests into the event loop.
@@ -72,6 +85,15 @@ pub struct App {
     capture_dir: PathBuf,
     /// Command-line capture to run as soon as the toolbar exists.
     action_on_start: Option<QuickAction>,
+    tray: Option<TrayIcon>,
+    /// Language of the tray menu, to rebuild it when the language changes.
+    tray_language: Option<Language>,
+    hotkeys: HotkeyRegistrar,
+    shortcuts: Shortcuts,
+    /// The user closed the toolbar to the tray; captures must not bring it back.
+    toolbar_hidden: bool,
+    /// Quit as soon as the running capture has ended.
+    exit_pending: bool,
 }
 
 impl App {
@@ -104,9 +126,29 @@ impl App {
             clock,
         };
         let capture = CaptureThread::spawn(coordinator, sender);
-        let menu_proxy = Mutex::new(proxy);
+        let menu_proxy = Mutex::new(proxy.clone());
         MenuEvent::set_event_handler(Some(move |event| {
             let _ = menu_proxy.lock().unwrap().send_event(AppEvent::Menu(event));
+        }));
+        let hotkey_proxy = Mutex::new(proxy.clone());
+        global_hotkey::GlobalHotKeyEvent::set_event_handler(Some(
+            move |event: global_hotkey::GlobalHotKeyEvent| {
+                // Releases would start a second capture after a quick one.
+                if event.state == global_hotkey::HotKeyState::Pressed {
+                    let _ = hotkey_proxy.lock().unwrap().send_event(AppEvent::Shortcut(event.id));
+                }
+            },
+        ));
+        let tray_proxy = Mutex::new(proxy);
+        tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+            if let tray_icon::TrayIconEvent::Click {
+                button: tray_icon::MouseButton::Left,
+                button_state: tray_icon::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let _ = tray_proxy.lock().unwrap().send_event(AppEvent::TrayClick);
+            }
         }));
         App {
             fonts: Fonts::for_language(language),
@@ -119,6 +161,92 @@ impl App {
             options: None,
             capture_dir,
             action_on_start,
+            tray: None,
+            tray_language: None,
+            hotkeys: HotkeyRegistrar::new(),
+            shortcuts: Shortcuts::default(),
+            toolbar_hidden: false,
+            exit_pending: false,
+        }
+    }
+
+    /// Creates, rebuilds or removes the notification icon to match the settings.
+    fn sync_tray(&mut self) {
+        let want = self.state.settings.keep_in_tray;
+        if want && (self.tray.is_none() || self.tray_language != Some(self.state.language)) {
+            self.tray = None;
+            self.tray = tray::create(self.state.texts());
+            self.tray_language = self.tray.as_ref().map(|_| self.state.language);
+        } else if !want && self.tray.is_some() {
+            self.tray = None;
+            self.tray_language = None;
+        }
+        if self.tray.is_none() && self.toolbar_hidden {
+            // The tray was the only way back to a closed toolbar.
+            self.show_toolbar();
+        }
+    }
+
+    fn sync_shortcuts(&mut self) {
+        self.shortcuts.apply(wanted(&self.state.settings), &mut self.hotkeys);
+    }
+
+    /// Shortcuts and their availability, for Options.
+    fn shortcut_lines(&self) -> Vec<ShortcutLine> {
+        let texts = self.state.texts();
+        let available =
+            |id: &str| self.shortcuts.status(id) != Some(Err(gyozarec::shortcuts::Unavailable));
+        let mut lines: Vec<ShortcutLine> = SHORTCUTS
+            .iter()
+            .zip(texts.quick_actions)
+            .map(|(b, label)| ShortcutLine {
+                label,
+                keys: b.keys,
+                print_screen: false,
+                available: available(b.id),
+            })
+            .collect();
+        lines.push(ShortcutLine {
+            label: texts.quick_actions[0],
+            keys: "Print Screen",
+            print_screen: true,
+            available: available(PRINT_SCREEN.id),
+        });
+        lines
+    }
+
+    fn show_toolbar(&mut self) {
+        self.toolbar_hidden = false;
+        if let Some(t) = &self.toolbar {
+            t.surface.window.set_minimized(false);
+            t.surface.window.set_visible(true);
+            t.surface.window.focus_window();
+        }
+    }
+
+    /// Quits now, or as soon as the running capture has been cancelled.
+    fn request_exit(&mut self, event_loop: &ActiveEventLoop) {
+        let stage = match (self.state.busy, &self.overlay, &self.recording) {
+            (false, ..) => Stage::Idle,
+            (true, Some(_), _) => Stage::Selecting,
+            (true, None, Some(_)) => Stage::Recording,
+            (true, None, None) => Stage::Capturing,
+        };
+        match exit_plan(stage) {
+            ExitPlan::ExitNow => event_loop.exit(),
+            ExitPlan::WaitForCapture => self.exit_pending = true,
+            ExitPlan::CancelSelection => {
+                self.exit_pending = true;
+                if let Some(mut overlay) = self.overlay.take() {
+                    overlay.cancel();
+                }
+            }
+            ExitPlan::CancelRecording => {
+                self.exit_pending = true;
+                if let Some(recording) = &self.recording {
+                    recording.cancel();
+                }
+            }
         }
     }
 
@@ -188,7 +316,9 @@ impl App {
         }
         let Some(t) = &self.toolbar else { return };
         let form = OptionsForm::from_settings(&self.state.settings);
-        self.options = OptionsWindow::open(event_loop, t.surface.hwnd(), form, self.state.language);
+        let lines = self.shortcut_lines();
+        self.options =
+            OptionsWindow::open(event_loop, t.surface.hwnd(), form, self.state.language, lines);
     }
 
     fn close_options(&mut self, result: OptionsResult) {
@@ -198,6 +328,8 @@ impl App {
                 self.state.settings = form.to_settings(&self.state.settings, &self.capture_dir);
                 self.save_settings();
                 self.apply_language();
+                self.sync_tray();
+                self.sync_shortcuts();
                 self.refresh_toolbar();
             }
             OptionsResult::Canceled => {}
@@ -215,8 +347,20 @@ impl App {
         self.fonts = Fonts::for_language(language);
     }
 
-    fn on_menu(&mut self, event: MenuEvent) {
+    fn on_menu(&mut self, event_loop: &ActiveEventLoop, event: MenuEvent) {
         let id = event.id.0.as_str();
+        if let Some(command) = tray::command(id) {
+            match command {
+                TrayCommand::Quick(action) => self.start_quick(action),
+                TrayCommand::Show => self.activate(),
+                TrayCommand::Options => {
+                    self.activate();
+                    self.open_options(event_loop);
+                }
+                TrayCommand::Exit => self.request_exit(event_loop),
+            }
+            return;
+        }
         if id.starts_with(options::MENU_PREFIX) {
             if let Some(o) = &mut self.options {
                 o.on_menu(id);
@@ -246,7 +390,7 @@ impl App {
                 }
             }
             UiRequest::ShowToolbar => {
-                if let Some(t) = &self.toolbar {
+                if let Some(t) = self.toolbar.as_ref().filter(|_| !self.toolbar_hidden) {
                     t.surface.window.set_visible(true);
                     t.surface.window.focus_window();
                 }
@@ -261,6 +405,10 @@ impl App {
             }
             UiRequest::CaptureFinished(outcome) => {
                 self.state.busy = false;
+                if self.exit_pending {
+                    event_loop.exit();
+                    return;
+                }
                 self.state.apply_outcome(&outcome);
                 self.refresh_toolbar();
             }
@@ -287,7 +435,7 @@ impl App {
     }
 
     /// Brings GyozaRec forward, unless a capture is running.
-    fn activate(&self) {
+    fn activate(&mut self) {
         match activation(self.state.busy, self.options.is_some()) {
             Activation::Nothing => {}
             Activation::FocusOptions => {
@@ -295,13 +443,7 @@ impl App {
                     o.focus();
                 }
             }
-            Activation::ShowToolbar => {
-                if let Some(t) = &self.toolbar {
-                    t.surface.window.set_minimized(false);
-                    t.surface.window.set_visible(true);
-                    t.surface.window.focus_window();
-                }
-            }
+            Activation::ShowToolbar => self.show_toolbar(),
         }
     }
 
@@ -316,6 +458,8 @@ impl ApplicationHandler<AppEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.toolbar.is_none() {
             self.toolbar = Some(Toolbar::create(event_loop, &self.state, &self.fonts));
+            self.sync_tray();
+            self.sync_shortcuts();
             if let Some(action) = self.action_on_start.take() {
                 self.start_quick(action);
             }
@@ -325,7 +469,13 @@ impl ApplicationHandler<AppEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         match event {
             AppEvent::Ui(req) => self.on_ui(event_loop, req),
-            AppEvent::Menu(event) => self.on_menu(event),
+            AppEvent::Menu(event) => self.on_menu(event_loop, event),
+            AppEvent::Shortcut(id) => {
+                if let Some(action) = self.shortcuts.action_for(id) {
+                    self.start_quick(action);
+                }
+            }
+            AppEvent::TrayClick => self.activate(),
             AppEvent::Instance(InstanceCommand::Quick(action)) => self.start_quick(action),
             AppEvent::Instance(InstanceCommand::Activate) => self.activate(),
         }
@@ -357,7 +507,13 @@ impl ApplicationHandler<AppEvent> for App {
             return;
         }
         if let WindowEvent::CloseRequested = event {
-            event_loop.exit();
+            match close_policy(self.tray.is_some()) {
+                ClosePolicy::HideToTray => {
+                    self.toolbar_hidden = true;
+                    t.surface.window.set_visible(false);
+                }
+                ClosePolicy::Exit => self.request_exit(event_loop),
+            }
             return;
         }
         let action = t.handle(&event, &self.fonts);

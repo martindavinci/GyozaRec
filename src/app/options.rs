@@ -37,6 +37,7 @@ const COLUMN_GAP: f32 = 28.0;
 const ID_LANGUAGE: u32 = 15;
 const ID_OK: u32 = 20;
 const ID_CANCEL: u32 = 21;
+const ID_VERSION: u32 = 22;
 /// Menu id prefix for value choices: `opt:<combo id>:<value>`.
 pub const MENU_PREFIX: &str = "opt:";
 /// Menu id prefix for the language choice: `opt:lang:<code|auto>`.
@@ -315,7 +316,17 @@ fn build_ui(
     y += ROW_GAP;
     let ok = WidgetKind::Button { label: texts.ok.into(), dropdown: false };
     let cancel = WidgetKind::Button { label: texts.cancel.into(), dropdown: false };
+    let row_y = y;
     push_row(vec![(ID_OK, ok), (ID_CANCEL, cancel)], PAD, &mut widgets, &mut y);
+    // The version, quietly, at the right end of the buttons row.
+    let right_edge = widgets.iter().map(|w| w.rect.right()).fold(0.0, f32::max);
+    let version = format!("GyozaRec {}", env!("CARGO_PKG_VERSION"));
+    let (tw, th) = measure_text(fonts, &version, GYOZA.font_px, false);
+    let kind = WidgetKind::Label { text: version, color: GYOZA.disabled_text };
+    let mut label =
+        layout_row(vec![(ID_VERSION, kind)], right_edge - tw, row_y, 0.0, fonts, &GYOZA);
+    label[0].rect.y = row_y + (y - ROW_GAP - row_y - th) / 2.0;
+    widgets.extend(label);
     Ui::new(widgets)
 }
 
@@ -630,6 +641,19 @@ impl OptionsWindow {
 #[cfg(test)]
 mod layout_tests {
     use super::*;
+
+    #[test]
+    fn options_show_the_version() {
+        let form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        let fonts = fonts_for(Language::En, &form);
+        let ui = build_ui(&form, Language::En.texts(), &[], &ShortcutEdit::default(), &fonts);
+        let version = format!("GyozaRec {}", env!("CARGO_PKG_VERSION"));
+        let shown = ui.widget(ID_VERSION).map(|w| w.kind.clone());
+        assert!(
+            matches!(&shown, Some(WidgetKind::Label { text, .. }) if *text == version),
+            "{shown:?}"
+        );
+    }
 
     /// Fits a 768-pixel-high screen at 125% scaling (614 logical pixels
     /// minus the title bar), with every option that adds rows turned on.

@@ -432,11 +432,17 @@ struct FakeClockState {
 pub struct FakeClock {
     local_start: NaiveDateTime,
     state: Arc<Mutex<FakeClockState>>,
+    on_sleep: Option<Arc<dyn Fn(Duration) + Send + Sync>>,
 }
 
 impl FakeClock {
     pub fn new(local_start: NaiveDateTime) -> Self {
-        Self { local_start, state: Arc::default() }
+        Self { local_start, state: Arc::default(), on_sleep: None }
+    }
+
+    /// Calls `hook` with the elapsed time after every `sleep`.
+    pub fn with_sleep_hook(self, hook: impl Fn(Duration) + Send + Sync + 'static) -> Self {
+        Self { on_sleep: Some(Arc::new(hook)), ..self }
     }
 
     pub fn advance(&self, d: Duration) {
@@ -460,9 +466,15 @@ impl Clock for FakeClock {
     }
 
     fn sleep(&self, d: Duration) {
-        let mut s = self.state.lock().unwrap();
-        s.sleeps.push(d);
-        s.elapsed += d;
+        let elapsed = {
+            let mut s = self.state.lock().unwrap();
+            s.sleeps.push(d);
+            s.elapsed += d;
+            s.elapsed
+        };
+        if let Some(hook) = &self.on_sleep {
+            hook(elapsed);
+        }
     }
 
     fn local_now(&self) -> NaiveDateTime {

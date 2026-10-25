@@ -3,7 +3,7 @@
 
 use super::surface::WindowSurface;
 use gyozarec::capture::{SelectionRequest, WindowCandidate, window_at};
-use gyozarec::geometry::{CaptureMode, MonitorInfo, PixelPoint, PixelRect, PixelSize};
+use gyozarec::geometry::{CaptureArea, MonitorInfo, PixelPoint, PixelRect, PixelSize};
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::render::OverlayCache;
 use gyozarec::uikit::painter::{Fonts, Painter, measure_text};
@@ -81,7 +81,7 @@ impl OverlayWindow {
 
 pub struct OverlaySession {
     windows: Vec<OverlayWindow>,
-    mode: CaptureMode,
+    area: CaptureArea,
     candidates: Vec<WindowCandidate>,
     reply: Option<Sender<Option<PixelRect>>>,
     /// Window-mode pick under the cursor, screen pixels.
@@ -141,7 +141,7 @@ impl OverlaySession {
         }
         OverlaySession {
             windows,
-            mode: request.mode,
+            area: request.area,
             candidates: request.windows,
             reply: Some(reply),
             hovered: None,
@@ -204,7 +204,7 @@ impl OverlaySession {
     fn pointer_moved(&mut self, index: usize, p: PixelPoint) {
         let w = &mut self.windows[index];
         w.cursor = p;
-        if self.mode == CaptureMode::Window {
+        if self.area == CaptureArea::Window {
             let screen = w.to_screen(p);
             let hovered = window_at(&self.candidates, screen)
                 .map(|c| c.bounds.intersect(&w.monitor.bounds))
@@ -232,7 +232,7 @@ impl OverlaySession {
     }
 
     fn left_button(&mut self, index: usize, pressed: bool) {
-        if self.mode == CaptureMode::Window {
+        if self.area == CaptureArea::Window {
             if !pressed {
                 let pick = self.hovered.unwrap_or_default();
                 self.finish(Some(pick));

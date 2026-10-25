@@ -272,7 +272,7 @@ impl SelectionUi for FakeSelection {
             &Some(self.log.clone()),
             format!(
                 "select:{:?}:frozen={}:windows={}",
-                req.mode,
+                req.area,
                 req.frozen.is_some(),
                 req.windows.len()
             ),

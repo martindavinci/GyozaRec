@@ -5,7 +5,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 ## [0.4.0] - 2026-10-26
 
 ### Added
-- An editor that opens after every image capture (on by default): arrow, rectangle, pen, highlighter, text, pixelate and crop, with undo, redo, Save, Save as and Copy.
+- An editor that opens after every image capture (on by default): arrow, rectangle, pen, highlighter, text, pixelate, redact and crop, with undo, redo, Save, Save as and Copy.
 - A notification with a thumbnail after each saved capture (on by default); clicking it opens the file, images in the editor.
 - "Convert a video to GIF…" in the Format menu and the notification area menu, with progress and cancel.
 - Once a day, a check for a newer release on GitHub (on by default), shown on the status line with a Download link.

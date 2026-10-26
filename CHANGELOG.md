@@ -16,6 +16,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - GIFs store only what changes between frames, so mostly still recordings are much smaller.
 
 ### Fixed
+- System audio in MP4s no longer starts seconds late (with the start sound in it) on output devices whose packet timestamps run ahead of the system clock.
 - Shortcut keys refused by Windows are reported in Options instead of vanishing silently.
 - Restoring a default shortcut with Backspace, and pressing OK, no longer allow two shortcuts with the same keys.
 

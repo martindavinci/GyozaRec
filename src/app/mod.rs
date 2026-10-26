@@ -3,6 +3,8 @@ mod hotkeys;
 mod notice;
 mod options;
 mod overlay;
+#[cfg(test)]
+mod readme_shot;
 mod recording;
 mod surface;
 mod toolbar;

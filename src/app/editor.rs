@@ -37,6 +37,21 @@ const ID_SAVE_AS: u32 = 304;
 const ID_SAVE: u32 = 305;
 const ID_NEW: u32 = 306;
 const ID_OPEN: u32 = 307;
+/// The bar's widget ids, for the README screenshot.
+#[cfg(test)]
+pub mod bar_ids {
+    pub const TOOL: u32 = super::ID_TOOL;
+    pub const SWATCH: u32 = super::ID_SWATCH;
+    pub const SIZE: u32 = super::ID_SIZE;
+    pub const UNDO: u32 = super::ID_UNDO;
+    pub const REDO: u32 = super::ID_REDO;
+    pub const NEW: u32 = super::ID_NEW;
+    pub const OPEN: u32 = super::ID_OPEN;
+    pub const COPY: u32 = super::ID_COPY;
+    pub const SAVE_AS: u32 = super::ID_SAVE_AS;
+    pub const SAVE: u32 = super::ID_SAVE;
+}
+
 /// Menu ids: `editor:<window id>:size:<index>`.
 pub const MENU_PREFIX: &str = "editor:";
 
@@ -523,6 +538,28 @@ impl EditorWindow {
             can_redo: self.doc.can_redo(),
             saving: self.saves.busy(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn add_for_screenshot(&mut self, a: Annotation) {
+        self.doc.add(a);
+        self.rebuild();
+    }
+
+    #[cfg(test)]
+    pub fn window(&self) -> &Window {
+        &self.surface.window
+    }
+
+    #[cfg(test)]
+    pub fn hwnd(&self) -> isize {
+        self.surface.hwnd()
+    }
+
+    /// Where a bar widget is, in logical client units.
+    #[cfg(test)]
+    pub fn bar_rect(&self, id: u32) -> Option<RectF> {
+        self.ui.widget(id).map(|w| w.rect)
     }
 
     pub fn is_dirty(&self) -> bool {

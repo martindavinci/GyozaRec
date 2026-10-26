@@ -2,9 +2,11 @@
 //! that turns them into a contiguous 48 kHz track aligned with the video.
 
 mod downmix;
+mod stamps;
 mod timeline;
 
 pub use downmix::to_stereo;
+pub use stamps::StampFix;
 pub use timeline::{AudioOut, PauseHistory, Timeline};
 
 use std::sync::mpsc::Receiver;

@@ -1,6 +1,6 @@
 //! System audio for recordings: WASAPI loopback on the default output device.
 
-use crate::audio::{AudioFeed, PcmChunk};
+use crate::audio::{AudioFeed, PcmChunk, StampFix};
 use crate::capture::AudioStarter;
 use crate::clock::Clock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -164,6 +164,9 @@ fn capture(
                 if qpc >= qpc_at { clock_at + delta } else { clock_at.saturating_sub(delta) }
             };
             let mut last_end: Option<Duration> = None;
+            // Some devices stamp packets seconds away from the real time.
+            let mut fix = StampFix::default();
+            let mut batch: Vec<(PcmChunk, Option<Duration>, Duration)> = Vec::new();
             while !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(POLL);
                 while reader.GetNextPacketSize()? > 0 {
@@ -187,23 +190,33 @@ fn capture(
                         }
                     };
                     reader.ReleaseBuffer(frames)?;
-                    let stamped = to_clock(qpc);
-                    let at = if flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32 != 0 {
-                        last_end.unwrap_or(stamped)
-                    } else {
-                        stamped
-                    };
-                    last_end =
-                        Some(at + Duration::from_secs_f64(frames as f64 / f64::from(format.rate)));
+                    let read_at = clock.elapsed();
+                    let length = Duration::from_secs_f64(frames as f64 / f64::from(format.rate));
+                    // Device time, or `None` when the device could not tell.
+                    let stamped = (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32 == 0)
+                        .then(|| to_clock(qpc));
+                    if let Some(stamped) = stamped {
+                        fix.observe(stamped, length, read_at);
+                    }
                     let chunk = PcmChunk {
                         source: 0,
                         rate: format.rate,
                         channels: format.channels,
                         channel_mask: format.mask,
                         samples,
-                        at,
+                        at: read_at.saturating_sub(length),
                         discontinuity: flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 != 0,
                     };
+                    batch.push((chunk, stamped, length));
+                }
+                // Packets read together share what the whole group teaches
+                // about the device clock, so they keep their spacing.
+                for (mut chunk, stamped, length) in batch.drain(..) {
+                    chunk.at = match stamped {
+                        Some(stamped) => fix.apply(stamped),
+                        None => last_end.unwrap_or(chunk.at),
+                    };
+                    last_end = Some(chunk.at + length);
                     if chunks.send(chunk).is_err() {
                         return Ok(()); // the recording is gone
                     }
@@ -222,6 +235,41 @@ fn capture(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Prints when loopback packets arrive and where the start tone lands
+    /// on the recording clock. Plays the start tone once.
+    #[test]
+    #[ignore = "desktop-audio"]
+    fn loopback_timestamps_follow_the_clock() {
+        use crate::capture::SoundPlayer;
+        let clock = Arc::new(crate::clock::SystemClock::new());
+        let start = clock.elapsed();
+        let mut feed = LoopbackStarter.start(clock.clone()).expect("output device");
+        let ready = clock.elapsed();
+        std::thread::sleep(Duration::from_millis(500));
+        let played = clock.elapsed();
+        super::super::SystemSound.play(crate::sounds::Cue::Start);
+        std::thread::sleep(Duration::from_millis(1500));
+        let stopped = clock.elapsed();
+        feed.stop();
+        let chunks: Vec<PcmChunk> = feed.chunks.try_iter().collect();
+        eprintln!("start {start:?} ready {ready:?} played {played:?} stopped {stopped:?}");
+        let mut frames = 0usize;
+        for c in &chunks {
+            let n = c.samples.len() / usize::from(c.channels);
+            frames += n;
+            let peak = c.samples.iter().fold(0f32, |m, s| m.max(s.abs()));
+            if peak > 0.02 || c.discontinuity {
+                eprintln!(
+                    "at {:?} frames {n} rate {} ch {} mask {:#x} peak {peak:.3} disc {}",
+                    c.at, c.rate, c.channels, c.channel_mask, c.discontinuity
+                );
+            }
+        }
+        let first = chunks.first().map(|c| c.at);
+        let last = chunks.last().map(|c| c.at);
+        eprintln!("chunks {} frames {frames} first {first:?} last {last:?}", chunks.len());
+    }
 
     /// Starts and stops loopback; a quiet system may deliver no packets.
     /// Plays nothing.

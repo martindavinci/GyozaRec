@@ -10,6 +10,7 @@ mod http;
 mod locale;
 mod monitors;
 mod mp4;
+mod random;
 mod recording;
 mod sound;
 mod video_reader;
@@ -25,6 +26,7 @@ pub use http::GitHubReleases;
 pub use locale::{cjk_font_path, system_ui_languages};
 pub use monitors::{Win32Cursor, Win32Monitors};
 pub use mp4::{Mp4Sink, probe_mp4};
+pub use random::random_bytes;
 pub use recording::{
     DefaultSinkFactory, ExplorerRevealer, allow_foreground_for_others, allow_tiny_window,
     exclude_from_capture, layered_color_key, make_color_keyed, reveal_in_explorer,

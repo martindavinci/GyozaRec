@@ -51,6 +51,8 @@ pub(super) const TEXTS: Texts = Texts {
     video_fps: "视频：每秒帧数",
     video_max_seconds: "视频：最长时长（秒）",
     language: "语言",
+    file_names: "文件名",
+    file_name_styles: ["日期和时间", "随机"],
     automatic: "自动（系统）",
     ok: "确定",
     cancel: "取消",

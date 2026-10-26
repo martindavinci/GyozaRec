@@ -22,7 +22,7 @@ A small toolbar:
 - **Area** — Rectangle, Window or Full screen. With several monitors, Full screen asks which one: click it, or press Esc to cancel.
 - **Format** — PNG image, JPG image, MP4 video or Animated GIF. Any area works with any format. The same menu has **Convert a video to GIF…**.
 - **Delay** — from no delay up to 5 seconds.
-- **Options** — save folder, copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, the editor after an image capture, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
+- **Options** — save folder, file names (date and time, or ten random characters such as `k3F9xQ2bTm.png`), copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, the editor after an image capture, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
 
 <p align="center">
   <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">

@@ -9,6 +9,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - A notification with a thumbnail after each saved capture (on by default); clicking it opens the file, images in the editor.
 - "Convert a video to GIF…" in the Format menu and the notification area menu, with progress and cancel.
 - Once a day, a check for a newer release on GitHub (on by default), shown on the status line with a Download link.
+- File names can be ten random characters instead of the date and time ("File names" in Options).
 
 ### Changed
 - GIFs store only what changes between frames, so mostly still recordings are much smaller.

@@ -145,7 +145,8 @@ impl CaptureCoordinator {
                 self.clock.sleep(crate::sounds::CUE_GUARD);
             }
         }
-        let path = FileNamer::new(self.clock.clone()).next_path(&settings.save_folder, ext);
+        let namer = FileNamer::with_style(self.clock.clone(), settings.file_names);
+        let path = namer.next_path(&settings.save_folder, ext);
         let sink = match self.sinks.create(&kind, &path, region.size(), fps) {
             Ok(sink) => sink,
             Err(err) => return CaptureOutcome::failed(err, false),
@@ -221,7 +222,7 @@ impl CaptureCoordinator {
 
     /// Saves the PNG and copies it; the copy happens even if saving fails.
     fn finish_image(&mut self, img: &PixelBuffer, settings: &AppSettings) -> CaptureOutcome {
-        let namer = FileNamer::new(self.clock.clone());
+        let namer = FileNamer::with_style(self.clock.clone(), settings.file_names);
         let saved =
             save_image(img, &settings.save_folder, &namer, settings.format, settings.jpeg_quality);
         let copied = settings.copy_to_clipboard && self.clipboard.set_image(img);
@@ -720,6 +721,24 @@ mod tests {
             h.run(settings);
             assert!(!h.events().iter().any(|e| e.starts_with("notice:")), "{:?}", h.events());
         }
+    }
+
+    #[test]
+    fn random_file_names_leave_out_the_app_name() {
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut img = CoordinatorHarness::rect(rect);
+        let random =
+            |s: AppSettings| AppSettings { file_names: crate::output::FileNames::Random, ..s };
+        let o = img.run(random(img.settings()));
+        let name = o.path.unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        assert!(
+            !name.starts_with("GyozaRec") && name.ends_with(".png") && name.len() == 14,
+            "{name}"
+        );
+        let mut rec = CoordinatorHarness::rect(rect).recording(RecordingOutcome::Saved);
+        let o = rec.run(random(AppSettings { format: OutputFormat::Gif, ..rec.settings() }));
+        let name = o.path.unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        assert!(!name.starts_with("GyozaRec") && name.ends_with(".gif"), "{name}");
     }
 
     #[test]

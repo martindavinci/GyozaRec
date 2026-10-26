@@ -51,6 +51,8 @@ pub(super) const TEXTS: Texts = Texts {
     video_fps: "動画: フレーム/秒",
     video_max_seconds: "動画: 最大の長さ (秒)",
     language: "言語",
+    file_names: "ファイル名",
+    file_name_styles: ["日時", "ランダム"],
     automatic: "自動 (システム)",
     ok: "OK",
     cancel: "キャンセル",

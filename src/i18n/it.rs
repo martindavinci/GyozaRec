@@ -56,6 +56,8 @@ pub(super) const TEXTS: Texts = Texts {
     video_fps: "Video: fotogrammi al secondo",
     video_max_seconds: "Video: durata massima (s)",
     language: "Lingua",
+    file_names: "Nome dei file",
+    file_name_styles: ["Data e ora", "Casuale"],
     automatic: "Automatica (sistema)",
     ok: "OK",
     cancel: "Annulla",

@@ -39,6 +39,8 @@ const ID_UPDATE_LINK: u32 = 23;
 const HINT_WIDTH: f32 = 340.0;
 const COLUMN_GAP: f32 = 28.0;
 const ID_LANGUAGE: u32 = 15;
+const ID_FILE_NAMES: u32 = 17;
+const ID_NAME_EXAMPLE: u32 = 18;
 const ID_OK: u32 = 20;
 const ID_CANCEL: u32 = 21;
 const ID_VERSION: u32 = 22;
@@ -46,6 +48,13 @@ const ID_VERSION: u32 = 22;
 pub const MENU_PREFIX: &str = "opt:";
 /// Menu id prefix for the language choice: `opt:lang:<code|auto>`.
 const LANGUAGE_PREFIX: &str = "opt:lang:";
+/// Menu id prefix for the file name style: `opt:names:<index>`.
+const NAMES_PREFIX: &str = "opt:names:";
+
+fn file_names_label(form: &OptionsForm, texts: &Texts) -> &'static str {
+    let i = gyozarec::output::FILE_NAMES.iter().position(|s| *s == form.file_names).unwrap_or(0);
+    texts.file_name_styles[i]
+}
 
 /// The numeric dropdowns: id, base choices.
 const COMBOS: [(u32, &[u32]); 6] = [
@@ -234,6 +243,14 @@ fn build_ui(
     let path = shorten_middle(&form.save_folder.to_string_lossy(), PATH_CHARS);
     let browse = WidgetKind::Button { label: texts.browse.into(), dropdown: false };
     push_row(vec![(101, label(&path)), (ID_BROWSE, browse)], PAD, &mut widgets, &mut y);
+    // How captures are named, with what the next one will be called.
+    let names = WidgetKind::Button { label: file_names_label(form, texts).into(), dropdown: true };
+    let example =
+        gyozarec::output::example_name(form.file_names, chrono::Local::now().naive_local());
+    let example = WidgetKind::Label { text: example, color: GYOZA.disabled_text };
+    let row =
+        vec![(102, label(texts.file_names)), (ID_FILE_NAMES, names), (ID_NAME_EXAMPLE, example)];
+    push_row(row, PAD, &mut widgets, &mut y);
 
     let checks = [
         (ID_CLIPBOARD, texts.copy_to_clipboard, form.copy_to_clipboard),
@@ -478,6 +495,13 @@ impl OptionsWindow {
 
     /// Applies a choice from a value menu (`opt:<id>:<value>` or `opt:lang:<code|auto>`).
     pub fn on_menu(&mut self, menu_id: &str) {
+        if let Some(i) = menu_id.strip_prefix(NAMES_PREFIX).and_then(|v| v.parse::<usize>().ok()) {
+            if let Some(style) = gyozarec::output::FILE_NAMES.get(i) {
+                self.form.file_names = *style;
+                self.rebuild();
+            }
+            return;
+        }
         if let Some(code) = menu_id.strip_prefix(LANGUAGE_PREFIX) {
             self.form.language = Language::from_code(code);
             self.fonts = fonts_for(self.ui_language, &self.form);
@@ -496,7 +520,17 @@ impl OptionsWindow {
 
     fn show_choices(&self, id: u32) {
         let menu = Menu::new();
-        if id == ID_LANGUAGE {
+        if id == ID_FILE_NAMES {
+            for (i, style) in gyozarec::output::FILE_NAMES.iter().enumerate() {
+                let _ = menu.append(&CheckMenuItem::with_id(
+                    format!("{NAMES_PREFIX}{i}"),
+                    self.texts.file_name_styles[i],
+                    true,
+                    *style == self.form.file_names,
+                    None,
+                ));
+            }
+        } else if id == ID_LANGUAGE {
             let choices = std::iter::once(None).chain(Language::ALL.iter().copied().map(Some));
             for choice in choices {
                 let code = choice.map_or("auto", Language::code);
@@ -674,7 +708,10 @@ impl OptionsWindow {
             ID_AUTOSTART => self.form.start_with_windows = !self.form.start_with_windows,
             ID_SHORTCUTS => self.form.shortcuts_enabled = !self.form.shortcuts_enabled,
             ID_PRINT_SCREEN => self.form.print_screen_captures = !self.form.print_screen_captures,
-            id if id == ID_LANGUAGE || COMBOS.iter().any(|(cid, _)| *cid == id) => {
+            id if id == ID_LANGUAGE
+                || id == ID_FILE_NAMES
+                || COMBOS.iter().any(|(cid, _)| *cid == id) =>
+            {
                 self.show_choices(id)
             }
             _ => {}
@@ -788,6 +825,25 @@ mod layout_tests {
         form.shortcuts_disabled.clear();
         form.shortcuts_enabled = false;
         assert!(clashing_lines(&form, &lines()).is_empty(), "all shortcuts are off");
+    }
+
+    #[test]
+    fn file_names_choice_shows_an_example() {
+        let mut form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        form.file_names = gyozarec::output::FileNames::Random;
+        let fonts = fonts_for(Language::It, &form);
+        let ui = build_ui(&form, Language::It.texts(), &[], &ShortcutEdit::default(), &fonts);
+        let label = |id| ui.widget(id).map(|w| w.kind.clone());
+        assert!(
+            matches!(label(ID_FILE_NAMES), Some(WidgetKind::Button { label, .. }) if label == "Casuale")
+        );
+        assert!(
+            matches!(label(ID_NAME_EXAMPLE), Some(WidgetKind::Label { text, .. }) if text == "k3F9xQ2bTm.png")
+        );
+        let (button, example) =
+            (ui.widget(ID_FILE_NAMES).unwrap().rect, ui.widget(ID_NAME_EXAMPLE).unwrap().rect);
+        assert!(example.x > button.right(), "beside its dropdown");
+        assert!(example.y > button.y && example.bottom() < button.bottom());
     }
 
     #[test]

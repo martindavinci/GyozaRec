@@ -29,6 +29,7 @@ pub struct AppSettings {
     pub show_notification: bool,
     /// Once a day, ask GitHub whether a newer release exists.
     pub check_for_updates: bool,
+    pub file_names: crate::output::FileNames,
     /// When that was last asked (Unix seconds).
     pub last_update_check: Option<i64>,
     /// Closing the toolbar hides it; GyozaRec stays in the notification area.
@@ -70,6 +71,7 @@ impl Default for AppSettings {
             open_editor_after_capture: true,
             show_notification: true,
             check_for_updates: true,
+            file_names: crate::output::FileNames::DateTime,
             last_update_check: None,
             keep_in_tray: true,
             start_with_windows: false,
@@ -218,6 +220,18 @@ mod tests {
         let s = SettingsStore::new(p, cap()).load();
         assert!(s.shortcut_keys.is_empty() && s.shortcuts_disabled.is_empty());
         assert_eq!(crate::shortcuts::effective(&s).len(), 4);
+    }
+
+    #[test]
+    fn file_names_are_stored_by_name() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        let store = SettingsStore::new(p.clone(), cap());
+        assert_eq!(store.load().file_names, crate::output::FileNames::DateTime);
+        let s = AppSettings { file_names: crate::output::FileNames::Random, ..store.load() };
+        store.save(&s).unwrap();
+        assert!(fs::read_to_string(&p).unwrap().contains(r#""file_names": "random""#));
+        assert_eq!(store.load().file_names, crate::output::FileNames::Random);
     }
 
     #[test]

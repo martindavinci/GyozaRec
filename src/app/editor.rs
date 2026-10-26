@@ -35,6 +35,8 @@ const ID_REDO: u32 = 302;
 const ID_COPY: u32 = 303;
 const ID_SAVE_AS: u32 = 304;
 const ID_SAVE: u32 = 305;
+const ID_NEW: u32 = 306;
+const ID_OPEN: u32 = 307;
 /// Menu ids: `editor:<window id>:size:<index>`.
 pub const MENU_PREFIX: &str = "editor:";
 
@@ -49,6 +51,10 @@ pub struct EditorSettings {
 pub enum EditorResult {
     Open,
     Closed,
+    /// New: capture another image (this editor gives way to it if clean).
+    NewCapture,
+    /// Open this picture in another editor.
+    OpenFile(PathBuf),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +65,8 @@ pub enum EditorCommand {
     SaveAs,
     Copy,
     Close,
+    New,
+    OpenFile,
 }
 
 /// Keyboard commands; while text is being typed, Ctrl+C and Esc belong to it.
@@ -76,6 +84,8 @@ pub fn command_for(key: &Key, mods: ModifiersState, typing: bool) -> Option<Edit
         ("s", false) => Some(EditorCommand::Save),
         ("s", true) => Some(EditorCommand::SaveAs),
         ("c", _) if !typing => Some(EditorCommand::Copy),
+        ("n", false) => Some(EditorCommand::New),
+        ("o", false) => Some(EditorCommand::OpenFile),
         _ => None,
     }
 }
@@ -150,6 +160,8 @@ fn build_bar(width: f32, s: &BarState, texts: &Texts, fonts: &Fonts) -> Ui {
     }
     let button = |label: &str| WidgetKind::Button { label: label.into(), dropdown: false };
     let files = vec![
+        (ID_NEW, button(texts.editor_new)),
+        (ID_OPEN, button(texts.editor_open)),
         (ID_COPY, button(texts.editor_copy)),
         (ID_SAVE_AS, button(texts.editor_save_as)),
         (ID_SAVE, button(texts.editor_save)),
@@ -275,6 +287,33 @@ impl EditorCanvas {
     }
 }
 
+/// Keeps the clipboard on the latest edit: snapshots go to a thread that
+/// draws only the newest one waiting, so quick edits do not pile up.
+pub struct CopyQueue {
+    snapshots: Option<std::sync::mpsc::Sender<Document>>,
+}
+
+impl CopyQueue {
+    pub fn start(fonts: Arc<Fonts>, copy: impl Fn(&PixelBuffer) + Send + 'static) -> CopyQueue {
+        let (snapshots, inbox) = std::sync::mpsc::channel::<Document>();
+        let _ = std::thread::Builder::new().name("gyozarec-editor-copy".into()).spawn(move || {
+            while let Ok(mut doc) = inbox.recv() {
+                while let Ok(newer) = inbox.try_recv() {
+                    doc = newer;
+                }
+                copy(&doc.flatten(&fonts));
+            }
+        });
+        CopyQueue { snapshots: Some(snapshots) }
+    }
+
+    pub fn push(&self, doc: Document) {
+        if let Some(s) = &self.snapshots {
+            let _ = s.send(doc);
+        }
+    }
+}
+
 /// Text being typed, not yet in the document.
 struct TextBox {
     at: Point,
@@ -390,6 +429,9 @@ pub struct EditorWindow {
     modifiers: ModifiersState,
     saves: SaveTracker,
     proxy: EventLoopProxy<AppEvent>,
+    /// Puts every edit on the clipboard, when copying is on.
+    copies: Option<CopyQueue>,
+    copied_version: u64,
 }
 
 impl EditorWindow {
@@ -436,8 +478,15 @@ impl EditorWindow {
             cursor: (-1.0, -1.0),
             modifiers: ModifiersState::empty(),
             saves: SaveTracker::default(),
+            copies: None,
+            copied_version: 0,
             proxy,
         };
+        if settings.copy_to_clipboard {
+            editor.copies = Some(CopyQueue::start(editor.fonts.clone(), |img| {
+                Win32Clipboard.set_image(img);
+            }));
+        }
         editor.rebuild();
         editor.focus();
         Some(editor)
@@ -476,7 +525,21 @@ impl EditorWindow {
         }
     }
 
+    pub fn is_dirty(&self) -> bool {
+        self.doc.is_dirty() || self.text.is_some()
+    }
+
+    pub fn scale_factor(&self) -> f64 {
+        self.surface.window.scale_factor()
+    }
+
     fn rebuild(&mut self) {
+        if let Some(copies) = &self.copies
+            && self.doc.version() != self.copied_version
+        {
+            self.copied_version = self.doc.version();
+            copies.push(self.doc.snapshot());
+        }
         let mut ui = build_bar(self.logical_size().0, &self.bar_state(), self.texts, &self.fonts);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
@@ -733,6 +796,21 @@ impl EditorWindow {
                     return EditorResult::Closed;
                 }
             }
+            EditorCommand::New => {
+                self.commit_text();
+                return EditorResult::NewCapture;
+            }
+            EditorCommand::OpenFile => {
+                self.commit_text();
+                let folder = self.path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+                let picked = rfd::FileDialog::new()
+                    .set_directory(folder)
+                    .add_filter("PNG, JPG", &["png", "jpg", "jpeg"])
+                    .pick_file();
+                if let Some(path) = picked {
+                    return EditorResult::OpenFile(path);
+                }
+            }
         }
         self.rebuild();
         EditorResult::Open
@@ -745,6 +823,8 @@ impl EditorWindow {
             ID_COPY => return self.run(EditorCommand::Copy),
             ID_SAVE_AS => return self.run(EditorCommand::SaveAs),
             ID_SAVE => return self.run(EditorCommand::Save),
+            ID_NEW => return self.run(EditorCommand::New),
+            ID_OPEN => return self.run(EditorCommand::OpenFile),
             ID_SIZE => self.show_size_menu(),
             id if (ID_TOOL..ID_TOOL + TOOLS.len() as u32).contains(&id) => {
                 self.commit_text();
@@ -933,6 +1013,33 @@ mod tests {
     }
 
     #[test]
+    fn the_clipboard_gets_the_latest_edit() {
+        let fonts = Arc::new(Fonts::embedded());
+        let (tx, copied) = std::sync::mpsc::channel::<PixelBuffer>();
+        let tx = std::sync::Mutex::new(tx);
+        let queue = CopyQueue::start(fonts.clone(), move |img| {
+            let _ = tx.lock().unwrap().send(img.clone());
+        });
+        let base = Arc::new(PixelBuffer::solid(PixelRect::new(0, 0, 40, 20), 255, 255, 255));
+        let mut doc = Document::new(base);
+        for i in 0..5 {
+            let x = 2.0 + i as f32 * 7.0;
+            doc.add(Annotation::Redact { a: (x, 2.0), b: (x + 4.0, 18.0), color: PALETTE[4] });
+            queue.push(doc.snapshot());
+        }
+        let expected = doc.flatten(&fonts);
+        let mut last = None;
+        while let Ok(img) = copied.recv_timeout(std::time::Duration::from_secs(5)) {
+            let done = img == expected;
+            last = Some(img);
+            if done {
+                break;
+            }
+        }
+        assert_eq!(last.as_ref(), Some(&expected), "the newest picture is copied last");
+    }
+
+    #[test]
     fn initial_size_fits_the_work_area() {
         let work = Some(PixelRect::new(0, 0, 1920, 1040));
         let (w, h) = initial_size(PixelSize { width: 7680, height: 2160 }, work, 1.0);
@@ -980,6 +1087,8 @@ mod tests {
         assert_eq!(command_for(&key("S"), ctrl_shift, false), Some(EditorCommand::SaveAs));
         assert_eq!(command_for(&key("c"), ctrl, false), Some(EditorCommand::Copy));
         assert_eq!(command_for(&key("c"), ctrl, true), None, "copy belongs to the text");
+        assert_eq!(command_for(&key("n"), ctrl, false), Some(EditorCommand::New));
+        assert_eq!(command_for(&key("o"), ctrl, true), Some(EditorCommand::OpenFile));
         assert_eq!(command_for(&key("s"), ModifiersState::empty(), true), None, "plain s is typed");
         let esc = Key::Named(NamedKey::Escape);
         assert_eq!(command_for(&esc, ModifiersState::empty(), false), Some(EditorCommand::Close));

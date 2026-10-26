@@ -71,6 +71,8 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save: "저장",
     editor_save_as: "다른 이름으로 저장…",
     editor_copy: "복사",
+    editor_new: "새로 만들기",
+    editor_open: "열기…",
     editor_sizes: ["가늘게", "보통", "굵게"],
     editor_save_question: "{name}의 변경 내용을 저장할까요?",
     editor_save_failed: "이미지를 저장할 수 없습니다: {error}",

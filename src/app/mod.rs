@@ -139,6 +139,9 @@ pub struct App {
     /// An editor opened during the running capture gets the focus after it.
     focus_editor: bool,
     notice: Option<notice::NoticeWindow>,
+    /// The editor whose New started the running capture; it gives way to
+    /// the new editor if it has nothing unsaved.
+    replace_editor: Option<WindowId>,
     notice_timer: gyozarec::presentation::NoticeTimer,
 }
 
@@ -224,6 +227,7 @@ impl App {
             editor_fonts: None,
             focus_editor: false,
             notice: None,
+            replace_editor: None,
             notice_timer: Default::default(),
         }
     }
@@ -689,6 +693,12 @@ impl App {
                 if !self.exit_pending {
                     self.open_editor(event_loop, image, path, Some(work_area), scale);
                     self.focus_editor = true;
+                    if let Some(old) = self.replace_editor.take()
+                        && let Some(i) = self.editors.iter().position(|e| e.id() == old)
+                        && !self.editors[i].is_dirty()
+                    {
+                        self.editors.remove(i);
+                    }
                 }
             }
             UiRequest::Select { request, reply } => {
@@ -709,6 +719,7 @@ impl App {
             }
             UiRequest::CaptureFinished(outcome) => {
                 self.state.busy = false;
+                self.replace_editor = None;
                 if self.exit_pending {
                     self.stop_conversion();
                     event_loop.exit();
@@ -853,8 +864,22 @@ impl ApplicationHandler<AppEvent> for App {
             return;
         }
         if let Some(i) = self.editors.iter().position(|e| e.id() == id) {
-            if self.editors[i].handle(&event) == editor::EditorResult::Closed {
-                self.editors.remove(i);
+            match self.editors[i].handle(&event) {
+                editor::EditorResult::Open => {}
+                editor::EditorResult::Closed => {
+                    self.editors.remove(i);
+                }
+                editor::EditorResult::NewCapture => {
+                    self.replace_editor = Some(id);
+                    self.start_quick(QuickAction::Image);
+                }
+                editor::EditorResult::OpenFile(path) => {
+                    let scale = self.editors[i].scale_factor();
+                    match gyozarec::editor::load(&path) {
+                        Ok(img) => self.open_editor(event_loop, Arc::new(img), path, None, scale),
+                        Err(err) => gyozarec::platform::show_error_box(&err.to_string()),
+                    }
+                }
             }
             return;
         }

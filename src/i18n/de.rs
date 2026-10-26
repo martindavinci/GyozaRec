@@ -78,6 +78,8 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save: "Speichern",
     editor_save_as: "Speichern unter…",
     editor_copy: "Kopieren",
+    editor_new: "Neu",
+    editor_open: "Öffnen…",
     editor_sizes: ["Dünn", "Mittel", "Dick"],
     editor_save_question: "Änderungen an {name} speichern?",
     editor_save_failed: "Das Bild konnte nicht gespeichert werden: {error}",

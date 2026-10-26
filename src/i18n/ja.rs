@@ -71,6 +71,8 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save: "保存",
     editor_save_as: "名前を付けて保存…",
     editor_copy: "コピー",
+    editor_new: "新規",
+    editor_open: "開く…",
     editor_sizes: ["細い", "中", "太い"],
     editor_save_question: "{name} への変更を保存しますか?",
     editor_save_failed: "画像を保存できませんでした: {error}",

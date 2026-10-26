@@ -76,6 +76,8 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save: "Enregistrer",
     editor_save_as: "Enregistrer sous…",
     editor_copy: "Copier",
+    editor_new: "Nouvelle",
+    editor_open: "Ouvrir…",
     editor_sizes: ["Fin", "Moyen", "Épais"],
     editor_save_question: "Enregistrer les modifications de {name} ?",
     editor_save_failed: "Impossible d’enregistrer l’image : {error}",

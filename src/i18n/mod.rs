@@ -199,6 +199,8 @@ pub struct Texts {
     pub editor_save: &'static str,
     pub editor_save_as: &'static str,
     pub editor_copy: &'static str,
+    pub editor_new: &'static str,
+    pub editor_open: &'static str,
     /// Line and text sizes of the editor, thinnest first.
     pub editor_sizes: [&'static str; 3],
     /// `{name}` is the file name.
@@ -294,6 +296,8 @@ mod tests {
                 t.err_capture_thread,
                 t.err_capture_failed,
                 t.crash_message,
+                t.editor_new,
+                t.editor_open,
                 t.file_name_prefix,
                 t.file_names,
                 t.check_for_updates,

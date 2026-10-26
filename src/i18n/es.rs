@@ -76,6 +76,8 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save: "Guardar",
     editor_save_as: "Guardar como…",
     editor_copy: "Copiar",
+    editor_new: "Nueva",
+    editor_open: "Abrir…",
     editor_sizes: ["Fino", "Medio", "Grueso"],
     editor_save_question: "¿Guardar los cambios en {name}?",
     editor_save_failed: "No se pudo guardar la imagen: {error}",

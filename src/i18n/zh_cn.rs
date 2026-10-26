@@ -71,6 +71,8 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save: "保存",
     editor_save_as: "另存为…",
     editor_copy: "复制",
+    editor_new: "新建",
+    editor_open: "打开…",
     editor_sizes: ["细", "中", "粗"],
     editor_save_question: "是否保存对 {name} 的更改？",
     editor_save_failed: "无法保存图片：{error}",

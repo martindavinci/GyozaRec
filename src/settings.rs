@@ -29,6 +29,8 @@ pub struct AppSettings {
     /// Once a day, ask GitHub whether a newer release exists.
     pub check_for_updates: bool,
     pub file_names: crate::output::FileNames,
+    /// Date-and-time names start with `GyozaRec_`.
+    pub file_name_prefix: bool,
     /// When that was last asked (Unix seconds).
     pub last_update_check: Option<i64>,
     /// Closing the toolbar hides it; GyozaRec stays in the notification area.
@@ -71,6 +73,7 @@ impl Default for AppSettings {
             show_notification: true,
             check_for_updates: true,
             file_names: crate::output::FileNames::DateTime,
+            file_name_prefix: false,
             last_update_check: None,
             keep_in_tray: true,
             start_with_windows: false,
@@ -227,6 +230,7 @@ mod tests {
         let p = d.path().join("s.json");
         let store = SettingsStore::new(p.clone(), cap());
         assert_eq!(store.load().file_names, crate::output::FileNames::DateTime);
+        assert!(!store.load().file_name_prefix, "no GyozaRec_ unless asked for");
         let s = AppSettings { file_names: crate::output::FileNames::Random, ..store.load() };
         store.save(&s).unwrap();
         assert!(fs::read_to_string(&p).unwrap().contains(r#""file_names": "random""#));

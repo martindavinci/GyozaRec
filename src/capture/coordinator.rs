@@ -145,7 +145,11 @@ impl CaptureCoordinator {
                 self.clock.sleep(crate::sounds::CUE_GUARD);
             }
         }
-        let namer = FileNamer::with_style(self.clock.clone(), settings.file_names);
+        let namer = FileNamer::with_style(
+            self.clock.clone(),
+            settings.file_names,
+            settings.file_name_prefix,
+        );
         let path = namer.next_path(&settings.save_folder, ext);
         let sink = match self.sinks.create(&kind, &path, region.size(), fps) {
             Ok(sink) => sink,
@@ -222,7 +226,11 @@ impl CaptureCoordinator {
 
     /// Saves the PNG and copies it; the copy happens even if saving fails.
     fn finish_image(&mut self, img: &PixelBuffer, settings: &AppSettings) -> CaptureOutcome {
-        let namer = FileNamer::with_style(self.clock.clone(), settings.file_names);
+        let namer = FileNamer::with_style(
+            self.clock.clone(),
+            settings.file_names,
+            settings.file_name_prefix,
+        );
         let saved =
             save_image(img, &settings.save_folder, &namer, settings.format, settings.jpeg_quality);
         let copied = settings.copy_to_clipboard && self.clipboard.set_image(img);
@@ -486,7 +494,7 @@ mod tests {
                 "select:Rectangle:frozen=true:windows=0",
                 "clip:image:10,20,30,40",
                 "sound",
-                "editor:GyozaRec_2026-10-24_12-00-00.png:30x40:work=0,0,1920,1080:scale=1",
+                "editor:2026-10-24_12-00-00.png:30x40:work=0,0,1920,1080:scale=1",
                 "show"
             ]
         );

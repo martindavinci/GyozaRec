@@ -10,7 +10,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FileNames {
-    /// `GyozaRec_yyyy-MM-dd_HH-mm-ss`.
+    /// `yyyy-MM-dd_HH-mm-ss`, optionally after `GyozaRec_`.
     #[default]
     DateTime,
     /// Ten random letters and digits, nothing else.
@@ -20,9 +20,9 @@ pub enum FileNames {
 pub const FILE_NAMES: [FileNames; 2] = [FileNames::DateTime, FileNames::Random];
 
 /// What a name looks like in this style, for Options.
-pub fn example_name(style: FileNames, now: chrono::NaiveDateTime) -> String {
+pub fn example_name(style: FileNames, prefix: bool, now: chrono::NaiveDateTime) -> String {
     match style {
-        FileNames::DateTime => format!("GyozaRec_{}.png", now.format("%Y-%m-%d_%H-%M-%S")),
+        FileNames::DateTime => format!("{}.png", date_stem(prefix, now)),
         FileNames::Random => "k3F9xQ2bTm.png".to_string(),
     }
 }
@@ -33,18 +33,20 @@ pub const RANDOM_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkm
 pub struct FileNamer {
     clock: Arc<dyn Clock>,
     style: FileNames,
+    /// Date-and-time names start with `GyozaRec_`.
+    prefix: bool,
 }
 
 impl FileNamer {
     pub fn new(clock: Arc<dyn Clock>) -> Self {
-        Self::with_style(clock, FileNames::DateTime)
+        Self::with_style(clock, FileNames::DateTime, true)
     }
 
-    pub fn with_style(clock: Arc<dyn Clock>, style: FileNames) -> Self {
-        Self { clock, style }
+    pub fn with_style(clock: Arc<dyn Clock>, style: FileNames, prefix: bool) -> Self {
+        Self { clock, style, prefix }
     }
 
-    /// `GyozaRec_yyyy-MM-dd_HH-mm-ss.<ext>`, with `_2`, `_3`… when taken;
+    /// `[GyozaRec_]yyyy-MM-dd_HH-mm-ss.<ext>`, with `_2`, `_3`… when taken;
     /// or a random name, drawn again while taken.
     pub fn next_path(&self, folder: &Path, ext: &str) -> PathBuf {
         if self.style == FileNames::Random {
@@ -53,7 +55,7 @@ impl FileNamer {
                 .find(|p| !p.exists())
                 .expect("unbounded draws");
         }
-        let stem = format!("GyozaRec_{}", self.clock.local_now().format("%Y-%m-%d_%H-%M-%S"));
+        let stem = date_stem(self.prefix, self.clock.local_now());
         let first = folder.join(format!("{stem}.{ext}"));
         if !first.exists() {
             return first;
@@ -63,6 +65,12 @@ impl FileNamer {
             .find(|p| !p.exists())
             .expect("unbounded counter")
     }
+}
+
+/// `yyyy-MM-dd_HH-mm-ss`, after `GyozaRec_` when `prefix` is on.
+fn date_stem(prefix: bool, at: chrono::NaiveDateTime) -> String {
+    let date = at.format("%Y-%m-%d_%H-%M-%S");
+    if prefix { format!("GyozaRec_{date}") } else { date.to_string() }
 }
 
 /// Ten characters of `RANDOM_ALPHABET`, uniformly drawn.
@@ -151,7 +159,7 @@ mod tests {
     #[test]
     fn random_names_are_ten_unambiguous_characters_without_the_app_name() {
         let d = tempdir().unwrap();
-        let n = FileNamer::with_style(namer().clock, FileNames::Random);
+        let n = FileNamer::with_style(namer().clock, FileNames::Random, true);
         let mut seen = std::collections::HashSet::new();
         for _ in 0..200 {
             let path = n.next_path(d.path(), "png");
@@ -169,9 +177,20 @@ mod tests {
     #[test]
     fn examples_show_each_style() {
         let at = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap().and_hms_opt(14, 30, 5).unwrap();
-        assert_eq!(example_name(FileNames::DateTime, at), "GyozaRec_2026-10-26_14-30-05.png");
-        let random = example_name(FileNames::Random, at);
+        assert_eq!(example_name(FileNames::DateTime, true, at), "GyozaRec_2026-10-26_14-30-05.png");
+        assert_eq!(example_name(FileNames::DateTime, false, at), "2026-10-26_14-30-05.png");
+        let random = example_name(FileNames::Random, true, at);
         assert!(random.trim_end_matches(".png").chars().all(|c| RANDOM_ALPHABET.contains(c)));
+    }
+
+    #[test]
+    fn date_names_without_the_prefix_still_count_up_when_taken() {
+        let d = tempdir().unwrap();
+        let n = FileNamer::with_style(namer().clock, FileNames::DateTime, false);
+        let first = n.next_path(d.path(), "png");
+        assert_eq!(first, d.path().join("2026-10-24_15-03-07.png"));
+        fs::write(&first, b"").unwrap();
+        assert_eq!(n.next_path(d.path(), "png"), d.path().join("2026-10-24_15-03-07_2.png"));
     }
 
     #[test]

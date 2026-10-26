@@ -52,6 +52,7 @@ pub(super) const TEXTS: Texts = Texts {
     video_max_seconds: "Vídeo: duração máxima (s)",
     language: "Idioma",
     file_names: "Nome dos arquivos",
+    file_name_prefix: "Começar com \"GyozaRec_\"",
     file_name_styles: ["Data e hora", "Aleatório"],
     automatic: "Automático (sistema)",
     ok: "OK",

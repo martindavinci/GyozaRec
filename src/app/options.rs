@@ -41,6 +41,7 @@ const COLUMN_GAP: f32 = 28.0;
 const ID_LANGUAGE: u32 = 15;
 const ID_FILE_NAMES: u32 = 17;
 const ID_NAME_EXAMPLE: u32 = 18;
+const ID_NAME_PREFIX: u32 = 19;
 const ID_OK: u32 = 20;
 const ID_CANCEL: u32 = 21;
 const ID_VERSION: u32 = 22;
@@ -245,12 +246,22 @@ fn build_ui(
     push_row(vec![(101, label(&path)), (ID_BROWSE, browse)], PAD, &mut widgets, &mut y);
     // How captures are named, with what the next one will be called.
     let names = WidgetKind::Button { label: file_names_label(form, texts).into(), dropdown: true };
-    let example =
-        gyozarec::output::example_name(form.file_names, chrono::Local::now().naive_local());
+    let example = gyozarec::output::example_name(
+        form.file_names,
+        form.file_name_prefix,
+        chrono::Local::now().naive_local(),
+    );
     let example = WidgetKind::Label { text: example, color: GYOZA.disabled_text };
     let row =
         vec![(102, label(texts.file_names)), (ID_FILE_NAMES, names), (ID_NAME_EXAMPLE, example)];
     push_row(row, PAD, &mut widgets, &mut y);
+    if form.file_names == gyozarec::output::FileNames::DateTime {
+        let prefix = WidgetKind::Check {
+            label: texts.file_name_prefix.into(),
+            checked: form.file_name_prefix,
+        };
+        push_row(vec![(ID_NAME_PREFIX, prefix)], PAD + 26.0, &mut widgets, &mut y);
+    }
 
     let checks = [
         (ID_CLIPBOARD, texts.copy_to_clipboard, form.copy_to_clipboard),
@@ -696,6 +707,7 @@ impl OptionsWindow {
             }
             ID_OPEN_FILE => self.form.open_file_after_capture = !self.form.open_file_after_capture,
             ID_NOTICE => self.form.show_notification = !self.form.show_notification,
+            ID_NAME_PREFIX => self.form.file_name_prefix = !self.form.file_name_prefix,
             ID_UPDATES => self.form.check_for_updates = !self.form.check_for_updates,
             ID_UPDATE_LINK => {
                 if let Some(page) = self.update.as_ref().and_then(|u| u.safe_page()) {
@@ -844,6 +856,24 @@ mod layout_tests {
             (ui.widget(ID_FILE_NAMES).unwrap().rect, ui.widget(ID_NAME_EXAMPLE).unwrap().rect);
         assert!(example.x > button.right(), "beside its dropdown");
         assert!(example.y > button.y && example.bottom() < button.bottom());
+    }
+
+    #[test]
+    fn the_prefix_choice_belongs_to_date_and_time_names() {
+        let mut form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        let fonts = fonts_for(Language::En, &form);
+        let texts = Language::En.texts();
+        let ui = build_ui(&form, texts, &[], &ShortcutEdit::default(), &fonts);
+        let check = ui.widget(ID_NAME_PREFIX).map(|w| w.kind.clone());
+        assert!(matches!(check, Some(WidgetKind::Check { checked: false, .. })), "{check:?}");
+        let example = ui.widget(ID_NAME_EXAMPLE).map(|w| w.kind.clone());
+        assert!(
+            matches!(&example, Some(WidgetKind::Label { text, .. }) if !text.starts_with("GyozaRec")),
+            "{example:?}"
+        );
+        form.file_names = gyozarec::output::FileNames::Random;
+        let ui = build_ui(&form, texts, &[], &ShortcutEdit::default(), &fonts);
+        assert!(ui.widget(ID_NAME_PREFIX).is_none(), "random names have no prefix");
     }
 
     #[test]

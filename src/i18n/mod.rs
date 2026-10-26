@@ -178,6 +178,7 @@ pub struct Texts {
     pub video_max_seconds: &'static str,
     pub language: &'static str,
     pub file_names: &'static str,
+    pub file_name_prefix: &'static str,
     /// In `FILE_NAMES` order: date and time, random.
     pub file_name_styles: [&'static str; 2],
     pub automatic: &'static str,
@@ -293,6 +294,7 @@ mod tests {
                 t.err_capture_thread,
                 t.err_capture_failed,
                 t.crash_message,
+                t.file_name_prefix,
                 t.file_names,
                 t.check_for_updates,
                 t.update_available,

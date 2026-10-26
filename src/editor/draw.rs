@@ -49,6 +49,7 @@ pub fn draw(p: &mut Painter, a: &Annotation, view: &View, fonts: &Fonts) {
             p.text(fonts, text, x, y, px * k, color.color(), true);
         }
         Annotation::Pixelate { a, b, block } => p.pixelate(rect(*a, *b), block * k),
+        Annotation::Redact { a, b, color } => p.fill_rounded_rect(rect(*a, *b), 0.0, color.color()),
     }
 }
 
@@ -170,7 +171,7 @@ mod tests {
             }
         }
         let mut d = Document::new(Arc::new(noise));
-        assert_eq!(pixel_block(64, 64), 8.0);
+        assert_eq!(pixel_block(64, 64, super::super::Size::Thin), 8.0);
         d.add(Annotation::Pixelate { a: (0.0, 0.0), b: (64.0, 64.0), block: 8.0 });
         let img = d.flatten(&Fonts::embedded());
         for by in 0..8 {
@@ -183,6 +184,26 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn pixelate_gets_coarser_with_the_size() {
+        use super::super::Size;
+        assert_eq!(pixel_block(1920, 1080, Size::Thin), 16.0, "as before 0.4.0");
+        assert_eq!(pixel_block(1920, 1080, Size::Medium), 32.0);
+        assert_eq!(pixel_block(1920, 1080, Size::Thick), 64.0);
+        assert_eq!(pixel_block(64, 64, Size::Thick), 32.0);
+    }
+
+    #[test]
+    fn redact_fills_the_area_with_the_color() {
+        let mut d = white(100, 60);
+        d.add(Annotation::Redact { a: (70.0, 50.0), b: (10.0, 10.0), color: PALETTE[4] });
+        let img = d.flatten(&Fonts::embedded());
+        for (x, y) in [(10, 10), (40, 30), (69, 49)] {
+            assert_eq!(at(&img, x, y), [0, 0, 0, 255], "inside at {x},{y}");
+        }
+        assert_eq!(at(&img, 80, 30), [255, 255, 255, 255], "outside stays white");
     }
 
     #[test]

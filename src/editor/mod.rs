@@ -19,16 +19,19 @@ pub enum Tool {
     Highlighter,
     Text,
     Pixelate,
+    /// A solid box over what must not be seen.
+    Redact,
     Crop,
 }
 
-pub const TOOLS: [Tool; 7] = [
+pub const TOOLS: [Tool; 8] = [
     Tool::Arrow,
     Tool::Rectangle,
     Tool::Pen,
     Tool::Highlighter,
     Tool::Text,
     Tool::Pixelate,
+    Tool::Redact,
     Tool::Crop,
 ];
 
@@ -117,9 +120,21 @@ pub enum Annotation {
         b: Point,
         block: f32,
     },
+    /// The area filled with `color`.
+    Redact {
+        a: Point,
+        b: Point,
+        color: Rgb,
+    },
 }
 
-/// Pixelate block for a capture: coarse enough to hide text at any size.
-pub fn pixel_block(width: i32, height: i32) -> f32 {
-    (width.max(height) as f32 / 120.0).max(8.0).round()
+/// Pixelate block for a capture: coarse enough to hide text at any size
+/// when thin, twice and four times as coarse when medium and thick.
+pub fn pixel_block(width: i32, height: i32, size: Size) -> f32 {
+    let coarse = match size {
+        Size::Thin => 1.0,
+        Size::Medium => 2.0,
+        Size::Thick => 4.0,
+    };
+    (width.max(height) as f32 / 120.0).max(8.0).round() * coarse
 }

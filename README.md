@@ -46,7 +46,7 @@ Every image capture opens in the editor (turn this off in **Options**; it then r
   <img src="docs/screenshots/editor.png" alt="The editor with an arrow, a rectangle, highlighted text and a pixelated area">
 </p>
 
-- Tools: **arrow**, **rectangle**, **pen**, **highlighter**, **text** (click, type, Enter), **pixelate** and **crop**; six colors and three sizes.
+- Tools: **arrow**, **rectangle**, **pen**, **highlighter**, **text** (click, type, Enter), **pixelate** (coarser with a bigger size), **redact** (a solid box in the chosen color) and **crop**; six colors and three sizes.
 - **Undo** and **Redo** (Ctrl+Z, Ctrl+Y).
 - **Save** (Ctrl+S) overwrites the capture and copies it again when **Copy to clipboard** is on; **Save as…** (Ctrl+Shift+S) writes a PNG or JPG elsewhere; **Copy** (Ctrl+C) copies the edited image.
 - Closing with unsaved changes asks whether to save them.

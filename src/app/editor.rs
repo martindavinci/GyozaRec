@@ -88,6 +88,7 @@ fn icon_of(tool: Tool) -> Icon {
         Tool::Highlighter => Icon::Highlighter,
         Tool::Text => Icon::Text,
         Tool::Pixelate => Icon::Pixelate,
+        Tool::Redact => Icon::Redact,
         Tool::Crop => Icon::Crop,
     }
 }
@@ -209,8 +210,11 @@ pub fn finish_drag(drag: &Drag, tool: Tool, color: usize, size: Size, image: Pix
                 Tool::Pixelate if w >= 4.0 && h >= 4.0 => DragEnd::Add(Annotation::Pixelate {
                     a,
                     b,
-                    block: pixel_block(image.width, image.height),
+                    block: pixel_block(image.width, image.height, size),
                 }),
+                Tool::Redact if w >= 2.0 && h >= 2.0 => {
+                    DragEnd::Add(Annotation::Redact { a, b, color })
+                }
                 Tool::Crop => DragEnd::Crop(a, b),
                 _ => DragEnd::Nothing,
             }
@@ -983,10 +987,27 @@ mod tests {
     }
 
     #[test]
+    fn redact_and_pixelate_follow_color_and_size() {
+        let image = PixelSize { width: 1920, height: 1080 };
+        let drag = Drag::Shape { start: (10.0, 10.0), current: (200.0, 80.0) };
+        let redact = finish_drag(&drag, Tool::Redact, 4, Size::Thin, image);
+        let black = Annotation::Redact { a: (10.0, 10.0), b: (200.0, 80.0), color: PALETTE[4] };
+        assert_eq!(redact, DragEnd::Add(black));
+        let blocks: Vec<_> = SIZES
+            .iter()
+            .map(|s| match finish_drag(&drag, Tool::Pixelate, 0, *s, image) {
+                DragEnd::Add(Annotation::Pixelate { block, .. }) => block,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(blocks, [16.0, 32.0, 64.0]);
+    }
+
+    #[test]
     fn zero_length_drags_add_nothing() {
         let size = PixelSize { width: 100, height: 100 };
         let still = Drag::Shape { start: (10.0, 10.0), current: (10.0, 10.0) };
-        for tool in [Tool::Arrow, Tool::Rectangle, Tool::Pixelate] {
+        for tool in [Tool::Arrow, Tool::Rectangle, Tool::Pixelate, Tool::Redact] {
             assert_eq!(finish_drag(&still, tool, 0, Size::Medium, size), DragEnd::Nothing);
         }
         let moved = Drag::Shape { start: (10.0, 10.0), current: (40.0, 30.0) };

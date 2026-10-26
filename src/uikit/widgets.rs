@@ -24,6 +24,8 @@ pub enum Icon {
     Highlighter,
     Text,
     Pixelate,
+    /// A solid black bar.
+    Redact,
     Crop,
     Undo,
     Redo,
@@ -371,6 +373,9 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
                 };
                 p.fill_rounded_rect(cell, 0.0, tone);
             }
+        }
+        Icon::Redact => {
+            p.fill_rounded_rect(RectF { x: cx - 6.5, y: cy - 4.0, w: 13.0, h: 8.0 }, 1.0, color);
         }
         Icon::Crop => {
             p.line((cx - 3.0, cy - 7.0), (cx - 3.0, cy + 3.0), 2.0, color);

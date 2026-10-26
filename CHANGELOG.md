@@ -2,7 +2,7 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.4.0] - 2026-10-25
+## [0.4.0] - 2026-10-26
 
 ### Added
 - An editor that opens after every image capture (on by default): arrow, rectangle, pen, highlighter, text, pixelate and crop, with undo, redo, Save, Save as and Copy.
@@ -12,6 +12,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - File names can be ten random characters instead of the date and time ("File names" in Options).
 
 ### Changed
+- Date-and-time file names no longer start with "GyozaRec_" unless "Start with \"GyozaRec_\"" is turned on in Options.
 - GIFs store only what changes between frames, so mostly still recordings are much smaller.
 
 ### Fixed

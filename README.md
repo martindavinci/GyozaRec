@@ -43,7 +43,7 @@ After each saved capture a small notification shows its thumbnail in the corner 
 Every image capture opens in the editor (turn this off in **Options**; it then replaces "Open the file after a capture" for images). The file is already saved and copied, so closing the editor without changes loses nothing.
 
 <p align="center">
-  <img src="docs/screenshots/editor.png" alt="The editor with an arrow, a rectangle, highlighted text and a pixelated area">
+  <img src="docs/screenshots/editor.png" alt="The editor with every button labeled, over a pizza and a menu marked with an arrow, text, a highlighter, a pen circle, a rectangle, pixelated prices and a redacted password">
 </p>
 
 - Tools: **arrow**, **rectangle**, **pen**, **highlighter**, **text** (click, type, Enter), **pixelate** (coarser with a bigger size), **redact** (a solid box in the chosen color) and **crop**; six colors and three sizes.

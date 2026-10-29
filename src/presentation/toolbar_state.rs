@@ -88,6 +88,7 @@ pub fn format_status(o: &CaptureOutcome, current: &str, texts: &Texts) -> (Strin
                 .unwrap_or_default();
             (format!("{}{name}{copied}", texts.saved_prefix), false)
         }
+        CaptureOutcomeKind::Unsaved => (format!("{}{copied}", texts.not_saved_status), false),
         CaptureOutcomeKind::Failed => {
             let reason = o
                 .error
@@ -393,6 +394,18 @@ mod tests {
             format_status(&saved(true), "x", Language::En.texts()),
             ("Saved: GyozaRec_1.png · copied to clipboard".to_string(), false)
         );
+    }
+
+    #[test]
+    fn unsaved_capture_says_so() {
+        assert_eq!(
+            format_status(&CaptureOutcome::unsaved(true), "x", Language::En.texts()),
+            ("Not saved yet · copied to clipboard".to_string(), false)
+        );
+        let mut s = ToolbarState::new(AppSettings::default(), Language::En);
+        s.apply_outcome(&saved(false));
+        s.apply_outcome(&CaptureOutcome::unsaved(true));
+        assert_eq!(s.last_saved, Some(PathBuf::from(r"C:\x\GyozaRec_1.png")), "kept");
     }
 
     #[test]

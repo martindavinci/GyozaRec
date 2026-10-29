@@ -84,7 +84,15 @@ pub trait FileRevealer: Send {
 
 /// Opens the editor on a saved image, on the monitor it came from.
 pub trait EditorLauncher: Send {
-    fn open(&self, image: Arc<PixelBuffer>, path: PathBuf, work_area: PixelRect, scale: f64);
+    /// `on_disk` is false when `path` is only where the editor would save.
+    fn open(
+        &self,
+        image: Arc<PixelBuffer>,
+        path: PathBuf,
+        on_disk: bool,
+        work_area: PixelRect,
+        scale: f64,
+    );
 }
 
 /// Shows the notification of a saved capture.
@@ -112,6 +120,8 @@ pub trait ToolbarVisibility: Send {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaptureOutcomeKind {
     Saved,
+    /// Copied and handed to the editor, not written to a file.
+    Unsaved,
     Canceled,
     Failed,
 }
@@ -145,6 +155,10 @@ impl CaptureOutcome {
 
     pub fn saved(path: PathBuf, copied_to_clipboard: bool) -> Self {
         Self { kind: CaptureOutcomeKind::Saved, path: Some(path), error: None, copied_to_clipboard }
+    }
+
+    pub fn unsaved(copied_to_clipboard: bool) -> Self {
+        Self { kind: CaptureOutcomeKind::Unsaved, path: None, error: None, copied_to_clipboard }
     }
 }
 

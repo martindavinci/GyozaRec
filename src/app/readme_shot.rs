@@ -159,12 +159,14 @@ impl ApplicationHandler<AppEvent> for Shot {
             return;
         }
         let image = Arc::new(scene(&self.fonts));
-        let settings = EditorSettings { copy_to_clipboard: false, jpeg_quality: 90 };
+        let settings =
+            EditorSettings { copy_to_clipboard: false, jpeg_quality: 90, ask_to_save: true };
         let path = std::path::PathBuf::from("2026-10-26_20-15-00.png");
         let mut editor = EditorWindow::open(
             event_loop,
             image,
             path,
+            true,
             settings,
             Language::En.texts(),
             self.fonts.clone(),

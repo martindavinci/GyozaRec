@@ -34,6 +34,7 @@ const ID_SYSTEM_AUDIO: u32 = 31;
 const ID_EDITOR: u32 = 32;
 const ID_NOTICE: u32 = 33;
 const ID_UPDATES: u32 = 34;
+const ID_ASK_TO_SAVE: u32 = 36;
 const ID_UPDATE_LINK: u32 = 23;
 /// Widest hint line before wrapping, in logical pixels.
 const HINT_WIDTH: f32 = 340.0;
@@ -51,6 +52,8 @@ pub const MENU_PREFIX: &str = "opt:";
 const LANGUAGE_PREFIX: &str = "opt:lang:";
 /// Menu id prefix for the file name style: `opt:names:<index>`.
 const NAMES_PREFIX: &str = "opt:names:";
+/// Menu id prefix for what an image capture does: `opt:image:<index>`.
+const IMAGE_PREFIX: &str = "opt:image:";
 
 fn file_names_label(form: &OptionsForm, texts: &Texts) -> &'static str {
     let i = gyozarec::output::FILE_NAMES.iter().position(|s| *s == form.file_names).unwrap_or(0);
@@ -263,19 +266,27 @@ fn build_ui(
         push_row(vec![(ID_NAME_PREFIX, prefix)], PAD + 26.0, &mut widgets, &mut y);
     }
 
+    // Saving, opening the editor, or both: one choice for two settings.
+    let action = texts.image_capture_actions[form.image_action()];
+    let action = WidgetKind::Button { label: action.into(), dropdown: true };
+    push_row(
+        vec![(103, label(texts.after_image_capture)), (ID_EDITOR, action)],
+        PAD,
+        &mut widgets,
+        &mut y,
+    );
+
     let checks = [
         (ID_CLIPBOARD, texts.copy_to_clipboard, form.copy_to_clipboard),
         (ID_SOUND, texts.play_sound, form.play_sound),
         (ID_CURSOR, texts.include_cursor, form.include_cursor),
         (ID_SYSTEM_AUDIO, texts.record_system_audio, form.record_system_audio),
         (ID_OPEN_FOLDER, texts.open_folder_after_recording, form.open_folder_after_recording),
-        (ID_EDITOR, texts.open_editor_after_capture, form.open_editor_after_capture),
+        (ID_ASK_TO_SAVE, texts.editor_asks_to_save, form.editor_asks_to_save),
         (ID_OPEN_FILE, texts.open_file_after_capture, form.open_file_after_capture),
         (ID_NOTICE, texts.show_notification, form.show_notification),
         (ID_TRAY, texts.keep_in_tray, form.keep_in_tray),
         (ID_AUTOSTART, texts.start_with_windows, form.start_with_windows),
-        #[cfg(feature = "github-updates")]
-        (ID_UPDATES, texts.check_for_updates, form.check_for_updates),
         (ID_SHORTCUTS, texts.shortcuts_enabled, form.shortcuts_enabled),
         (ID_PRINT_SCREEN, texts.print_screen_captures, form.print_screen_captures),
     ];
@@ -318,6 +329,15 @@ fn build_ui(
         y += row_h + ROW_GAP;
         widgets.extend(row);
         widgets.extend(button);
+    }
+    // Here rather than on the left, which would grow taller than small screens.
+    #[cfg(feature = "github-updates")]
+    {
+        let check = WidgetKind::Check {
+            label: texts.check_for_updates.into(),
+            checked: form.check_for_updates,
+        };
+        push_row(vec![(ID_UPDATES, check)], right_x, &mut widgets, &mut y);
     }
 
     let listed: Vec<(usize, &ShortcutLine)> =
@@ -513,6 +533,11 @@ impl OptionsWindow {
             }
             return;
         }
+        if let Some(i) = menu_id.strip_prefix(IMAGE_PREFIX).and_then(|v| v.parse::<usize>().ok()) {
+            self.form.set_image_action(i.min(2));
+            self.rebuild();
+            return;
+        }
         if let Some(code) = menu_id.strip_prefix(LANGUAGE_PREFIX) {
             self.form.language = Language::from_code(code);
             self.fonts = fonts_for(self.ui_language, &self.form);
@@ -538,6 +563,16 @@ impl OptionsWindow {
                     self.texts.file_name_styles[i],
                     true,
                     *style == self.form.file_names,
+                    None,
+                ));
+            }
+        } else if id == ID_EDITOR {
+            for (i, text) in self.texts.image_capture_actions.iter().enumerate() {
+                let _ = menu.append(&CheckMenuItem::with_id(
+                    format!("{IMAGE_PREFIX}{i}"),
+                    *text,
+                    true,
+                    i == self.form.image_action(),
                     None,
                 ));
             }
@@ -715,13 +750,14 @@ impl OptionsWindow {
                     gyozarec::platform::ExplorerRevealer.open(std::path::Path::new(page));
                 }
             }
-            ID_EDITOR => self.form.open_editor_after_capture = !self.form.open_editor_after_capture,
+            ID_ASK_TO_SAVE => self.form.editor_asks_to_save = !self.form.editor_asks_to_save,
             ID_TRAY => self.form.keep_in_tray = !self.form.keep_in_tray,
             ID_AUTOSTART => self.form.start_with_windows = !self.form.start_with_windows,
             ID_SHORTCUTS => self.form.shortcuts_enabled = !self.form.shortcuts_enabled,
             ID_PRINT_SCREEN => self.form.print_screen_captures = !self.form.print_screen_captures,
             id if id == ID_LANGUAGE
                 || id == ID_FILE_NAMES
+                || id == ID_EDITOR
                 || COMBOS.iter().any(|(cid, _)| *cid == id) =>
             {
                 self.show_choices(id)

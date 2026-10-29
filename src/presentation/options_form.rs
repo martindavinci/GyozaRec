@@ -45,6 +45,8 @@ pub struct OptionsForm {
     pub open_folder_after_recording: bool,
     pub open_file_after_capture: bool,
     pub open_editor_after_capture: bool,
+    pub edit_before_saving: bool,
+    pub editor_asks_to_save: bool,
     pub show_notification: bool,
     pub check_for_updates: bool,
     pub file_names: crate::output::FileNames,
@@ -66,6 +68,23 @@ pub struct OptionsForm {
 }
 
 impl OptionsForm {
+    /// What an image capture does: 0 saves and opens the editor, 1 only
+    /// saves, 2 copies and opens the editor without saving.
+    pub fn image_action(&self) -> usize {
+        match (self.edit_before_saving, self.open_editor_after_capture) {
+            (true, _) => 2,
+            (false, true) => 0,
+            (false, false) => 1,
+        }
+    }
+
+    pub fn set_image_action(&mut self, action: usize) {
+        self.edit_before_saving = action == 2;
+        if action < 2 {
+            self.open_editor_after_capture = action == 0;
+        }
+    }
+
     pub fn from_settings(s: &AppSettings) -> OptionsForm {
         OptionsForm {
             save_folder: s.save_folder.clone(),
@@ -76,6 +95,8 @@ impl OptionsForm {
             open_folder_after_recording: s.open_folder_after_recording,
             open_file_after_capture: s.open_file_after_capture,
             open_editor_after_capture: s.open_editor_after_capture,
+            edit_before_saving: s.edit_before_saving,
+            editor_asks_to_save: s.editor_asks_to_save,
             show_notification: s.show_notification,
             check_for_updates: s.check_for_updates,
             file_names: s.file_names,
@@ -107,6 +128,8 @@ impl OptionsForm {
             open_folder_after_recording: self.open_folder_after_recording,
             open_file_after_capture: self.open_file_after_capture,
             open_editor_after_capture: self.open_editor_after_capture,
+            edit_before_saving: self.edit_before_saving,
+            editor_asks_to_save: self.editor_asks_to_save,
             show_notification: self.show_notification,
             check_for_updates: self.check_for_updates,
             file_names: self.file_names,
@@ -227,6 +250,31 @@ mod tests {
         assert!(!f.open_file_after_capture);
         f.open_file_after_capture = true;
         assert!(f.to_settings(&base, &cap()).open_file_after_capture);
+    }
+
+    #[test]
+    fn edit_before_saving_defaults_off_and_asking_on() {
+        let base = AppSettings::defaults(&cap());
+        let mut f = OptionsForm::from_settings(&base);
+        assert!(!f.edit_before_saving && f.editor_asks_to_save);
+        assert_eq!(f.image_action(), 0);
+        f.set_image_action(2);
+        f.editor_asks_to_save = false;
+        let s = f.to_settings(&base, &cap());
+        assert!(s.edit_before_saving && !s.editor_asks_to_save);
+    }
+
+    #[test]
+    fn image_action_maps_to_the_editor_settings() {
+        let mut f = OptionsForm::from_settings(&AppSettings::defaults(&cap()));
+        for i in [1, 2, 0, 2, 1] {
+            f.set_image_action(i);
+            assert_eq!(f.image_action(), i);
+        }
+        f.set_image_action(1);
+        assert!(!f.open_editor_after_capture && !f.edit_before_saving);
+        f.set_image_action(0);
+        assert!(f.open_editor_after_capture && !f.edit_before_saving);
     }
 
     #[test]

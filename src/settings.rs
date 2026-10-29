@@ -24,6 +24,11 @@ pub struct AppSettings {
     pub open_file_after_capture: bool,
     /// After an image capture, open it in the editor.
     pub open_editor_after_capture: bool,
+    /// Image captures are only copied and opened in the editor; nothing is
+    /// written until the editor saves it.
+    pub edit_before_saving: bool,
+    /// Closing the editor asks to save a picture that is unsaved or edited.
+    pub editor_asks_to_save: bool,
     /// A notification with a thumbnail after each saved capture.
     pub show_notification: bool,
     /// Once a day, ask GitHub whether a newer release exists.
@@ -70,6 +75,8 @@ impl Default for AppSettings {
             open_folder_after_recording: false,
             open_file_after_capture: false,
             open_editor_after_capture: true,
+            edit_before_saving: false,
+            editor_asks_to_save: true,
             show_notification: true,
             check_for_updates: true,
             file_names: crate::output::FileNames::DateTime,
@@ -243,6 +250,15 @@ mod tests {
         let p = d.path().join("s.json");
         fs::write(&p, r#"{ "open_file_after_capture": true }"#).unwrap();
         assert!(SettingsStore::new(p, cap()).load().open_editor_after_capture);
+    }
+
+    #[test]
+    fn old_settings_save_captures_and_ask_before_closing() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "gif_fps": 15 }"#).unwrap();
+        let s = SettingsStore::new(p, cap()).load();
+        assert_eq!((s.edit_before_saving, s.editor_asks_to_save), (false, true));
     }
 
     #[test]

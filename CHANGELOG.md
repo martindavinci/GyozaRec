@@ -2,6 +2,15 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- "Image captures" in Options: save and open the editor (as before), only save, or copy and open the editor without saving (off by default); a capture that was never saved is marked "Not saved yet" in the editor's title and on the status line.
+- "Editor: ask to save unsaved or edited images" in Options (on by default); off, the editor closes without asking.
+
+### Changed
+- "Check for updates" moved to the right column of Options, under Language.
+
 ## [0.4.0] - 2026-10-26
 
 ### Added

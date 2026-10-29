@@ -226,6 +226,9 @@ impl CaptureCoordinator {
 
     /// Saves the PNG and copies it; the copy happens even if saving fails.
     fn finish_image(&mut self, img: &PixelBuffer, settings: &AppSettings) -> CaptureOutcome {
+        if settings.edit_before_saving {
+            return self.copy_and_edit(img, settings);
+        }
         let namer = FileNamer::with_style(
             self.clock.clone(),
             settings.file_names,
@@ -246,7 +249,8 @@ impl CaptureCoordinator {
                 match home {
                     // The editor takes the place of the default app and the notification.
                     Some((work_area, scale)) if settings.open_editor_after_capture => {
-                        self.editor.open(Arc::new(img.clone()), path.clone(), work_area, scale);
+                        let image = Arc::new(img.clone());
+                        self.editor.open(image, path.clone(), true, work_area, scale);
                     }
                     _ => {
                         if settings.open_file_after_capture {
@@ -269,6 +273,29 @@ impl CaptureCoordinator {
             }
             Err(err) => CaptureOutcome::failed(err, copied),
         }
+    }
+
+    /// Copies the picture and opens it in the editor without writing a file;
+    /// the editor saves it under the name the capture would have had.
+    fn copy_and_edit(&mut self, img: &PixelBuffer, settings: &AppSettings) -> CaptureOutcome {
+        let copied = self.clipboard.set_image(img);
+        if settings.play_sound {
+            self.sound.play(crate::sounds::Cue::Saved);
+        }
+        let monitors = self.monitors.monitors();
+        if !monitors.is_empty() {
+            let monitor = monitor_from_point(&monitors, img.bounds.center());
+            let namer = FileNamer::with_style(
+                self.clock.clone(),
+                settings.file_names,
+                settings.file_name_prefix,
+            );
+            let ext = if settings.format == OutputFormat::Jpg { "jpg" } else { "png" };
+            let path = namer.next_path(&settings.save_folder, ext);
+            let (work_area, scale) = (monitor.work_area, monitor.scale);
+            self.editor.open(Arc::new(img.clone()), path, false, work_area, scale);
+        }
+        CaptureOutcome::unsaved(copied)
     }
 }
 
@@ -650,6 +677,55 @@ mod tests {
         assert!(editor.ends_with(".png:200x100:work=0,0,1920,1080:scale=1"), "{editor}");
         assert!(!ev.iter().any(|e| e.starts_with("open:")), "{ev:?}");
         assert!(ev.iter().any(|e| e.starts_with("clip:image")), "still copied: {ev:?}");
+    }
+
+    #[test]
+    fn edit_before_saving_copies_and_opens_the_editor_without_a_file() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(10, 20, 30, 40)));
+        let o = h.run(AppSettings {
+            edit_before_saving: true,
+            copy_to_clipboard: false,
+            open_editor_after_capture: false,
+            open_file_after_capture: true,
+            ..h.settings()
+        });
+        assert_eq!(
+            (o.kind, o.path, o.copied_to_clipboard),
+            (CaptureOutcomeKind::Unsaved, None, true)
+        );
+        assert_eq!(fs::read_dir(h.dir()).unwrap().count(), 0, "nothing written");
+        assert_eq!(
+            h.events(),
+            [
+                "hide",
+                "grab:0,0,1920,1080",
+                "select:Rectangle:frozen=true:windows=0",
+                "clip:image:10,20,30,40",
+                "sound",
+                "editor:2026-10-24_12-00-00.png:30x40:work=0,0,1920,1080:scale=1:unsaved",
+                "show"
+            ]
+        );
+        let mut jpg = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 30, 40)));
+        jpg.run(AppSettings {
+            edit_before_saving: true,
+            format: OutputFormat::Jpg,
+            ..jpg.settings()
+        });
+        assert!(jpg.events().iter().any(|e| e.starts_with("editor:") && e.contains(".jpg:")));
+    }
+
+    #[test]
+    fn edit_before_saving_leaves_recordings_alone() {
+        let mut h = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        let o = h.run(AppSettings {
+            format: OutputFormat::Gif,
+            edit_before_saving: true,
+            ..h.settings()
+        });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        assert!(!h.events().iter().any(|e| e.starts_with("editor:")));
     }
 
     #[test]

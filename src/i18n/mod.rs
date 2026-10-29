@@ -133,6 +133,8 @@ pub struct Texts {
     pub initial_status: &'static str,
     pub saved_prefix: &'static str,
     pub copied_suffix: &'static str,
+    /// Status after an image capture that was only copied and edited.
+    pub not_saved_status: &'static str,
     pub error_prefix: &'static str,
     pub open_folder: &'static str,
     pub save_folder: &'static str,
@@ -143,7 +145,10 @@ pub struct Texts {
     pub record_system_audio: &'static str,
     pub open_folder_after_recording: &'static str,
     pub open_file_after_capture: &'static str,
-    pub open_editor_after_capture: &'static str,
+    pub after_image_capture: &'static str,
+    /// In `OptionsForm::image_action` order.
+    pub image_capture_actions: [&'static str; 3],
+    pub editor_asks_to_save: &'static str,
     pub show_notification: &'static str,
     pub check_for_updates: &'static str,
     /// `{version}` is the new version number.
@@ -205,6 +210,8 @@ pub struct Texts {
     pub editor_sizes: [&'static str; 3],
     /// `{name}` is the file name.
     pub editor_save_question: &'static str,
+    /// Asked on closing a picture never saved; `{name}` as above.
+    pub editor_save_new_question: &'static str,
     /// `{error}` is the reason.
     pub editor_save_failed: &'static str,
     /// Shown when the app ends on an error; `{path}` is the crash log.
@@ -306,7 +313,10 @@ mod tests {
                 t.show_notification,
                 t.notice_edit,
                 t.notice_open,
-                t.open_editor_after_capture,
+                t.after_image_capture,
+                t.editor_asks_to_save,
+                t.not_saved_status,
+                t.editor_save_new_question,
                 t.editor_save,
                 t.editor_save_as,
                 t.editor_copy,
@@ -322,6 +332,7 @@ mod tests {
                     .chain(&t.areas)
                     .chain(&t.formats)
                     .chain(&t.delays)
+                    .chain(&t.image_capture_actions)
                     .all(|s| !s.trim().is_empty()),
                 "{lang:?}"
             );

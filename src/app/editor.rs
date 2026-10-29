@@ -60,6 +60,8 @@ pub const MENU_PREFIX: &str = "editor:";
 pub struct EditorSettings {
     pub copy_to_clipboard: bool,
     pub jpeg_quality: u8,
+    /// Closing asks to save a picture that is edited or not on disk yet.
+    pub ask_to_save: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -337,6 +339,24 @@ struct TextBox {
     preedit: String,
 }
 
+/// What closing the window takes.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CloseCheck {
+    Close,
+    /// The file exists but the picture has changed.
+    AskChanges,
+    /// The picture was never saved.
+    AskNew,
+}
+
+pub fn close_check(ask_to_save: bool, on_disk: bool, edited: bool) -> CloseCheck {
+    match (ask_to_save, on_disk, edited) {
+        (false, ..) | (true, true, false) => CloseCheck::Close,
+        (true, false, _) => CloseCheck::AskNew,
+        (true, true, true) => CloseCheck::AskChanges,
+    }
+}
+
 /// What a finished save leads to.
 #[derive(Debug, PartialEq)]
 pub enum SaveEnd {
@@ -427,7 +447,9 @@ fn paint_editor(
 pub struct EditorWindow {
     surface: WindowSurface,
     doc: Document,
+    /// Where Save writes; the file exists only when `on_disk`.
     path: PathBuf,
+    on_disk: bool,
     settings: EditorSettings,
     texts: &'static Texts,
     fonts: Arc<Fonts>,
@@ -455,6 +477,7 @@ impl EditorWindow {
         event_loop: &ActiveEventLoop,
         image: Arc<PixelBuffer>,
         path: PathBuf,
+        on_disk: bool,
         settings: EditorSettings,
         texts: &'static Texts,
         fonts: Arc<Fonts>,
@@ -464,7 +487,7 @@ impl EditorWindow {
     ) -> Option<EditorWindow> {
         let (w, h) = initial_size(image.bounds.size(), work_area, scale);
         let mut attrs = Window::default_attributes()
-            .with_title(title(&path))
+            .with_title(title(&path, on_disk, texts))
             .with_window_icon(super::window_icon())
             .with_min_inner_size(LogicalSize::new(360.0, 240.0))
             .with_inner_size(LogicalSize::new(w, h));
@@ -479,6 +502,7 @@ impl EditorWindow {
             surface: WindowSurface::new(window),
             doc: Document::new(image),
             path,
+            on_disk,
             settings,
             texts,
             fonts,
@@ -562,8 +586,9 @@ impl EditorWindow {
         self.ui.widget(id).map(|w| w.rect)
     }
 
+    /// Whether closing would lose something the user may want to keep.
     pub fn is_dirty(&self) -> bool {
-        self.doc.is_dirty() || self.text.is_some()
+        self.doc.is_dirty() || self.text.is_some() || (self.settings.ask_to_save && !self.on_disk)
     }
 
     pub fn scale_factor(&self) -> f64 {
@@ -732,7 +757,11 @@ impl EditorWindow {
             (self.fonts.clone(), self.settings, self.proxy.clone(), self.id());
         std::thread::spawn(move || {
             let img = snapshot.flatten(&fonts);
-            let result = gyozarec::editor::save(&img, &path, settings.jpeg_quality)
+            // A picture never saved may name a folder that does not exist yet.
+            let result = path
+                .parent()
+                .map_or(Ok(()), gyozarec::output::ensure_folder)
+                .and_then(|()| gyozarec::editor::save(&img, &path, settings.jpeg_quality))
                 .map_err(|e| e.to_string());
             if result.is_ok() && settings.copy_to_clipboard {
                 Win32Clipboard.set_image(&img);
@@ -749,13 +778,17 @@ impl EditorWindow {
         }
         if result.is_ok() {
             self.doc.mark_saved_at(version);
+            if !self.on_disk {
+                self.on_disk = true;
+                self.surface.window.set_title(&title(&self.path, true, self.texts));
+            }
         }
         let still_dirty = self.doc.is_dirty() || self.text.is_some();
         match self.saves.finish(result.is_ok(), still_dirty) {
             SaveEnd::Close => return EditorResult::Closed,
             SaveEnd::SaveAgain(path) => self.start_save(path, true),
             SaveEnd::Stay { adopt: Some(path) } if path != self.path => {
-                self.surface.window.set_title(&title(&path));
+                self.surface.window.set_title(&title(&path, true, self.texts));
                 self.path = path;
             }
             SaveEnd::Stay { .. } => {}
@@ -801,10 +834,13 @@ impl EditorWindow {
             self.saves.begin(self.path.clone(), true);
             return false;
         }
-        if !self.doc.is_dirty() {
-            return true;
-        }
-        let question = self.texts.editor_save_question.replace("{name}", &self.name());
+        let question =
+            match close_check(self.settings.ask_to_save, self.on_disk, self.doc.is_dirty()) {
+                CloseCheck::Close => return true,
+                CloseCheck::AskChanges => self.texts.editor_save_question,
+                CloseCheck::AskNew => self.texts.editor_save_new_question,
+            };
+        let question = question.replace("{name}", &self.name());
         match ask_save_changes(self.surface.hwnd(), &question) {
             SaveChoice::Save => {
                 self.start_save(self.path.clone(), true);
@@ -1002,9 +1038,13 @@ impl EditorWindow {
     }
 }
 
-fn title(path: &std::path::Path) -> String {
+fn title(path: &std::path::Path, on_disk: bool, texts: &Texts) -> String {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    format!("{name} — GyozaRec")
+    if on_disk {
+        format!("{name} — GyozaRec")
+    } else {
+        format!("{name} ({}) — GyozaRec", texts.not_saved_status)
+    }
 }
 
 #[cfg(test)]
@@ -1026,6 +1066,24 @@ mod tests {
         assert!(t.begin(PathBuf::from("a.png"), true));
         assert_eq!(t.finish(true, false), SaveEnd::Close);
         assert!(!t.busy());
+    }
+
+    #[test]
+    fn closing_asks_only_when_something_would_be_lost() {
+        assert_eq!(close_check(true, true, false), CloseCheck::Close);
+        assert_eq!(close_check(true, true, true), CloseCheck::AskChanges);
+        assert_eq!(close_check(true, false, false), CloseCheck::AskNew);
+        assert_eq!(close_check(true, false, true), CloseCheck::AskNew);
+        assert_eq!(close_check(false, false, true), CloseCheck::Close, "the user said no");
+        assert_eq!(close_check(false, true, true), CloseCheck::Close);
+    }
+
+    #[test]
+    fn unsaved_pictures_say_so_in_the_title() {
+        let texts = Language::En.texts();
+        let path = std::path::Path::new(r"C:\caps\a.png");
+        assert_eq!(title(path, true, texts), "a.png — GyozaRec");
+        assert_eq!(title(path, false, texts), "a.png (Not saved yet) — GyozaRec");
     }
 
     #[test]

@@ -362,12 +362,14 @@ impl App {
         self.refresh_toolbar();
     }
 
-    /// Opens an editor on a saved image.
+    /// Opens an editor on an image, saved at `path` unless `on_disk` is false.
+    #[allow(clippy::too_many_arguments)]
     fn open_editor(
         &mut self,
         event_loop: &ActiveEventLoop,
         image: Arc<gyozarec::pixels::PixelBuffer>,
         path: PathBuf,
+        on_disk: bool,
         work_area: Option<gyozarec::geometry::PixelRect>,
         scale: f64,
     ) {
@@ -375,14 +377,18 @@ impl App {
             .editor_fonts
             .get_or_insert_with(|| Arc::new(Fonts::for_languages(&Language::ALL)))
             .clone();
+        let s = &self.state.settings;
         let settings = editor::EditorSettings {
-            copy_to_clipboard: self.state.settings.copy_to_clipboard,
-            jpeg_quality: self.state.settings.jpeg_quality,
+            // Without a saved file the clipboard is where the picture goes.
+            copy_to_clipboard: s.copy_to_clipboard || s.edit_before_saving,
+            jpeg_quality: s.jpeg_quality,
+            ask_to_save: s.editor_asks_to_save,
         };
         let opened = editor::EditorWindow::open(
             event_loop,
             image,
             path,
+            on_disk,
             settings,
             self.state.texts(),
             fonts,
@@ -429,7 +435,8 @@ impl App {
         match n.kind {
             gyozarec::presentation::NoticeKind::Image => match gyozarec::editor::load(&n.path) {
                 Ok(img) => {
-                    self.open_editor(event_loop, Arc::new(img), n.path, Some(n.work_area), n.scale)
+                    let area = Some(n.work_area);
+                    self.open_editor(event_loop, Arc::new(img), n.path, true, area, n.scale)
                 }
                 Err(err) => {
                     self.state.set_error(&err.to_string());
@@ -691,9 +698,9 @@ impl App {
                     self.schedule_notice_timeout(generation);
                 }
             }
-            UiRequest::OpenEditor { image, path, work_area, scale } => {
+            UiRequest::OpenEditor { image, path, on_disk, work_area, scale } => {
                 if !self.exit_pending {
-                    self.open_editor(event_loop, image, path, Some(work_area), scale);
+                    self.open_editor(event_loop, image, path, on_disk, Some(work_area), scale);
                     self.focus_editor = true;
                     if let Some(old) = self.replace_editor.take()
                         && let Some(i) = self.editors.iter().position(|e| e.id() == old)
@@ -878,7 +885,9 @@ impl ApplicationHandler<AppEvent> for App {
                 editor::EditorResult::OpenFile(path) => {
                     let scale = self.editors[i].scale_factor();
                     match gyozarec::editor::load(&path) {
-                        Ok(img) => self.open_editor(event_loop, Arc::new(img), path, None, scale),
+                        Ok(img) => {
+                            self.open_editor(event_loop, Arc::new(img), path, true, None, scale)
+                        }
                         Err(err) => gyozarec::platform::show_error_box(&err.to_string()),
                     }
                 }

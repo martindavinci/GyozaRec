@@ -353,19 +353,30 @@ impl crate::capture::AudioStarter for FakeAudioStarter {
     }
 }
 
-/// Logs `editor:<file>:<w>x<h>:work=<x>,<y>,<w>,<h>:scale=<s>`.
+/// Logs `editor:<file>:<w>x<h>:work=<x>,<y>,<w>,<h>:scale=<s>`, with
+/// `:unsaved` at the end when the file is not written.
 pub struct FakeEditor {
     pub log: EventLog,
 }
 
 impl EditorLauncher for FakeEditor {
-    fn open(&self, image: Arc<PixelBuffer>, path: std::path::PathBuf, work: PixelRect, scale: f64) {
+    fn open(
+        &self,
+        image: Arc<PixelBuffer>,
+        path: std::path::PathBuf,
+        on_disk: bool,
+        work: PixelRect,
+        scale: f64,
+    ) {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let (w, h) = (image.width(), image.height());
         let area = format!("{},{},{},{}", work.x, work.y, work.width, work.height);
         log_event(
             &Some(self.log.clone()),
-            format!("editor:{name}:{w}x{h}:work={area}:scale={scale}"),
+            format!(
+                "editor:{name}:{w}x{h}:work={area}:scale={scale}{}",
+                if on_disk { "" } else { ":unsaved" }
+            ),
         );
     }
 }

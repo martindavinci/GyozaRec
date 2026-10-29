@@ -231,6 +231,7 @@ mod tests {
 
     fn req() -> SelectionRequest {
         SelectionRequest {
+            switcher: false,
             area: CaptureArea::Rectangle,
             frozen: None,
             windows: Vec::new(),

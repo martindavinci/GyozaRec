@@ -183,6 +183,9 @@ pub struct Texts {
     pub video_fps: &'static str,
     pub video_max_seconds: &'static str,
     pub language: &'static str,
+    pub theme: &'static str,
+    /// In `settings::THEME_CHOICES` order.
+    pub theme_choices: [&'static str; 3],
     pub file_names: &'static str,
     pub file_name_prefix: &'static str,
     /// In `FILE_NAMES` order: date and time, random.
@@ -293,6 +296,7 @@ mod tests {
                 t.video_fps,
                 t.video_max_seconds,
                 t.language,
+                t.theme,
                 t.automatic,
                 t.ok,
                 t.cancel,
@@ -334,6 +338,7 @@ mod tests {
                     .chain(&t.formats)
                     .chain(&t.delays)
                     .chain(&t.image_capture_actions)
+                    .chain(&t.theme_choices)
                     .all(|s| !s.trim().is_empty()),
                 "{lang:?}"
             );

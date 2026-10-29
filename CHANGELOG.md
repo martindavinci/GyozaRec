@@ -2,6 +2,15 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- A dark theme: "Theme" in Options is Automatic (follows Windows' app mode, the default), Light or Dark; title bars follow it too.
+- A bar at the top of the screen during image captures switches between Rectangle, Window and Full screen, or cancels; the area picked there becomes the toolbar's, and Full screen on a single monitor captures at once.
+
+### Changed
+- "Check for updates" moved next to OK and Cancel in Options, to make room for Theme.
+
 ## [0.4.1] - 2026-10-29
 
 ### Added

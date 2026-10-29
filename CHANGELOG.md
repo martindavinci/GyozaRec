@@ -2,7 +2,7 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.2] - 2026-10-30
 
 ### Added
 - A dark theme: "Theme" in Options is Automatic (follows Windows' app mode, the default), Light or Dark; title bars follow it too.
@@ -82,6 +82,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.4.2]: https://github.com/martindavinci/GyozaRec/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/martindavinci/GyozaRec/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/martindavinci/GyozaRec/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/martindavinci/GyozaRec/compare/v0.2.0...v0.3.0

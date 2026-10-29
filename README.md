@@ -22,7 +22,7 @@ A small toolbar:
 - **Area** — Rectangle, Window or Full screen. With several monitors, Full screen asks which one: click it, or press Esc to cancel.
 - **Format** — PNG image, JPG image, MP4 video or Animated GIF. Any area works with any format. The same menu has **Convert a video to GIF…**.
 - **Delay** — from no delay up to 5 seconds.
-- **Options** — save folder, file names (date and time such as `2026-10-26_14-30-05.png`, optionally starting with `GyozaRec_`, or ten random characters such as `k3F9xQ2bTm.png`; a name already taken gets `_2`, `_3`… at the end), copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, the editor after an image capture, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
+- **Options** — save folder, file names (date and time such as `2026-10-26_14-30-05.png`, optionally starting with `GyozaRec_`, or ten random characters such as `k3F9xQ2bTm.png`; a name already taken gets `_2`, `_3`… at the end), copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, what an image capture does (save and open the editor, only save, or only copy and open the editor), asking to save when closing the editor, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
 
 <p align="center">
   <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">
@@ -40,7 +40,9 @@ After each saved capture a small notification shows its thumbnail in the corner 
 
 ### Editor
 
-Every image capture opens in the editor (turn this off in **Options**; it then replaces "Open the file after a capture" for images). The file is already saved and copied, so closing the editor without changes loses nothing.
+Every image capture opens in the editor (turn this off with **Image captures** in **Options**; the editor then replaces "Open the file after a capture" for images). The file is already saved and copied, so closing the editor without changes loses nothing.
+
+With **Image captures** set to **Copy and open the editor, don't save**, nothing is written to disk: the capture is copied to the clipboard (whatever **Copy to clipboard** says) and opens in the editor under the name it would have had, marked "Not saved yet" in the title. **Save** writes it to the save folder; the status line, the notification and "Open the file after a capture" stay out of the way.
 
 <p align="center">
   <img src="docs/screenshots/editor.png" alt="The editor with every button labeled, over a pizza and a menu marked with an arrow, text, a highlighter, a pen circle, a rectangle, pixelated prices and a redacted password">
@@ -50,7 +52,7 @@ Every image capture opens in the editor (turn this off in **Options**; it then r
 - **Undo** and **Redo** (Ctrl+Z, Ctrl+Y). With **Copy to clipboard** on, every change also goes to the clipboard, so the edited image is always ready to paste.
 - **New** (Ctrl+N) captures another image with the current area; the editor gives way to it when it has nothing unsaved. **Open…** (Ctrl+O) edits a PNG or JPG from disk in another window.
 - **Save** (Ctrl+S) overwrites the capture and copies it again when **Copy to clipboard** is on; **Save as…** (Ctrl+Shift+S) writes a PNG or JPG elsewhere; **Copy** (Ctrl+C) copies the edited image.
-- Closing with unsaved changes asks whether to save them.
+- Closing with unsaved changes, or on a capture never saved, asks whether to save it. Turn off **Editor: ask to save unsaved or edited images** in **Options** to close without asking.
 
 ### Notification area and shortcuts
 

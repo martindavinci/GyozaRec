@@ -25,6 +25,7 @@ pub enum UiRequest {
     OpenEditor {
         image: Arc<crate::pixels::PixelBuffer>,
         path: std::path::PathBuf,
+        on_disk: bool,
         work_area: PixelRect,
         scale: f64,
     },
@@ -179,10 +180,11 @@ impl<S: UiSender> crate::capture::EditorLauncher for BridgeEditor<S> {
         &self,
         image: Arc<crate::pixels::PixelBuffer>,
         path: std::path::PathBuf,
+        on_disk: bool,
         work_area: PixelRect,
         scale: f64,
     ) {
-        self.sender.send(UiRequest::OpenEditor { image, path, work_area, scale });
+        self.sender.send(UiRequest::OpenEditor { image, path, on_disk, work_area, scale });
     }
 }
 

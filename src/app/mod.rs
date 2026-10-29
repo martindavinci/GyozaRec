@@ -42,7 +42,7 @@ use options::{OptionsResult, OptionsWindow, ShortcutLine};
 use overlay::OverlaySession;
 use recording::RecordingSession;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use toolbar::{Toolbar, ToolbarAction};
 use tray::TrayCommand;
@@ -53,6 +53,19 @@ use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::WindowId;
 
 /// The gyoza icon for title bars and the taskbar (derived from GyozaRec.ico).
+/// What title bars follow: 0 is Windows' own app mode, 1 light, 2 dark.
+static TITLE_THEME: AtomicU8 = AtomicU8::new(0);
+
+/// The title bar look for new and restyled windows; `None` follows Windows,
+/// which also tells the windows when its mode changes.
+pub fn title_theme() -> Option<winit::window::Theme> {
+    match TITLE_THEME.load(Ordering::Relaxed) {
+        1 => Some(winit::window::Theme::Light),
+        2 => Some(winit::window::Theme::Dark),
+        _ => None,
+    }
+}
+
 pub fn window_icon() -> Option<winit::window::Icon> {
     let png = include_bytes!("../../assets/icon/gyozarec-256.png");
     let img = image::load_from_memory(png).ok()?.to_rgba8();
@@ -138,6 +151,8 @@ pub struct App {
     editors: Vec<editor::EditorWindow>,
     /// Fonts for typed annotations, with every script; loaded on first use.
     editor_fonts: Option<Arc<Fonts>>,
+    /// Windows' app mode, for the automatic theme.
+    system_theme: Option<winit::window::Theme>,
     /// An editor opened during the running capture gets the focus after it.
     focus_editor: bool,
     notice: Option<notice::NoticeWindow>,
@@ -227,6 +242,7 @@ impl App {
             conversion: None,
             editors: Vec::new(),
             editor_fonts: None,
+            system_theme: None,
             focus_editor: false,
             notice: None,
             replace_editor: None,
@@ -581,6 +597,7 @@ impl App {
                 let old = self.state.settings.clone();
                 self.state.settings = form.to_settings(&self.state.settings, &self.capture_dir);
                 self.apply_language();
+                self.apply_theme();
                 self.sync_tray();
                 // A changed shortcut Windows refuses keeps its previous keys.
                 let results =
@@ -608,6 +625,35 @@ impl App {
     }
 
     /// Switches the interface to the language the settings now ask for.
+    /// Light or dark windows, from the setting or from Windows' app mode.
+    fn apply_theme(&mut self) {
+        use gyozarec::settings::ThemeChoice;
+        let choice = self.state.settings.theme;
+        let code = match choice {
+            ThemeChoice::Auto => 0,
+            ThemeChoice::Light => 1,
+            ThemeChoice::Dark => 2,
+        };
+        let system_dark = self.system_theme == Some(winit::window::Theme::Dark);
+        let dark = choice.is_dark(system_dark);
+        let unchanged = TITLE_THEME.swap(code, Ordering::Relaxed) == code
+            && gyozarec::uikit::theme::is_dark() == dark;
+        gyozarec::uikit::theme::set_dark(dark);
+        if unchanged {
+            return;
+        }
+        if let Some(t) = &self.toolbar {
+            t.surface.window.set_theme(title_theme());
+        }
+        self.refresh_toolbar();
+        if let Some(o) = &mut self.options {
+            o.restyle();
+        }
+        for e in &mut self.editors {
+            e.restyle();
+        }
+    }
+
     fn apply_language(&mut self) {
         let language = resolve(self.state.settings.language(), &system_ui_languages());
         if language == self.state.language {
@@ -719,8 +765,8 @@ impl App {
                     return;
                 }
                 let cursor = Win32Cursor.position();
-                let hint = (request.area == gyozarec::geometry::CaptureArea::FullScreen)
-                    .then_some(self.state.texts().pick_monitor_hint);
+                // Shown only while picking a monitor; the area bar can switch to it.
+                let hint = Some(self.state.texts().pick_monitor_hint);
                 let session =
                     OverlaySession::open(event_loop, request, reply, cursor, hint, &self.fonts);
                 // A session that could not open any window has already replied.
@@ -787,6 +833,8 @@ impl App {
 impl ApplicationHandler<AppEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.toolbar.is_none() {
+            self.system_theme = event_loop.system_theme();
+            self.apply_theme();
             self.sync_tray();
             let visible = startup_visible(self.autostart, self.tray.is_some());
             self.toolbar_hidden = !visible;
@@ -837,6 +885,11 @@ impl ApplicationHandler<AppEvent> for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
+        // Windows' app mode changed; only windows that follow it are told.
+        if let WindowEvent::ThemeChanged(theme) = event {
+            self.system_theme = Some(theme);
+            self.apply_theme();
+        }
         let pinned = self.overlay.as_ref().and_then(|o| o.surface(id));
         let pinned = pinned.or_else(|| self.recording.as_ref()?.surface(id));
         let pinned =
@@ -864,6 +917,14 @@ impl ApplicationHandler<AppEvent> for App {
         if let Some(session) = self.overlay.as_mut().filter(|s| s.owns(id)) {
             session.handle(id, &event, &self.fonts);
             if session.is_finished() {
+                // The area picked on the bar becomes the toolbar's, like the
+                // Snipping Tool remembers its mode.
+                if let Some(area) = session.switched_area() {
+                    self.state.settings.area = area;
+                    self.state.settings_changed();
+                    self.save_settings();
+                    self.refresh_toolbar();
+                }
                 self.overlay = None;
             }
             return;

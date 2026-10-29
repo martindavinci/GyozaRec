@@ -10,7 +10,7 @@ use gyozarec::recording::{
     PanelAction, PanelInput, PanelMode, frame_bounds, panel_step, place_panel, render_frame,
 };
 use gyozarec::uikit::painter::{Fonts, Painter};
-use gyozarec::uikit::theme::GYOZA;
+use gyozarec::uikit::theme;
 use gyozarec::uikit::widgets::{Icon, Ui, WidgetKind, layout_row};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -61,7 +61,13 @@ fn build_panel_ui(
     let button = |icon| WidgetKind::IconButton { icon };
     let items = match mode {
         PanelMode::Normal => vec![
-            (ID_TIME, WidgetKind::Label { text: format_elapsed(elapsed, max), color: GYOZA.text }),
+            (
+                ID_TIME,
+                WidgetKind::Label {
+                    text: format_elapsed(elapsed, max),
+                    color: theme::current().text,
+                },
+            ),
             (ID_PAUSE, button(if paused { Icon::Resume } else { Icon::Pause })),
             (ID_STOP, button(Icon::Stop)),
             (ID_CANCEL, button(Icon::Discard)),
@@ -69,7 +75,10 @@ fn build_panel_ui(
         PanelMode::Confirming => vec![
             (
                 ID_QUESTION,
-                WidgetKind::Label { text: texts.discard_question.into(), color: GYOZA.text },
+                WidgetKind::Label {
+                    text: texts.discard_question.into(),
+                    color: theme::current().text,
+                },
             ),
             (ID_CONFIRM, button(Icon::Discard)),
             (ID_BACK, button(Icon::Back)),
@@ -77,7 +86,7 @@ fn build_panel_ui(
     };
     // The question has no recording dot in front of it.
     let x = if mode == PanelMode::Normal { PAD + DOT + 6.0 } else { PAD };
-    Ui::new(layout_row(items, x, PAD, 10.0, fonts, &GYOZA))
+    Ui::new(layout_row(items, x, PAD, 10.0, fonts, theme::current()))
 }
 
 /// Logical size that fits every layout the panel can show, so switching to
@@ -92,12 +101,12 @@ fn panel_logical_size(max: Duration, texts: &Texts, fonts: &Fonts) -> (f32, f32)
 }
 
 fn paint_panel(painter: &mut Painter, ui: &Ui, paused: bool, fonts: &Fonts) {
-    painter.clear(GYOZA.bg);
+    painter.clear(theme::current().bg);
     if let Some(time) = ui.widget(ID_TIME).map(|w| w.rect) {
-        let dot = if paused { GYOZA.disabled_text } else { GYOZA.accent };
+        let dot = if paused { theme::current().disabled_text } else { theme::current().accent };
         painter.fill_circle(PAD + DOT / 2.0, time.y + time.h / 2.0, DOT / 2.0 - 1.0, dot);
     }
-    ui.paint(painter, fonts, &GYOZA);
+    ui.paint(painter, fonts, theme::current());
 }
 
 pub struct RecordingSession {
@@ -268,7 +277,7 @@ fn open_frame(event_loop: &ActiveEventLoop, region: PixelRect) -> Option<WindowS
 fn paint_frame(frame: &mut WindowSurface) {
     let size = frame.size();
     let mut pixels = vec![0u32; (size.width.max(0) * size.height.max(0)) as usize];
-    render_frame(size, FRAME_THICKNESS, GYOZA.accent.0, FRAME_KEY, &mut pixels);
+    render_frame(size, FRAME_THICKNESS, theme::current().accent.0, FRAME_KEY, &mut pixels);
     frame.present(&pixels);
 }
 

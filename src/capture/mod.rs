@@ -60,6 +60,8 @@ pub trait RecordingUi: Send {
 #[derive(Clone, Debug)]
 pub struct SelectionRequest {
     pub area: CaptureArea,
+    /// Show the bar that switches between rectangle, window and full screen.
+    pub switcher: bool,
     pub frozen: Option<Arc<PixelBuffer>>,
     pub windows: Vec<WindowCandidate>,
     pub monitors: Vec<MonitorInfo>,

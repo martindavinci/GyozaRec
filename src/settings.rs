@@ -6,6 +6,32 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Light or dark windows; automatic follows Windows' app mode.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeChoice {
+    Light,
+    Dark,
+    /// Also what an unknown value means, so it never resets the other settings.
+    #[default]
+    #[serde(other)]
+    Auto,
+}
+
+/// In the order Options lists them.
+pub const THEME_CHOICES: [ThemeChoice; 3] =
+    [ThemeChoice::Auto, ThemeChoice::Light, ThemeChoice::Dark];
+
+impl ThemeChoice {
+    pub fn is_dark(self, system_is_dark: bool) -> bool {
+        match self {
+            ThemeChoice::Auto => system_is_dark,
+            ThemeChoice::Light => false,
+            ThemeChoice::Dark => true,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
@@ -58,6 +84,11 @@ pub struct AppSettings {
     /// "follow Windows". Kept as text so an unknown code never resets the
     /// other settings.
     pub language: Option<String>,
+    pub theme: ThemeChoice,
+    /// For one capture, never saved: an image selection shows the bar that
+    /// switches between rectangle, window and full screen.
+    #[serde(skip)]
+    pub area_switcher: bool,
 }
 
 /// Defaults with an empty save folder; `normalized` fills it in.
@@ -95,6 +126,8 @@ impl Default for AppSettings {
             video_fps: 30,
             video_max_seconds: 300,
             language: None,
+            theme: ThemeChoice::Auto,
+            area_switcher: false,
         }
     }
 }
@@ -396,6 +429,28 @@ mod tests {
         let s = AppSettings { language: Some("ja".into()), ..AppSettings::defaults(&cap()) };
         st.save(&s).unwrap();
         assert_eq!(st.load().language(), Some(Language::Ja));
+    }
+
+    #[test]
+    fn theme_is_stored_by_name_and_unknown_means_automatic() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        let store = SettingsStore::new(p.clone(), cap());
+        assert_eq!(store.load().theme, ThemeChoice::Auto);
+        store.save(&AppSettings { theme: ThemeChoice::Dark, ..store.load() }).unwrap();
+        assert!(fs::read_to_string(&p).unwrap().contains(r#""theme": "dark""#));
+        assert_eq!(store.load().theme, ThemeChoice::Dark);
+        fs::write(&p, r#"{ "theme": "sepia", "gif_fps": 15 }"#).unwrap();
+        let s = store.load();
+        assert_eq!((s.theme, s.gif_fps), (ThemeChoice::Auto, 15));
+    }
+
+    #[test]
+    fn theme_choice_decides_dark() {
+        let dark = |c: ThemeChoice| [c.is_dark(false), c.is_dark(true)];
+        assert_eq!(dark(ThemeChoice::Auto), [false, true]);
+        assert_eq!(dark(ThemeChoice::Light), [false, false]);
+        assert_eq!(dark(ThemeChoice::Dark), [true, true]);
     }
 
     #[test]

@@ -5,7 +5,7 @@ use gyozarec::i18n::Texts;
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::presentation::{Notice, NoticeKind, notice_rect, shorten_middle};
 use gyozarec::uikit::painter::{Fonts, Painter, RectF};
-use gyozarec::uikit::theme::GYOZA;
+use gyozarec::uikit::theme;
 use gyozarec::uikit::widgets::{Icon, Ui, Widget, WidgetKind};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -43,7 +43,7 @@ pub fn layout(thumbnail: (i32, i32)) -> NoticeLayout {
     let (w, h) = (thumbnail.0.max(1) as f32, thumbnail.1.max(1) as f32);
     let k = (THUMB.0 / w).min(THUMB.1 / h).min(1.0);
     let (tw, th) = ((w * k).round(), (h * k).round());
-    let c = GYOZA.control_height;
+    let c = theme::current().control_height;
     let close = RectF { x: WIDTH - PAD - c, y: PAD, w: c, h: c };
     let name_y = PAD + (c - LINE) / 2.0;
     let thumb = RectF { x: (WIDTH - tw) / 2.0, y: PAD + c + 6.0, w: tw, h: th };
@@ -70,13 +70,17 @@ fn paint_notice(
     hint: &str,
     fonts: &Fonts,
 ) {
-    p.clear(GYOZA.bg);
+    p.clear(theme::current().bg);
     let (w, h) = l.size;
-    p.stroke_rect(RectF { x: 0.5, y: 0.5, w: w - 1.0, h: h - 1.0 }, 1.0, GYOZA.disabled_text);
-    p.text(fonts, name, PAD, l.name_y, GYOZA.font_px, GYOZA.text, true);
+    p.stroke_rect(
+        RectF { x: 0.5, y: 0.5, w: w - 1.0, h: h - 1.0 },
+        1.0,
+        theme::current().disabled_text,
+    );
+    p.text(fonts, name, PAD, l.name_y, theme::current().font_px, theme::current().text, true);
     p.image(thumbnail, l.thumb);
-    p.text(fonts, hint, PAD, l.hint_y, GYOZA.font_px, GYOZA.accent, false);
-    ui.paint(p, fonts, &GYOZA);
+    p.text(fonts, hint, PAD, l.hint_y, theme::current().font_px, theme::current().accent, false);
+    ui.paint(p, fonts, theme::current());
 }
 
 pub struct NoticeWindow {

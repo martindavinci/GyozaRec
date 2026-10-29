@@ -4,7 +4,7 @@ use super::surface::WindowSurface;
 use gyozarec::geometry::PixelSize;
 use gyozarec::presentation::{ToolbarState, area_label, capture_label, delay_label, format_label};
 use gyozarec::uikit::painter::{Fonts, Painter};
-use gyozarec::uikit::theme::GYOZA;
+use gyozarec::uikit::theme;
 use gyozarec::uikit::widgets::{Ui, WidgetKind, layout_row};
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -60,13 +60,13 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
         PAD,
         6.0,
         fonts,
-        &GYOZA,
+        theme::current(),
     );
     for w in &mut widgets {
         w.enabled = !state.busy;
     }
     let row1_bottom = widgets.iter().map(|w| w.rect.bottom()).fold(0.0, f32::max);
-    let color = if state.status_is_error { GYOZA.error } else { GYOZA.text };
+    let color = if state.status_is_error { theme::current().error } else { theme::current().text };
     let mut row2 = vec![(ID_STATUS, WidgetKind::Label { text: state.status.clone(), color })];
     if state.shows_update() {
         row2.push((ID_DOWNLOAD, WidgetKind::Link { text: texts.download.into() }));
@@ -75,7 +75,7 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     } else if state.last_saved.is_some() {
         row2.push((ID_FOLDER, WidgetKind::Link { text: texts.open_folder.into() }));
     }
-    widgets.extend(layout_row(row2, PAD, row1_bottom + 8.0, 12.0, fonts, &GYOZA));
+    widgets.extend(layout_row(row2, PAD, row1_bottom + 8.0, 12.0, fonts, theme::current()));
     Ui::new(widgets)
 }
 
@@ -96,6 +96,7 @@ impl Toolbar {
         let attrs = Window::default_attributes()
             .with_title("GyozaRec")
             .with_window_icon(super::window_icon())
+            .with_theme(super::title_theme())
             .with_taskbar_icon(super::window_icon())
             .with_resizable(false)
             .with_enabled_buttons(WindowButtons::CLOSE | WindowButtons::MINIMIZE)
@@ -128,8 +129,8 @@ impl Toolbar {
             return;
         }
         let mut painter = Painter::new(size, self.scale());
-        painter.clear(GYOZA.bg);
-        self.ui.paint(&mut painter, fonts, &GYOZA);
+        painter.clear(theme::current().bg);
+        self.ui.paint(&mut painter, fonts, theme::current());
         let mut pixels = vec![0u32; (size.width * size.height) as usize];
         painter.to_softbuffer(&mut pixels);
         self.surface.present(&pixels);

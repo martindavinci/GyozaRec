@@ -6,8 +6,9 @@ use gyozarec::presentation::{
     GIF_FPS_CHOICES, GIF_LONG_SIDE_CHOICES, GIF_MAX_SECONDS_CHOICES, JPEG_QUALITY_CHOICES,
     OptionsForm, VIDEO_FPS_CHOICES, VIDEO_MAX_SECONDS_CHOICES, choices_with, shorten_middle,
 };
+use gyozarec::settings::THEME_CHOICES;
 use gyozarec::uikit::painter::{Fonts, Painter, measure_text};
-use gyozarec::uikit::theme::GYOZA;
+use gyozarec::uikit::theme;
 use gyozarec::uikit::widgets::{Ui, Widget, WidgetKind, layout_row};
 use muda::{CheckMenuItem, ContextMenu, Menu};
 use winit::dpi::LogicalSize;
@@ -40,6 +41,7 @@ const ID_UPDATE_LINK: u32 = 23;
 const HINT_WIDTH: f32 = 340.0;
 const COLUMN_GAP: f32 = 28.0;
 const ID_LANGUAGE: u32 = 15;
+const ID_THEME: u32 = 24;
 const ID_FILE_NAMES: u32 = 17;
 const ID_NAME_EXAMPLE: u32 = 18;
 const ID_NAME_PREFIX: u32 = 19;
@@ -54,6 +56,12 @@ const LANGUAGE_PREFIX: &str = "opt:lang:";
 const NAMES_PREFIX: &str = "opt:names:";
 /// Menu id prefix for what an image capture does: `opt:image:<index>`.
 const IMAGE_PREFIX: &str = "opt:image:";
+/// Menu id prefix for the theme: `opt:theme:<index>`.
+const THEME_PREFIX: &str = "opt:theme:";
+
+fn theme_index(form: &OptionsForm) -> usize {
+    THEME_CHOICES.iter().position(|t| *t == form.theme).unwrap_or(0)
+}
 
 fn file_names_label(form: &OptionsForm, texts: &Texts) -> &'static str {
     let i = gyozarec::output::FILE_NAMES.iter().position(|s| *s == form.file_names).unwrap_or(0);
@@ -184,7 +192,9 @@ fn wrap(text: &str, max: f32, fonts: &Fonts) -> Vec<String> {
     let mut line = String::new();
     for word in text.split(' ') {
         let candidate = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
-        if !line.is_empty() && measure_text(fonts, &candidate, GYOZA.font_px, false).0 > max {
+        if !line.is_empty()
+            && measure_text(fonts, &candidate, theme::current().font_px, false).0 > max
+        {
             lines.push(std::mem::replace(&mut line, word.to_string()));
         } else {
             line = candidate;
@@ -219,7 +229,7 @@ pub struct OptionsWindow {
 }
 
 fn label(text: &str) -> WidgetKind {
-    WidgetKind::Label { text: text.into(), color: GYOZA.text }
+    WidgetKind::Label { text: text.into(), color: theme::current().text }
 }
 
 /// Interface fonts plus whatever the chosen language's native name needs.
@@ -238,7 +248,7 @@ fn build_ui(
     let mut y = PAD;
     let push_row =
         |items: Vec<(u32, WidgetKind)>, x: f32, widgets: &mut Vec<Widget>, y: &mut f32| {
-            let row = layout_row(items, x, *y, 10.0, fonts, &GYOZA);
+            let row = layout_row(items, x, *y, 10.0, fonts, theme::current());
             *y = row.iter().map(|w| w.rect.bottom()).fold(*y, f32::max) + ROW_GAP;
             widgets.extend(row);
         };
@@ -254,7 +264,7 @@ fn build_ui(
         form.file_name_prefix,
         chrono::Local::now().naive_local(),
     );
-    let example = WidgetKind::Label { text: example, color: GYOZA.disabled_text };
+    let example = WidgetKind::Label { text: example, color: theme::current().disabled_text };
     let row =
         vec![(102, label(texts.file_names)), (ID_FILE_NAMES, names), (ID_NAME_EXAMPLE, example)];
     push_row(row, PAD, &mut widgets, &mut y);
@@ -297,7 +307,7 @@ fn build_ui(
     // The Print Screen hint sits under its checkbox, in the left column.
     if form.print_screen_captures {
         for (i, line) in wrap(texts.print_screen_hint, HINT_WIDTH, fonts).into_iter().enumerate() {
-            let kind = WidgetKind::Label { text: line, color: GYOZA.disabled_text };
+            let kind = WidgetKind::Label { text: line, color: theme::current().disabled_text };
             push_row(vec![(450 + i as u32, kind)], PAD + 26.0, &mut widgets, &mut y);
         }
     }
@@ -310,34 +320,32 @@ fn build_ui(
     let dropdowns: Vec<(u32, &str, String)> = COMBOS
         .iter()
         .map(|(id, _)| (*id, combo_label(*id, texts), combo_value(form, *id).to_string()))
-        .chain(std::iter::once((
-            ID_LANGUAGE,
-            texts.language,
-            language_label(form.language, texts).to_string(),
-        )))
+        .chain([
+            (ID_LANGUAGE, texts.language, language_label(form.language, texts).to_string()),
+            (ID_THEME, texts.theme, texts.theme_choices[theme_index(form)].to_string()),
+        ])
         .collect();
     let label_w = dropdowns
         .iter()
-        .map(|(_, text, _)| measure_text(fonts, text, GYOZA.font_px, false).0)
+        .map(|(_, text, _)| measure_text(fonts, text, theme::current().font_px, false).0)
         .fold(0.0, f32::max);
     for (id, text, value) in dropdowns {
         let value = WidgetKind::Button { label: value, dropdown: true };
-        let mut row = layout_row(vec![(200 + id, label(text))], right_x, y, 0.0, fonts, &GYOZA);
-        let button = layout_row(vec![(id, value)], right_x + label_w + 16.0, y, 0.0, fonts, &GYOZA);
+        let mut row =
+            layout_row(vec![(200 + id, label(text))], right_x, y, 0.0, fonts, theme::current());
+        let button = layout_row(
+            vec![(id, value)],
+            right_x + label_w + 16.0,
+            y,
+            0.0,
+            fonts,
+            theme::current(),
+        );
         let row_h = button[0].rect.h;
         row[0].rect.y = y + (row_h - row[0].rect.h) / 2.0;
         y += row_h + ROW_GAP;
         widgets.extend(row);
         widgets.extend(button);
-    }
-    // Here rather than on the left, which would grow taller than small screens.
-    #[cfg(feature = "github-updates")]
-    {
-        let check = WidgetKind::Check {
-            label: texts.check_for_updates.into(),
-            checked: form.check_for_updates,
-        };
-        push_row(vec![(ID_UPDATES, check)], right_x, &mut widgets, &mut y);
     }
 
     let listed: Vec<(usize, &ShortcutLine)> =
@@ -349,7 +357,6 @@ fn build_ui(
             })
             .collect();
     if !listed.is_empty() {
-        y += ROW_GAP;
         let mut title = vec![(400, label(texts.shortcuts_title))];
         if form.shortcuts_enabled {
             let reset = WidgetKind::Button { label: texts.reset_shortcuts.into(), dropdown: false };
@@ -359,7 +366,7 @@ fn build_ui(
         // Key buttons line up in a column after the longest label.
         let check_w = listed
             .iter()
-            .map(|(_, l)| measure_text(fonts, l.label, GYOZA.font_px, false).0 + 22.0)
+            .map(|(_, l)| measure_text(fonts, l.label, theme::current().font_px, false).0 + 22.0)
             .fold(0.0, f32::max);
         let keys_x = right_x + check_w + 12.0;
         for (i, l) in listed {
@@ -380,10 +387,10 @@ fn build_ui(
                 .copied()
                 .or_else(|| (!l.available && enabled).then_some(texts.shortcut_unavailable));
             if let Some(note) = note {
-                let kind = WidgetKind::Label { text: note.into(), color: GYOZA.error };
+                let kind = WidgetKind::Label { text: note.into(), color: theme::current().error };
                 items.push((460 + i as u32, kind));
             }
-            let right = layout_row(items, keys_x, y, 10.0, fonts, &GYOZA);
+            let right = layout_row(items, keys_x, y, 10.0, fonts, theme::current());
             let row_h = right[0].rect.h;
             let mut left = layout_row(
                 vec![(ID_SHORTCUT_CHECK + i as u32, check)],
@@ -391,7 +398,7 @@ fn build_ui(
                 y,
                 0.0,
                 fonts,
-                &GYOZA,
+                theme::current(),
             );
             left[0].rect.y = y + (row_h - left[0].rect.h) / 2.0;
             y += row_h + ROW_GAP;
@@ -406,13 +413,26 @@ fn build_ui(
     let cancel = WidgetKind::Button { label: texts.cancel.into(), dropdown: false };
     let row_y = y;
     push_row(vec![(ID_OK, ok), (ID_CANCEL, cancel)], PAD, &mut widgets, &mut y);
+    // In the buttons row: neither column has room left for small screens.
+    #[cfg(feature = "github-updates")]
+    {
+        let check = WidgetKind::Check {
+            label: texts.check_for_updates.into(),
+            checked: form.check_for_updates,
+        };
+        // Just after Cancel, the last widget pushed.
+        let x = widgets.last().map_or(PAD, |w| w.rect.right()) + 24.0;
+        let mut row = layout_row(vec![(ID_UPDATES, check)], x, row_y, 0.0, fonts, theme::current());
+        row[0].rect.y = row_y + (y - ROW_GAP - row_y - row[0].rect.h) / 2.0;
+        widgets.extend(row);
+    }
     // The version, quietly, at the right end of the buttons row.
     let right_edge = widgets.iter().map(|w| w.rect.right()).fold(0.0, f32::max);
     let version = format!("GyozaRec {}", env!("CARGO_PKG_VERSION"));
-    let (tw, th) = measure_text(fonts, &version, GYOZA.font_px, false);
-    let kind = WidgetKind::Label { text: version, color: GYOZA.disabled_text };
+    let (tw, th) = measure_text(fonts, &version, theme::current().font_px, false);
+    let kind = WidgetKind::Label { text: version, color: theme::current().disabled_text };
     let mut label =
-        layout_row(vec![(ID_VERSION, kind)], right_edge - tw, row_y, 0.0, fonts, &GYOZA);
+        layout_row(vec![(ID_VERSION, kind)], right_edge - tw, row_y, 0.0, fonts, theme::current());
     label[0].rect.y = row_y + (y - ROW_GAP - row_y - th) / 2.0;
     widgets.extend(label);
     Ui::new(widgets)
@@ -429,7 +449,7 @@ fn add_update_link(
         return;
     };
     let text = texts.update_available.replace("{version}", &u.version);
-    let (w, _) = measure_text(fonts, &text, GYOZA.font_px, false);
+    let (w, _) = measure_text(fonts, &text, theme::current().font_px, false);
     let kind = WidgetKind::Link { text };
     let link = layout_row(
         vec![(ID_UPDATE_LINK, kind)],
@@ -437,7 +457,7 @@ fn add_update_link(
         version.y,
         0.0,
         fonts,
-        &GYOZA,
+        theme::current(),
     );
     ui.widgets.extend(link);
 }
@@ -464,6 +484,7 @@ impl OptionsWindow {
         let attrs = Window::default_attributes()
             .with_title(texts.options)
             .with_window_icon(super::window_icon())
+            .with_theme(super::title_theme())
             .with_resizable(false)
             .with_enabled_buttons(WindowButtons::CLOSE)
             .with_owner_window(owner)
@@ -498,6 +519,12 @@ impl OptionsWindow {
         self.surface.window.scale_factor() as f32
     }
 
+    /// Takes the current light or dark look.
+    pub fn restyle(&mut self) {
+        self.surface.window.set_theme(super::title_theme());
+        self.rebuild();
+    }
+
     fn rebuild(&mut self) {
         let mut ui = build_ui(&self.form, self.texts, &self.shortcuts, &self.edit, &self.fonts);
         add_update_link(&mut ui, self.update.as_ref(), self.texts, &self.fonts);
@@ -517,8 +544,8 @@ impl OptionsWindow {
             return;
         }
         let mut painter = Painter::new(size, self.scale());
-        painter.clear(GYOZA.bg);
-        self.ui.paint(&mut painter, &self.fonts, &GYOZA);
+        painter.clear(theme::current().bg);
+        self.ui.paint(&mut painter, &self.fonts, theme::current());
         let mut pixels = vec![0u32; (size.width * size.height) as usize];
         painter.to_softbuffer(&mut pixels);
         self.surface.present(&pixels);
@@ -536,6 +563,13 @@ impl OptionsWindow {
         if let Some(i) = menu_id.strip_prefix(IMAGE_PREFIX).and_then(|v| v.parse::<usize>().ok()) {
             self.form.set_image_action(i.min(2));
             self.rebuild();
+            return;
+        }
+        if let Some(i) = menu_id.strip_prefix(THEME_PREFIX).and_then(|v| v.parse::<usize>().ok()) {
+            if let Some(theme) = THEME_CHOICES.get(i) {
+                self.form.theme = *theme;
+                self.rebuild();
+            }
             return;
         }
         if let Some(code) = menu_id.strip_prefix(LANGUAGE_PREFIX) {
@@ -573,6 +607,16 @@ impl OptionsWindow {
                     *text,
                     true,
                     i == self.form.image_action(),
+                    None,
+                ));
+            }
+        } else if id == ID_THEME {
+            for (i, text) in self.texts.theme_choices.iter().enumerate() {
+                let _ = menu.append(&CheckMenuItem::with_id(
+                    format!("{THEME_PREFIX}{i}"),
+                    *text,
+                    true,
+                    i == theme_index(&self.form),
                     None,
                 ));
             }
@@ -756,6 +800,7 @@ impl OptionsWindow {
             ID_SHORTCUTS => self.form.shortcuts_enabled = !self.form.shortcuts_enabled,
             ID_PRINT_SCREEN => self.form.print_screen_captures = !self.form.print_screen_captures,
             id if id == ID_LANGUAGE
+                || id == ID_THEME
                 || id == ID_FILE_NAMES
                 || id == ID_EDITOR
                 || COMBOS.iter().any(|(cid, _)| *cid == id) =>
@@ -1008,8 +1053,8 @@ mod preview_tests {
         let (w, h) = logical_size(&ui);
         let size = gyozarec::geometry::PixelSize { width: w as i32, height: h as i32 };
         let mut painter = Painter::new(size, 1.0);
-        painter.clear(GYOZA.bg);
-        ui.paint(&mut painter, &fonts, &GYOZA);
+        painter.clear(theme::current().bg);
+        ui.paint(&mut painter, &fonts, theme::current());
         let mut pixels = vec![0u32; (size.width * size.height) as usize];
         painter.to_softbuffer(&mut pixels);
         let img = image::RgbImage::from_fn(w as u32, h as u32, |x, y| {

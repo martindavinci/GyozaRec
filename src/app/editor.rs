@@ -11,7 +11,7 @@ use gyozarec::i18n::Texts;
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::platform::{SaveChoice, Win32Clipboard, ask_save_changes, show_error_box};
 use gyozarec::uikit::painter::{Fonts, Painter, RectF, measure_text};
-use gyozarec::uikit::theme::{Color, GYOZA};
+use gyozarec::uikit::theme;
 use gyozarec::uikit::widgets::{Icon, Ui, Widget, WidgetKind, layout_row};
 use muda::{CheckMenuItem, ContextMenu, Menu};
 use std::path::PathBuf;
@@ -26,7 +26,6 @@ const PAD: f32 = 8.0;
 const GROUP_GAP: f32 = 14.0;
 /// Space around the picture inside the canvas.
 const MARGIN: f32 = 12.0;
-const CANVAS_BG: Color = Color(0xEADBC4);
 const ID_TOOL: u32 = 100;
 const ID_SWATCH: u32 = 200;
 const ID_SIZE: u32 = 300;
@@ -124,7 +123,7 @@ fn icon_of(tool: Tool) -> Icon {
 /// screen pixel, within 80 % of the work area, at least 720×420 when it fits.
 pub fn initial_size(image: PixelSize, work_area: Option<PixelRect>, scale: f64) -> (f32, f32) {
     let s = scale.max(0.5) as f32;
-    let bar = 2.0 * PAD + GYOZA.control_height;
+    let bar = 2.0 * PAD + theme::current().control_height;
     let content =
         (image.width as f32 / s + 2.0 * MARGIN, image.height as f32 / s + 2.0 * MARGIN + bar);
     let (aw, ah) = work_area.map_or((1280.0, 800.0), |a| (a.width as f32 / s, a.height as f32 / s));
@@ -149,7 +148,7 @@ fn build_bar(width: f32, s: &BarState, texts: &Texts, fonts: &Fonts) -> Ui {
     let mut x = PAD;
     let mut widgets: Vec<Widget> = Vec::new();
     let group = |items: Vec<(u32, WidgetKind)>, x: &mut f32, widgets: &mut Vec<Widget>| {
-        let row = layout_row(items, *x, PAD, 4.0, fonts, &GYOZA);
+        let row = layout_row(items, *x, PAD, 4.0, fonts, theme::current());
         *x = row.last().map_or(*x, |w| w.rect.right()) + GROUP_GAP;
         widgets.extend(row);
     };
@@ -183,13 +182,13 @@ fn build_bar(width: f32, s: &BarState, texts: &Texts, fonts: &Fonts) -> Ui {
         (ID_SAVE_AS, button(texts.editor_save_as)),
         (ID_SAVE, button(texts.editor_save)),
     ];
-    let mut right = layout_row(files, 0.0, PAD, 4.0, fonts, &GYOZA);
+    let mut right = layout_row(files, 0.0, PAD, 4.0, fonts, theme::current());
     let group_w = right.last().map_or(0.0, |w| w.rect.right());
     let left_end = x - GROUP_GAP;
     let (dx, dy) = if width - PAD - group_w >= left_end + GROUP_GAP {
         (width - PAD - group_w, 0.0)
     } else {
-        (PAD, GYOZA.control_height + 6.0)
+        (PAD, theme::current().control_height + 6.0)
     };
     for w in &mut right {
         w.rect.x += dx;
@@ -415,8 +414,8 @@ fn paint_editor(
     area: RectF,
     fonts: &Fonts,
 ) -> View {
-    p.clear(GYOZA.bg);
-    p.fill_rounded_rect(area, 0.0, CANVAS_BG);
+    p.clear(theme::current().bg);
+    p.fill_rounded_rect(area, 0.0, theme::current().canvas);
     let inner = RectF {
         x: area.x + MARGIN,
         y: area.y + MARGIN,
@@ -429,7 +428,7 @@ fn paint_editor(
         draw(p, a, &view, fonts);
     }
     if let Some(r) = selection {
-        p.dashed_rect(r, GYOZA.text);
+        p.dashed_rect(r, theme::current().text);
     }
     if let Some((a, caret_px)) = text {
         draw(p, a, &view, fonts);
@@ -440,7 +439,7 @@ fn paint_editor(
             p.line((x + w + 1.0, y), (x + w + 1.0, y + h), 1.5, color.color());
         }
     }
-    ui.paint(p, fonts, &GYOZA);
+    ui.paint(p, fonts, theme::current());
     view
 }
 
@@ -489,6 +488,7 @@ impl EditorWindow {
         let mut attrs = Window::default_attributes()
             .with_title(title(&path, on_disk, texts))
             .with_window_icon(super::window_icon())
+            .with_theme(super::title_theme())
             .with_min_inner_size(LogicalSize::new(360.0, 240.0))
             .with_inner_size(LogicalSize::new(w, h));
         if let Some(a) = work_area {
@@ -589,6 +589,12 @@ impl EditorWindow {
     /// Whether closing would lose something the user may want to keep.
     pub fn is_dirty(&self) -> bool {
         self.doc.is_dirty() || self.text.is_some() || (self.settings.ask_to_save && !self.on_disk)
+    }
+
+    /// Takes the current light or dark look.
+    pub fn restyle(&mut self) {
+        self.surface.window.set_theme(super::title_theme());
+        self.rebuild();
     }
 
     pub fn scale_factor(&self) -> f64 {

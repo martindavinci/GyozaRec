@@ -297,10 +297,11 @@ impl SelectionUi for FakeSelection {
         log_event(
             &Some(self.log.clone()),
             format!(
-                "select:{:?}:frozen={}:windows={}",
+                "select:{:?}:frozen={}:windows={}{}",
                 req.area,
                 req.frozen.is_some(),
-                req.windows.len()
+                req.windows.len(),
+                if req.switcher { ":bar" } else { "" }
             ),
         );
         self.result

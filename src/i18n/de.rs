@@ -65,6 +65,8 @@ pub(super) const TEXTS: Texts = Texts {
     video_fps: "Video: Bilder pro Sekunde",
     video_max_seconds: "Video: maximale Länge (s)",
     language: "Sprache",
+    theme: "Design",
+    theme_choices: ["Automatisch (System)", "Hell", "Dunkel"],
     file_names: "Dateinamen",
     file_name_prefix: "Mit \"GyozaRec_\" beginnen",
     file_name_styles: ["Datum und Uhrzeit", "Zufällig"],

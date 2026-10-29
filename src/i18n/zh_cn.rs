@@ -54,6 +54,8 @@ pub(super) const TEXTS: Texts = Texts {
     video_fps: "视频：每秒帧数",
     video_max_seconds: "视频：最长时长（秒）",
     language: "语言",
+    theme: "主题",
+    theme_choices: ["自动（系统）", "浅色", "深色"],
     file_names: "文件名",
     file_name_prefix: "以“GyozaRec_”开头",
     file_name_styles: ["日期和时间", "随机"],

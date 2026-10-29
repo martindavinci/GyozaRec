@@ -39,7 +39,8 @@ impl QuickAction {
     }
 }
 
-/// The settings for one capture; the saved settings stay untouched.
+/// The settings for one capture; the saved settings stay untouched. Image
+/// captures offer the area bar, except the one that asks for full screen.
 pub fn apply(action: QuickAction, s: &AppSettings) -> AppSettings {
     let recording = if s.format.is_recording() { s.format } else { OutputFormat::Mp4 };
     let image = if s.format == OutputFormat::Jpg { OutputFormat::Jpg } else { OutputFormat::Png };
@@ -50,7 +51,8 @@ pub fn apply(action: QuickAction, s: &AppSettings) -> AppSettings {
         QuickAction::Record => (s.area, recording),
         QuickAction::RecordFullScreen => (CaptureArea::FullScreen, recording),
     };
-    AppSettings { area, format, ..s.clone() }
+    let area_switcher = matches!(action, QuickAction::Current | QuickAction::Image);
+    AppSettings { area, format, area_switcher, ..s.clone() }
 }
 
 /// A capture is already running, or Options is open: the request is dropped.
@@ -95,6 +97,14 @@ mod tests {
         assert_eq!(apply(QuickAction::Image, &s(Window, Jpg)).format, Jpg);
         assert_eq!(apply(QuickAction::ImageFullScreen, &s(Window, Jpg)).format, Jpg);
         assert_eq!(apply(QuickAction::Image, &s(Window, Mp4)).format, Png);
+    }
+
+    #[test]
+    fn the_area_bar_is_offered_unless_full_screen_is_asked_for() {
+        let base = s(CaptureArea::FullScreen, OutputFormat::Png);
+        let offered: Vec<bool> =
+            QuickAction::ALL.iter().map(|a| apply(*a, &base).area_switcher).collect();
+        assert_eq!(offered, [true, true, false, false, false]);
     }
 
     #[test]

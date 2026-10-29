@@ -29,6 +29,10 @@ pub enum Icon {
     Crop,
     Undo,
     Redo,
+    /// A window with its title bar.
+    Window,
+    /// Four corners: the whole screen.
+    FullScreen,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -251,7 +255,7 @@ impl Ui {
                     let outer = RectF { x: w.rect.x, y: by, w: CHECK_BOX, h: CHECK_BOX };
                     p.fill_rounded_rect(outer, 3.0, text_color);
                     let inner = RectF { x: outer.x + 1.5, y: by + 1.5, w: 13.0, h: 13.0 };
-                    p.fill_rounded_rect(inner, 2.0, Color(0xFFFFFF));
+                    p.fill_rounded_rect(inner, 2.0, theme.check_well);
                     if *checked {
                         let mark = RectF { x: outer.x + 4.0, y: by + 4.0, w: 8.0, h: 8.0 };
                         p.fill_rounded_rect(mark, 2.0, theme.accent);
@@ -376,6 +380,19 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
         }
         Icon::Redact => {
             p.fill_rounded_rect(RectF { x: cx - 6.5, y: cy - 4.0, w: 13.0, h: 8.0 }, 1.0, color);
+        }
+        Icon::Window => {
+            p.stroke_rect(RectF { x: cx - 6.5, y: cy - 5.0, w: 13.0, h: 10.0 }, 1.5, color);
+            p.fill_rounded_rect(RectF { x: cx - 6.5, y: cy - 5.0, w: 13.0, h: 3.0 }, 0.0, color);
+        }
+        Icon::FullScreen => {
+            let (x0, y0, x1, y1, arm) = (cx - 6.5, cy - 5.0, cx + 6.5, cy + 5.0, 4.0);
+            for (x, y, dx, dy) in
+                [(x0, y0, 1.0, 1.0), (x1, y0, -1.0, 1.0), (x0, y1, 1.0, -1.0), (x1, y1, -1.0, -1.0)]
+            {
+                p.line((x, y), (x + dx * arm, y), 1.5, color);
+                p.line((x, y), (x, y + dy * arm), 1.5, color);
+            }
         }
         Icon::Crop => {
             p.line((cx - 3.0, cy - 7.0), (cx - 3.0, cy + 3.0), 2.0, color);

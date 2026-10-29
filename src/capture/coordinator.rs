@@ -51,6 +51,10 @@ impl CaptureCoordinator {
 
     fn capture_hidden(&mut self, settings: &AppSettings) -> CaptureOutcome {
         match (settings.format, settings.area) {
+            // The bar can switch to any area, so even full screen is selected.
+            (OutputFormat::Png | OutputFormat::Jpg, _) if settings.area_switcher => {
+                self.capture_region(settings)
+            }
             (OutputFormat::Png | OutputFormat::Jpg, CaptureArea::FullScreen) => {
                 self.capture_fullscreen(settings)
             }
@@ -68,10 +72,15 @@ impl CaptureCoordinator {
             Ok(frozen) => Arc::new(frozen),
             Err(err) => return Err(CaptureOutcome::failed(err, false)),
         };
-        let windows =
-            if settings.area == CaptureArea::Window { self.windows.snapshot() } else { Vec::new() };
+        let switcher = settings.area_switcher && !settings.format.is_recording();
+        let windows = if settings.area == CaptureArea::Window || switcher {
+            self.windows.snapshot()
+        } else {
+            Vec::new()
+        };
         let request = SelectionRequest {
             area: settings.area,
+            switcher,
             frozen: Some(frozen.clone()),
             windows,
             monitors: self.monitors.monitors(),
@@ -559,6 +568,35 @@ mod tests {
             CoordinatorHarness::with_windows(Some(PixelRect::new(0, 0, 50, 50)), vec![cand]);
         h.run(AppSettings { area: CaptureArea::Window, ..h.settings() });
         assert!(h.events().contains(&"select:Window:frozen=true:windows=1".to_string()));
+    }
+
+    #[test]
+    fn the_area_bar_selects_every_image_area_with_windows_at_hand() {
+        let cand = WindowCandidate {
+            id: 1,
+            pid: 2,
+            title: "x".into(),
+            maximized: false,
+            bounds: PixelRect::new(0, 0, 50, 50),
+        };
+        let mut h =
+            CoordinatorHarness::with_windows(Some(PixelRect::new(0, 0, 50, 50)), vec![cand]);
+        let o = h.run(AppSettings {
+            area: CaptureArea::FullScreen,
+            area_switcher: true,
+            ..h.settings()
+        });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let ev = h.events();
+        assert!(ev.contains(&"select:FullScreen:frozen=true:windows=1:bar".to_string()), "{ev:?}");
+        let mut rec = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        rec.run(AppSettings { format: OutputFormat::Gif, area_switcher: true, ..rec.settings() });
+        assert!(
+            rec.events().contains(&"select:Rectangle:frozen=true:windows=0".to_string()),
+            "recordings keep the plain selection: {:?}",
+            rec.events()
+        );
     }
 
     #[test]

@@ -19,10 +19,10 @@
 A small toolbar:
 
 - **Capture** (**Record** for videos and GIFs) — starts a capture with the selected area, format and delay.
-- **Area** — Rectangle, Window or Full screen. With several monitors, Full screen asks which one: click it, or press Esc to cancel.
+- **Area** — Rectangle, Window or Full screen. With several monitors, Full screen asks which one: click it, or press Esc to cancel. Image captures (**Capture**, the Capture image shortcut and Print Screen) show a bar at the top of the screen to switch between Rectangle, Window and Full screen, or to cancel; the area picked there becomes the toolbar's. Full screen on a single monitor captures at once.
 - **Format** — PNG image, JPG image, MP4 video or Animated GIF. Any area works with any format. The same menu has **Convert a video to GIF…**.
 - **Delay** — from no delay up to 5 seconds.
-- **Options** — save folder, file names (date and time such as `2026-10-26_14-30-05.png`, optionally starting with `GyozaRec_`, or ten random characters such as `k3F9xQ2bTm.png`; a name already taken gets `_2`, `_3`… at the end), copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, what an image capture does (save and open the editor, only save, or only copy and open the editor), asking to save when closing the editor, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language.
+- **Options** — save folder, file names (date and time such as `2026-10-26_14-30-05.png`, optionally starting with `GyozaRec_`, or ten random characters such as `k3F9xQ2bTm.png`; a name already taken gets `_2`, `_3`… at the end), copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, what an image capture does (save and open the editor, only save, or only copy and open the editor), asking to save when closing the editor, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language, theme (automatic follows Windows' app mode, light or dark).
 
 <p align="center">
   <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">

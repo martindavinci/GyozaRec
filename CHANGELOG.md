@@ -2,7 +2,7 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.1] - 2026-10-29
 
 ### Added
 - "Image captures" in Options: save and open the editor (as before), only save, or copy and open the editor without saving (off by default); a capture that was never saved is marked "Not saved yet" in the editor's title and on the status line.
@@ -73,6 +73,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.4.1]: https://github.com/martindavinci/GyozaRec/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/martindavinci/GyozaRec/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/martindavinci/GyozaRec/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/martindavinci/GyozaRec/compare/v0.1.0...v0.2.0

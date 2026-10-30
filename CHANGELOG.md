@@ -2,6 +2,12 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.5] - 2026-10-30
+
+### Added
+- Interface size in Options, next to Theme: 100 % to 200 % on top of Windows' display scale, for every window and the capture bar; it shows at once, like the theme. Ctrl + mouse wheel or Ctrl +/- on the toolbar change it too. Options itself grows only as far as it still fits the screen.
+- The author's name next to the version at the bottom of Options.
+
 ## [0.4.4] - 2026-10-30
 
 ### Added
@@ -101,6 +107,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.4.5]: https://github.com/martindavinci/GyozaRec/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/martindavinci/GyozaRec/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/martindavinci/GyozaRec/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/martindavinci/GyozaRec/compare/v0.4.1...v0.4.2

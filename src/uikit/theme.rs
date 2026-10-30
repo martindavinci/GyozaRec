@@ -1,6 +1,6 @@
 //! Colors and metrics of the "gyoza" look, light and dark.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// `0x00RRGGBB`, the softbuffer pixel format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,24 +65,59 @@ pub const GYOZA_DARK: Theme = Theme {
     ..GYOZA
 };
 
-static DARK: AtomicBool = AtomicBool::new(false);
+/// Cool blue-grey dark, from a palette a user shared.
+pub const SLATE: Theme = Theme {
+    bg: Color(0x1E2026),
+    button: Color(0x2B303A),
+    button_hover: Color(0x383F4B),
+    button_pressed: Color(0x464F60),
+    text: Color(0xE8EDF3),
+    disabled_text: Color(0xAAB4C2),
+    accent: Color(0x85B7FF),
+    error: Color(0xFF8C8C),
+    canvas: Color(0x14171C),
+    check_well: Color(0x15181D),
+    ..GYOZA
+};
 
-/// Switches every window drawn from now on to the dark or light look.
-pub fn set_dark(dark: bool) {
-    DARK.store(dark, Ordering::Relaxed);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Look {
+    Light,
+    Dark,
+    Slate,
 }
 
-pub fn is_dark() -> bool {
-    DARK.load(Ordering::Relaxed)
+impl Look {
+    const ALL: [Look; 3] = [Look::Light, Look::Dark, Look::Slate];
+
+    pub fn theme(self) -> &'static Theme {
+        match self {
+            Look::Light => &GYOZA,
+            Look::Dark => &GYOZA_DARK,
+            Look::Slate => &SLATE,
+        }
+    }
+
+    /// Dark title bars go with it.
+    pub fn is_dark(self) -> bool {
+        self != Look::Light
+    }
+}
+
+static LOOK: AtomicU8 = AtomicU8::new(0);
+
+/// Switches every window drawn from now on to `look`.
+pub fn set_look(look: Look) {
+    LOOK.store(look as u8, Ordering::Relaxed);
+}
+
+pub fn look() -> Look {
+    Look::ALL[usize::from(LOOK.load(Ordering::Relaxed)).min(Look::ALL.len() - 1)]
 }
 
 /// The look in use.
 pub fn current() -> &'static Theme {
-    look(is_dark())
-}
-
-fn look(dark: bool) -> &'static Theme {
-    if dark { &GYOZA_DARK } else { &GYOZA }
+    look().theme()
 }
 
 #[cfg(test)]
@@ -105,7 +140,7 @@ mod tests {
 
     #[test]
     fn text_is_readable_in_both_looks() {
-        for t in [GYOZA, GYOZA_DARK] {
+        for t in [GYOZA, GYOZA_DARK, SLATE] {
             for bg in [t.bg, t.button, t.button_hover, t.button_pressed] {
                 assert!(contrast(t.text, bg) >= 4.5, "{:?} on {:?}", t.text, bg);
             }
@@ -116,7 +151,9 @@ mod tests {
 
     #[test]
     fn each_look_has_its_colors() {
-        assert_eq!((look(false).bg, look(true).bg), (GYOZA.bg, GYOZA_DARK.bg));
-        assert_eq!(look(true).control_height, GYOZA.control_height, "same sizes");
+        let bgs: Vec<Color> = Look::ALL.iter().map(|l| l.theme().bg).collect();
+        assert_eq!(bgs, [GYOZA.bg, GYOZA_DARK.bg, SLATE.bg]);
+        assert_eq!(Look::ALL.map(Look::is_dark), [false, true, true]);
+        assert_eq!(SLATE.control_height, GYOZA.control_height, "same sizes");
     }
 }

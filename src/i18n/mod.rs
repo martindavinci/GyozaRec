@@ -184,7 +184,7 @@ pub struct Texts {
     pub language: &'static str,
     pub theme: &'static str,
     /// In `settings::THEME_CHOICES` order.
-    pub theme_choices: [&'static str; 3],
+    pub theme_choices: [&'static str; 4],
     pub file_names: &'static str,
     pub file_name_prefix: &'static str,
     /// In `FILE_NAMES` order: date and time, random.

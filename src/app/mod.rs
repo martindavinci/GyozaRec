@@ -624,21 +624,21 @@ impl App {
         self.options = None;
     }
 
-    /// Switches the interface to the language the settings now ask for.
-    /// Light or dark windows, from the setting or from Windows' app mode.
+    /// The windows' look, from the setting or from Windows' app mode.
     fn apply_theme(&mut self) {
         use gyozarec::settings::ThemeChoice;
+        use gyozarec::uikit::theme;
         let choice = self.state.settings.theme;
-        let code = match choice {
-            ThemeChoice::Auto => 0,
-            ThemeChoice::Light => 1,
-            ThemeChoice::Dark => 2,
-        };
         let system_dark = self.system_theme == Some(winit::window::Theme::Dark);
-        let dark = choice.is_dark(system_dark);
-        let unchanged = TITLE_THEME.swap(code, Ordering::Relaxed) == code
-            && gyozarec::uikit::theme::is_dark() == dark;
-        gyozarec::uikit::theme::set_dark(dark);
+        let look = choice.look(system_dark);
+        // Automatic leaves title bars to Windows, which reports its changes.
+        let code = match (choice, look.is_dark()) {
+            (ThemeChoice::Auto, _) => 0,
+            (_, false) => 1,
+            (_, true) => 2,
+        };
+        let unchanged = TITLE_THEME.swap(code, Ordering::Relaxed) == code && theme::look() == look;
+        theme::set_look(look);
         if unchanged {
             return;
         }
@@ -654,6 +654,7 @@ impl App {
         }
     }
 
+    /// Switches the interface to the language the settings now ask for.
     fn apply_language(&mut self) {
         let language = resolve(self.state.settings.language(), &system_ui_languages());
         if language == self.state.language {

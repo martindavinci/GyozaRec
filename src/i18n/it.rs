@@ -64,7 +64,7 @@ pub(super) const TEXTS: Texts = Texts {
     video_max_seconds: "Video: durata massima (s)",
     language: "Lingua",
     theme: "Tema",
-    theme_choices: ["Automatico (sistema)", "Chiaro", "Scuro"],
+    theme_choices: ["Automatico (sistema)", "Chiaro", "Scuro", "Ardesia"],
     file_names: "Nome dei file",
     file_name_prefix: "Inizia con \"GyozaRec_\"",
     file_name_styles: ["Data e ora", "Casuale"],

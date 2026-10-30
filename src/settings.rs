@@ -2,16 +2,19 @@
 
 use crate::geometry::{CaptureArea, OutputFormat};
 use crate::paths::AppPaths;
+use crate::uikit::theme::Look;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Light or dark windows; automatic follows Windows' app mode.
+/// The windows' look; automatic is light or dark after Windows' app mode.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemeChoice {
     Light,
     Dark,
+    /// Blue-grey dark.
+    Slate,
     /// Also what an unknown value means, so it never resets the other settings.
     #[default]
     #[serde(other)]
@@ -19,15 +22,16 @@ pub enum ThemeChoice {
 }
 
 /// In the order Options lists them.
-pub const THEME_CHOICES: [ThemeChoice; 3] =
-    [ThemeChoice::Auto, ThemeChoice::Light, ThemeChoice::Dark];
+pub const THEME_CHOICES: [ThemeChoice; 4] =
+    [ThemeChoice::Auto, ThemeChoice::Light, ThemeChoice::Dark, ThemeChoice::Slate];
 
 impl ThemeChoice {
-    pub fn is_dark(self, system_is_dark: bool) -> bool {
+    pub fn look(self, system_is_dark: bool) -> Look {
         match self {
-            ThemeChoice::Auto => system_is_dark,
-            ThemeChoice::Light => false,
-            ThemeChoice::Dark => true,
+            ThemeChoice::Auto if system_is_dark => Look::Dark,
+            ThemeChoice::Auto | ThemeChoice::Light => Look::Light,
+            ThemeChoice::Dark => Look::Dark,
+            ThemeChoice::Slate => Look::Slate,
         }
     }
 }
@@ -446,11 +450,13 @@ mod tests {
     }
 
     #[test]
-    fn theme_choice_decides_dark() {
-        let dark = |c: ThemeChoice| [c.is_dark(false), c.is_dark(true)];
-        assert_eq!(dark(ThemeChoice::Auto), [false, true]);
-        assert_eq!(dark(ThemeChoice::Light), [false, false]);
-        assert_eq!(dark(ThemeChoice::Dark), [true, true]);
+    fn theme_choice_decides_the_look() {
+        use crate::uikit::theme::Look;
+        let looks = |c: ThemeChoice| [c.look(false), c.look(true)];
+        assert_eq!(looks(ThemeChoice::Auto), [Look::Light, Look::Dark]);
+        assert_eq!(looks(ThemeChoice::Light), [Look::Light, Look::Light]);
+        assert_eq!(looks(ThemeChoice::Dark), [Look::Dark, Look::Dark]);
+        assert_eq!(looks(ThemeChoice::Slate), [Look::Slate, Look::Slate]);
     }
 
     #[test]

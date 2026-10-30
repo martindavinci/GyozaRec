@@ -21,6 +21,9 @@ const LABEL_PX: f32 = 13.0;
 /// Space above the area bar and inside its border, logical units.
 const BAR_TOP: f32 = 12.0;
 const BAR_PAD: f32 = 6.0;
+/// The bar is drawn this many times the size of the other controls, so it
+/// is easy to hit on a full screen.
+const BAR_ZOOM: f32 = 2.0;
 /// Bar ids: the areas in `AREAS` order, then Close.
 const ID_AREA: u32 = 1;
 const ID_CLOSE: u32 = 10;
@@ -58,16 +61,18 @@ struct AreaBar {
 }
 
 impl AreaBar {
-    fn new(area: CaptureArea, monitor_width: i32, scale: f32, fonts: &Fonts) -> AreaBar {
+    /// `monitor_scale` is the monitor's; the bar is drawn `BAR_ZOOM` times larger.
+    fn new(area: CaptureArea, monitor_width: i32, monitor_scale: f32, fonts: &Fonts) -> AreaBar {
         let ui = bar_ui(area, fonts);
         let b = ui.bounds();
+        let scale = monitor_scale * BAR_ZOOM;
         let size = PixelSize {
             width: ((b.right() + BAR_PAD) * scale).ceil() as i32,
             height: ((b.bottom() + BAR_PAD) * scale).ceil() as i32,
         };
         let origin = PixelPoint {
             x: ((monitor_width - size.width) / 2).max(0),
-            y: (BAR_TOP * scale) as i32,
+            y: (BAR_TOP * monitor_scale) as i32,
         };
         AreaBar { ui, origin, size, scale, pressed: false }
     }
@@ -550,12 +555,16 @@ mod tests {
     fn bar_sits_centred_at_the_top_and_marks_the_area() {
         let fonts = Fonts::embedded();
         let bar = AreaBar::new(CaptureArea::Window, 1920, 1.5, &fonts);
-        assert_eq!(bar.origin.y, 18);
+        assert_eq!(bar.origin.y, 18, "the gap above follows the monitor, not the zoom");
         assert!((bar.origin.x * 2 + bar.size.width - 1920).abs() <= 1, "{:?}", bar.origin);
+        let b = bar.ui.bounds();
+        let plain = ((b.bottom() + BAR_PAD) * 1.5).ceil() as i32;
+        assert!(bar.size.height >= 2 * plain - 1, "twice as tall: {}", bar.size.height);
+        let s = bar.scale;
         let centre = |id: u32| {
             let r = bar.ui.widget(id).unwrap().rect;
             let (x, y) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
-            PixelPoint { x: bar.origin.x + (x * 1.5) as i32, y: bar.origin.y + (y * 1.5) as i32 }
+            PixelPoint { x: bar.origin.x + (x * s) as i32, y: bar.origin.y + (y * s) as i32 }
         };
         let close = centre(ID_CLOSE);
         assert!(bar.contains(close));

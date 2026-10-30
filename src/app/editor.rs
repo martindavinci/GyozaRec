@@ -292,7 +292,11 @@ impl EditorCanvas {
         if self.fitted.as_ref().is_none_or(|(k, _)| *k != key) {
             let full = &self.full.as_ref().expect("built above").1;
             let size = PixelSize { width: physical.0, height: physical.1 };
-            let copy = (full.bounds.size() != size).then(|| full.resized(size));
+            let mut copy = (full.bounds.size() != size).then(|| full.resized(size));
+            if !full.is_opaque() {
+                let shown = copy.as_ref().unwrap_or(full);
+                copy = Some(shown.on_checkerboard((8.0 * scale).round() as usize));
+            }
             self.fitted = Some((key, copy));
             rebuilt = true;
         }

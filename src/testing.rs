@@ -4,9 +4,9 @@
 use crate::bridge::{RecordingCommand, UiRequest, UiSender};
 use crate::capture::{
     CaptureCoordinator, CaptureOutcome, ClipboardService, CursorLocator, EditorLauncher,
-    FileRevealer, MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, SelectionRequest,
-    SelectionUi, SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility, WindowCandidate,
-    WindowSnapshotter,
+    FileRevealer, MonitorProvider, RecordingJob, RecordingUi, ScreenGrabber, Selection,
+    SelectionRequest, SelectionUi, SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility,
+    WindowCandidate, WindowSnapshotter,
 };
 use crate::clock::Clock;
 use crate::geometry::{MonitorInfo, PixelPoint, PixelRect};
@@ -135,7 +135,7 @@ impl UiSender for FakeUiSender {
             UiRequest::ShowToolbar => log_event(&log, "ui:show"),
             UiRequest::Select { reply, .. } => {
                 log_event(&log, "ui:select");
-                let _ = reply.send(self.select_reply);
+                let _ = reply.send(self.select_reply.map(Selection::from));
             }
             UiRequest::CaptureFinished(outcome) => {
                 log_event(&log, format!("ui:finished:{:?}", outcome.kind));
@@ -288,12 +288,12 @@ impl CursorLocator for FakeCursor {
 }
 
 pub struct FakeSelection {
-    pub result: Option<PixelRect>,
+    pub result: Option<Selection>,
     pub log: EventLog,
 }
 
 impl SelectionUi for FakeSelection {
-    fn select_region(&mut self, req: SelectionRequest) -> Option<PixelRect> {
+    fn select_region(&mut self, req: SelectionRequest) -> Option<Selection> {
         log_event(
             &Some(self.log.clone()),
             format!(
@@ -304,7 +304,7 @@ impl SelectionUi for FakeSelection {
                 if req.switcher { ":bar" } else { "" }
             ),
         );
-        self.result
+        self.result.clone()
     }
 }
 
@@ -446,7 +446,10 @@ impl CoordinatorHarness {
             grabber: Arc::new(FakeGrabber::with_log(log.clone())),
             cursor: Box::new(FakeCursor(cursor)),
             windows: Box::new(FakeWindows(windows)),
-            selection: Box::new(FakeSelection { result: selection, log: log.clone() }),
+            selection: Box::new(FakeSelection {
+                result: selection.map(Selection::from),
+                log: log.clone(),
+            }),
             clipboard: Box::new(FakeClipboard { log: log.clone() }),
             sound: Box::new(FakeSound { log: log.clone() }),
             revealer: Box::new(FakeRevealer { log: log.clone() }),
@@ -498,6 +501,13 @@ impl CoordinatorHarness {
             virtual_screen: PixelRect::new(-1920, 0, 3840, 1080),
         };
         Self::build(selection, monitors, cursor, Vec::new())
+    }
+
+    /// The selection answers a lasso drawn along `outline`, inside `rect`.
+    pub fn lasso(mut self, rect: PixelRect, outline: Vec<PixelPoint>) -> Self {
+        let result = Some(Selection { rect, outline });
+        self.coordinator.selection = Box::new(FakeSelection { result, log: self.log.clone() });
+        self
     }
 
     /// An audio device is present.

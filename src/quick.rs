@@ -53,7 +53,7 @@ pub fn apply(action: QuickAction, s: &AppSettings) -> AppSettings {
     };
     let area_switcher =
         matches!(action, QuickAction::Current | QuickAction::Image | QuickAction::Record);
-    AppSettings { area, format, area_switcher, ..s.clone() }
+    AppSettings { area: area.for_format(format), format, area_switcher, ..s.clone() }
 }
 
 /// A capture is already running, or Options is open: the request is dropped.
@@ -106,6 +106,18 @@ mod tests {
         let offered: Vec<bool> =
             QuickAction::ALL.iter().map(|a| apply(*a, &base).area_switcher).collect();
         assert_eq!(offered, [true, true, false, true, false]);
+    }
+
+    #[test]
+    fn recordings_take_a_rectangle_for_the_lasso() {
+        let lasso = s(CaptureArea::Lasso, OutputFormat::Png);
+        assert_eq!(apply(QuickAction::Image, &lasso).area, CaptureArea::Lasso);
+        assert_eq!(apply(QuickAction::Record, &lasso).area, CaptureArea::Rectangle);
+        let gif = s(CaptureArea::Lasso, OutputFormat::Gif);
+        assert_eq!(apply(QuickAction::Current, &gif).area, CaptureArea::Rectangle);
+        assert!(!CaptureArea::Lasso.offered_for(OutputFormat::Mp4));
+        assert!(CaptureArea::Lasso.offered_for(OutputFormat::Jpg));
+        assert!(CaptureArea::Window.offered_for(OutputFormat::Gif));
     }
 
     #[test]

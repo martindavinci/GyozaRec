@@ -292,19 +292,27 @@ impl Painter {
         }
     }
 
-    /// Paints on a copy of `img`, one logical unit per pixel. Captures are
-    /// opaque, so premultiplied RGBA is BGRA with red and blue swapped.
+    /// Paints on a copy of `img`, one logical unit per pixel.
     pub fn from_buffer(img: &crate::pixels::PixelBuffer) -> Painter {
         Painter { pixmap: pixmap_of(img), scale: 1.0 }
     }
 
-    /// The painted pixels as an opaque BGRA buffer placed at `origin`.
+    /// The painted pixels as a BGRA buffer placed at `origin`; fully
+    /// transparent pixels come out white, like a lasso's.
     pub fn into_buffer(self, origin: PixelPoint) -> crate::pixels::PixelBuffer {
         let (w, h) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
         let mut bgra = self.pixmap.take();
         for px in bgra.as_chunks_mut::<4>().0 {
             px.swap(0, 2);
-            px[3] = 255;
+            match u16::from(px[3]) {
+                255 => {}
+                0 => px.copy_from_slice(&[255, 255, 255, 0]),
+                a => {
+                    for ch in &mut px[..3] {
+                        *ch = ((u16::from(*ch) * 255 + a / 2) / a).min(255) as u8;
+                    }
+                }
+            }
         }
         let bounds = crate::geometry::PixelRect::new(origin.x, origin.y, w, h);
         crate::pixels::PixelBuffer::new(bounds, bgra)
@@ -433,13 +441,18 @@ impl Painter {
     }
 }
 
-/// An opaque BGRA buffer as a premultiplied RGBA pixmap.
+/// A BGRA buffer as a premultiplied RGBA pixmap.
 fn pixmap_of(img: &crate::pixels::PixelBuffer) -> Pixmap {
     let (w, h) = (img.width().max(1) as u32, img.height().max(1) as u32);
     let mut rgba = img.bgra.clone();
     for px in rgba.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
-        px[3] = 255;
+        let a = u16::from(px[3]);
+        if a < 255 {
+            for ch in &mut px[..3] {
+                *ch = ((u16::from(*ch) * a + 127) / 255) as u8;
+            }
+        }
     }
     if rgba.len() != (w * h * 4) as usize {
         return Pixmap::new(w, h).expect("non-empty pixmap");

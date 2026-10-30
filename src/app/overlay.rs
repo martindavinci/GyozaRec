@@ -1,7 +1,7 @@
 //! Full-screen selection overlays, one borderless window per monitor.
 
 use super::surface::WindowSurface;
-use gyozarec::capture::{SelectionRequest, WindowCandidate, hovered_window, monitor_at};
+use gyozarec::capture::{Selection, SelectionRequest, WindowCandidate, hovered_window, monitor_at};
 use gyozarec::geometry::{CaptureArea, MonitorInfo, PixelPoint, PixelRect, PixelSize, local_point};
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::presentation::AREAS;
@@ -31,18 +31,23 @@ const ID_CLOSE: u32 = 10;
 fn area_icon(area: CaptureArea) -> Icon {
     match area {
         CaptureArea::Rectangle => Icon::Rectangle,
+        CaptureArea::Lasso => Icon::Lasso,
         CaptureArea::Window => Icon::Window,
         CaptureArea::FullScreen => Icon::FullScreen,
         CaptureArea::AllMonitors => Icon::AllMonitors,
     }
 }
 
-/// The buttons that switch the area, then Close, a gap apart.
-fn bar_ui(area: CaptureArea, fonts: &Fonts) -> Ui {
+/// The buttons that switch the area, then Close, a gap apart. Without
+/// `lasso` its button is left out; the others keep their ids.
+fn bar_ui(area: CaptureArea, lasso: bool, fonts: &Fonts) -> Ui {
     let t = theme::current();
-    let tools = AREAS.iter().enumerate().map(|(i, a)| {
-        (ID_AREA + i as u32, WidgetKind::ToolButton { icon: area_icon(*a), selected: *a == area })
-    });
+    let tools = AREAS.iter().enumerate().filter(|(_, a)| lasso || **a != CaptureArea::Lasso).map(
+        |(i, a)| {
+            let kind = WidgetKind::ToolButton { icon: area_icon(*a), selected: *a == area };
+            (ID_AREA + i as u32, kind)
+        },
+    );
     let mut widgets = layout_row(tools.collect(), BAR_PAD, BAR_PAD, 4.0, fonts, t);
     let x = widgets.last().map_or(BAR_PAD, |w| w.rect.right()) + 12.0;
     let close = vec![(ID_CLOSE, WidgetKind::IconButton { icon: Icon::Cancel })];
@@ -59,12 +64,19 @@ struct AreaBar {
     scale: f32,
     /// A press started on the bar, so the release belongs to it.
     pressed: bool,
+    lasso: bool,
 }
 
 impl AreaBar {
     /// `monitor_scale` is the monitor's; the bar is drawn `BAR_ZOOM` times larger.
-    fn new(area: CaptureArea, monitor_width: i32, monitor_scale: f32, fonts: &Fonts) -> AreaBar {
-        let ui = bar_ui(area, fonts);
+    fn new(
+        area: CaptureArea,
+        lasso: bool,
+        monitor_width: i32,
+        monitor_scale: f32,
+        fonts: &Fonts,
+    ) -> AreaBar {
+        let ui = bar_ui(area, lasso, fonts);
         let b = ui.bounds();
         let scale = monitor_scale * BAR_ZOOM;
         let size = PixelSize {
@@ -75,11 +87,11 @@ impl AreaBar {
             x: ((monitor_width - size.width) / 2).max(0),
             y: (BAR_TOP * monitor_scale) as i32,
         };
-        AreaBar { ui, origin, size, scale, pressed: false }
+        AreaBar { ui, origin, size, scale, pressed: false, lasso }
     }
 
     fn rebuild(&mut self, area: CaptureArea, fonts: &Fonts) {
-        let mut ui = bar_ui(area, fonts);
+        let mut ui = bar_ui(area, self.lasso, fonts);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
     }
@@ -133,6 +145,8 @@ struct OverlayWindow {
     drag_start: Option<PixelPoint>,
     /// Shown selection, local pixels.
     selection: Option<PixelRect>,
+    /// The lasso drawn so far, local pixels.
+    outline: Vec<PixelPoint>,
     shown: bool,
     /// Instruction drawn at the top while picking a monitor.
     hint: Option<String>,
@@ -159,6 +173,10 @@ impl OverlayWindow {
         self.cache.render(self.selection, &mut self.buffer);
         if let Some(sel) = self.selection.filter(|s| !s.is_empty()) {
             self.draw_label(sel, size, fonts);
+        }
+        let width = (2.0 * self.monitor.scale).round().max(1.0) as i32;
+        for pair in self.outline.windows(2) {
+            draw_line(&mut self.buffer, size, pair[0], pair[1], width, 0xFFFFFF);
         }
         if let Some(hint) = self.hint.clone().filter(|_| area == CaptureArea::FullScreen) {
             self.draw_hint(&hint, size, fonts);
@@ -217,6 +235,48 @@ impl OverlayWindow {
     }
 }
 
+/// A line `width` pixels thick, straight into the 0RGB `buffer`.
+fn draw_line(
+    buffer: &mut [u32],
+    size: PixelSize,
+    a: PixelPoint,
+    b: PixelPoint,
+    width: i32,
+    color: u32,
+) {
+    let steps = (b.x - a.x).abs().max((b.y - a.y).abs()).max(1);
+    let half = width / 2;
+    for i in 0..=steps {
+        let (x, y) = (a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps);
+        for py in (y - half)..(y - half + width) {
+            for px in (x - half)..(x - half + width) {
+                if px >= 0 && py >= 0 && px < size.width && py < size.height {
+                    buffer[(py * size.width + px) as usize] = color;
+                }
+            }
+        }
+    }
+}
+
+/// The lasso in screen pixels, inside `monitor`, and the rectangle around it;
+/// `None` when too few points were drawn to enclose anything.
+fn lasso_selection(local: &[PixelPoint], monitor: PixelRect) -> Option<Selection> {
+    let outline: Vec<PixelPoint> = local
+        .iter()
+        .map(|p| PixelPoint {
+            x: (p.x + monitor.x).clamp(monitor.x, monitor.right() - 1),
+            y: (p.y + monitor.y).clamp(monitor.y, monitor.bottom() - 1),
+        })
+        .collect();
+    if outline.len() < 3 {
+        return None;
+    }
+    let (x0, x1) = outline.iter().fold((i32::MAX, i32::MIN), |(a, b), p| (a.min(p.x), b.max(p.x)));
+    let (y0, y1) = outline.iter().fold((i32::MAX, i32::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+    let rect = PixelRect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+    Some(Selection { rect, outline })
+}
+
 /// What a hover highlights: the window under the point (Window mode), the
 /// whole monitor (full-screen monitor pick) or every monitor; nothing while
 /// dragging a rectangle.
@@ -230,7 +290,7 @@ fn initial_hover(
         CaptureArea::Window => hovered_window(candidates, monitors, at),
         CaptureArea::FullScreen => monitor_at(monitors, at),
         CaptureArea::AllMonitors => union(monitors),
-        CaptureArea::Rectangle => None,
+        CaptureArea::Rectangle | CaptureArea::Lasso => None,
     }
 }
 
@@ -246,7 +306,7 @@ pub struct OverlaySession {
     windows: Vec<OverlayWindow>,
     area: CaptureArea,
     candidates: Vec<WindowCandidate>,
-    reply: Option<Sender<Option<PixelRect>>>,
+    reply: Option<Sender<Option<Selection>>>,
     /// Window-mode pick under the cursor, screen pixels.
     hovered: Option<PixelRect>,
     /// The area bar changed the area.
@@ -257,7 +317,7 @@ impl OverlaySession {
     pub fn open(
         event_loop: &ActiveEventLoop,
         request: SelectionRequest,
-        reply: Sender<Option<PixelRect>>,
+        reply: Sender<Option<Selection>>,
         cursor: PixelPoint,
         hint: Option<&str>,
         fonts: &Fonts,
@@ -296,6 +356,7 @@ impl OverlaySession {
                 cursor: PixelPoint::default(),
                 drag_start: None,
                 selection: None,
+                outline: Vec::new(),
                 shown: false,
                 hint: hint.map(str::to_string),
                 bar: None,
@@ -306,7 +367,8 @@ impl OverlaySession {
             let home = windows.iter().position(|w| w.monitor.bounds.contains(cursor)).unwrap_or(0);
             if let Some(w) = windows.get_mut(home) {
                 let scale = w.monitor.scale as f32 * gyozarec::uikit::theme::zoom();
-                w.bar = Some(AreaBar::new(request.area, w.monitor.bounds.width, scale, fonts));
+                let (area, width) = (request.area, w.monitor.bounds.width);
+                w.bar = Some(AreaBar::new(area, request.lasso, width, scale, fonts));
             }
         }
         let mut session =
@@ -327,7 +389,7 @@ impl OverlaySession {
         mut windows: Vec<OverlayWindow>,
         area: CaptureArea,
         candidates: Vec<WindowCandidate>,
-        reply: Sender<Option<PixelRect>>,
+        reply: Sender<Option<Selection>>,
         cursor: PixelPoint,
     ) -> OverlaySession {
         for w in &mut windows {
@@ -378,6 +440,10 @@ impl OverlaySession {
     }
 
     fn finish(&mut self, result: Option<PixelRect>) {
+        self.finish_with(result.map(Selection::from));
+    }
+
+    fn finish_with(&mut self, result: Option<Selection>) {
         if let Some(reply) = self.reply.take() {
             let _ = reply.send(result);
         }
@@ -504,12 +570,13 @@ impl OverlaySession {
         for w in &mut self.windows {
             w.drag_start = None;
             w.selection = None;
+            w.outline.clear();
             if let Some(bar) = w.bar.as_mut() {
                 bar.rebuild(area, fonts);
             }
             w.surface.window.request_redraw();
         }
-        if area != CaptureArea::Rectangle {
+        if !matches!(area, CaptureArea::Rectangle | CaptureArea::Lasso) {
             let screen = self.windows[index].to_screen(self.windows[index].cursor);
             self.update_hover(screen);
         }
@@ -521,7 +588,12 @@ impl OverlaySession {
             return;
         }
         let w = &mut self.windows[index];
-        if self.area != CaptureArea::Rectangle {
+        if self.area == CaptureArea::Lasso {
+            if w.drag_start.is_some() && w.outline.last() != Some(&p) {
+                w.outline.push(p);
+                w.surface.window.request_redraw();
+            }
+        } else if self.area != CaptureArea::Rectangle {
             let screen = w.to_screen(p);
             self.update_hover(screen);
         } else if let Some(start) = w.drag_start {
@@ -534,6 +606,18 @@ impl OverlaySession {
     }
 
     fn left_button(&mut self, index: usize, pressed: bool) {
+        if self.area == CaptureArea::Lasso {
+            let w = &mut self.windows[index];
+            if pressed {
+                w.drag_start = Some(w.cursor);
+                w.outline = vec![w.cursor];
+            } else if w.drag_start.take().is_some() {
+                // Releasing closes the outline; a click alone cancels.
+                let picked = lasso_selection(&w.outline, w.monitor.bounds);
+                self.finish_with(picked);
+            }
+            return;
+        }
         if self.area != CaptureArea::Rectangle {
             if !pressed {
                 let pick = self.hovered.unwrap_or_default();
@@ -561,17 +645,18 @@ mod tests {
     #[test]
     fn bar_buttons_map_to_areas_and_close() {
         assert_eq!(bar_click(ID_AREA), Some(BarClick::Area(CaptureArea::Rectangle)));
-        assert_eq!(bar_click(ID_AREA + 1), Some(BarClick::Area(CaptureArea::Window)));
-        assert_eq!(bar_click(ID_AREA + 2), Some(BarClick::Area(CaptureArea::FullScreen)));
-        assert_eq!(bar_click(ID_AREA + 3), Some(BarClick::Area(CaptureArea::AllMonitors)));
-        assert_eq!(bar_click(ID_AREA + 4), None);
+        assert_eq!(bar_click(ID_AREA + 1), Some(BarClick::Area(CaptureArea::Lasso)));
+        assert_eq!(bar_click(ID_AREA + 2), Some(BarClick::Area(CaptureArea::Window)));
+        assert_eq!(bar_click(ID_AREA + 3), Some(BarClick::Area(CaptureArea::FullScreen)));
+        assert_eq!(bar_click(ID_AREA + 4), Some(BarClick::Area(CaptureArea::AllMonitors)));
+        assert_eq!(bar_click(ID_AREA + 5), None);
         assert_eq!(bar_click(ID_CLOSE), Some(BarClick::Close));
     }
 
     #[test]
     fn bar_sits_centred_at_the_top_and_marks_the_area() {
         let fonts = Fonts::embedded();
-        let bar = AreaBar::new(CaptureArea::Window, 1920, 1.5, &fonts);
+        let bar = AreaBar::new(CaptureArea::Window, true, 1920, 1.5, &fonts);
         assert_eq!(bar.origin.y, 18, "the gap above follows the monitor, not the zoom");
         assert!((bar.origin.x * 2 + bar.size.width - 1920).abs() <= 1, "{:?}", bar.origin);
         let b = bar.ui.bounds();
@@ -586,13 +671,32 @@ mod tests {
         let close = centre(ID_CLOSE);
         assert!(bar.contains(close));
         assert_eq!(bar.ui.hit_test(bar.local(close).0, bar.local(close).1), Some(ID_CLOSE));
-        let selected: Vec<bool> = (0..4)
+        let selected: Vec<bool> = (0..5)
             .map(|i| match bar.ui.widget(ID_AREA + i).unwrap().kind {
                 WidgetKind::ToolButton { selected, .. } => selected,
                 _ => unreachable!(),
             })
             .collect();
-        assert_eq!(selected, [false, true, false, false]);
+        assert_eq!(selected, [false, false, true, false, false]);
+        let recording = AreaBar::new(CaptureArea::Window, false, 1920, 1.5, &fonts);
+        assert!(recording.ui.widget(ID_AREA + 1).is_none(), "no lasso for recordings");
+        assert!(recording.ui.widget(ID_AREA + 2).is_some());
+        assert!(recording.size.width < bar.size.width);
+    }
+
+    #[test]
+    fn lasso_closes_into_a_selection_on_its_monitor() {
+        let monitor = PixelRect::new(-1920, 0, 1920, 1080);
+        let drawn = [
+            PixelPoint { x: 10, y: 20 },
+            PixelPoint { x: 50, y: 20 },
+            PixelPoint { x: 5000, y: 60 },
+        ];
+        let s = lasso_selection(&drawn, monitor).unwrap();
+        assert_eq!(s.outline[0], PixelPoint { x: -1910, y: 20 });
+        assert_eq!(s.outline[2], PixelPoint { x: -1, y: 60 }, "kept on the monitor");
+        assert_eq!(s.rect, PixelRect::new(-1910, 20, 1910, 41));
+        assert_eq!(lasso_selection(&drawn[..2], monitor), None);
     }
 
     #[test]

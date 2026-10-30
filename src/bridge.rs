@@ -17,7 +17,7 @@ pub enum UiRequest {
     ShowToolbar,
     Select {
         request: SelectionRequest,
-        reply: mpsc::Sender<Option<PixelRect>>,
+        reply: mpsc::Sender<Option<crate::capture::Selection>>,
     },
     CaptureFinished(CaptureOutcome),
     Notify(crate::presentation::Notice),
@@ -135,7 +135,7 @@ pub struct BridgeSelectionUi<S: UiSender> {
 }
 
 impl<S: UiSender> SelectionUi for BridgeSelectionUi<S> {
-    fn select_region(&mut self, request: SelectionRequest) -> Option<PixelRect> {
+    fn select_region(&mut self, request: SelectionRequest) -> Option<crate::capture::Selection> {
         let (reply, answer) = mpsc::channel();
         if !self.sender.send(UiRequest::Select { request, reply }) {
             return None;
@@ -231,6 +231,7 @@ mod tests {
     fn req() -> SelectionRequest {
         SelectionRequest {
             switcher: false,
+            lasso: false,
             area: CaptureArea::Rectangle,
             frozen: None,
             windows: Vec::new(),
@@ -242,7 +243,7 @@ mod tests {
     fn selection_returns_ui_reply() {
         let mut ui =
             BridgeSelectionUi { sender: FakeUiSender::replying(Some(PixelRect::new(1, 2, 3, 4))) };
-        assert_eq!(ui.select_region(req()), Some(PixelRect::new(1, 2, 3, 4)));
+        assert_eq!(ui.select_region(req()), Some(PixelRect::new(1, 2, 3, 4).into()));
     }
 
     #[test]

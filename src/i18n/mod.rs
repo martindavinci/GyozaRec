@@ -122,7 +122,7 @@ pub struct Texts {
     pub capture: &'static str,
     pub options: &'static str,
     /// In `AREAS` order.
-    pub areas: [&'static str; 4],
+    pub areas: [&'static str; 5],
     /// In `FORMATS` order.
     pub formats: [&'static str; 4],
     /// Replaces `capture` on the button when the format is a recording.

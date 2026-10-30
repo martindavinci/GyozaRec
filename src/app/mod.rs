@@ -534,6 +534,7 @@ impl App {
             ToolbarAction::AreaMenu => AREAS
                 .iter()
                 .enumerate()
+                .filter(|(_, a)| a.offered_for(s.format))
                 .map(|(i, a)| (format!("area:{i}"), area_label(*a, texts), *a == s.area))
                 .collect(),
             ToolbarAction::FormatMenu => FORMATS
@@ -712,7 +713,9 @@ impl App {
         if let Some(area) = index("area:").and_then(|i| AREAS.get(i)) {
             self.state.settings.area = *area;
         } else if let Some(format) = index("format:").and_then(|i| FORMATS.get(i)) {
-            self.state.settings.format = *format;
+            let s = &mut self.state.settings;
+            s.format = *format;
+            s.area = s.area.for_format(s.format);
         } else if let Some(s) = id.strip_prefix("delay:").and_then(|v| v.parse::<u32>().ok()) {
             self.state.settings.delay_seconds = s;
         } else {

@@ -2,12 +2,12 @@
 
 use super::{
     AudioStarter, CaptureOutcome, ClipboardService, Cues, CursorLocator, EditorLauncher,
-    FileRevealer, MonitorProvider, Notifier, RecordingJob, RecordingUi, ScreenGrabber,
+    FileRevealer, MonitorProvider, Notifier, RecordingJob, RecordingUi, ScreenGrabber, Selection,
     SelectionRequest, SelectionUi, SinkFactory, SinkKind, SoundPlayer, ToolbarVisibility,
     WindowSnapshotter, monitor_from_point,
 };
 use crate::clock::Clock;
-use crate::geometry::{CaptureArea, OutputFormat, PixelRect, meets_minimum};
+use crate::geometry::{CaptureArea, OutputFormat, meets_minimum};
 use crate::output::{FileNamer, ensure_folder, save_image};
 use crate::pixels::PixelBuffer;
 use crate::presentation::{Notice, NoticeKind, thumbnail};
@@ -44,7 +44,8 @@ impl CaptureCoordinator {
         self.toolbar.hide();
         let delay = Duration::from_secs(u64::from(settings.delay_seconds));
         self.clock.sleep(HIDE_SETTLE_DELAY + delay);
-        let outcome = self.capture_hidden(settings);
+        let area = settings.area.for_format(settings.format);
+        let outcome = self.capture_hidden(&AppSettings { area, ..settings.clone() });
         self.toolbar.show();
         outcome
     }
@@ -73,7 +74,7 @@ impl CaptureCoordinator {
     fn select_on_frozen(
         &mut self,
         settings: &AppSettings,
-    ) -> Result<(Arc<PixelBuffer>, PixelRect), CaptureOutcome> {
+    ) -> Result<(Arc<PixelBuffer>, Selection), CaptureOutcome> {
         let frozen = match self.grabber.grab(self.monitors.virtual_screen(), false) {
             Ok(frozen) => Arc::new(frozen),
             Err(err) => return Err(CaptureOutcome::failed(err, false)),
@@ -87,20 +88,26 @@ impl CaptureCoordinator {
         let request = SelectionRequest {
             area: settings.area,
             switcher,
+            lasso: !settings.format.is_recording(),
             frozen: Some(frozen.clone()),
             windows,
             monitors: self.monitors.monitors(),
         };
         match self.selection.select_region(request) {
-            Some(region) => Ok((frozen, region)),
+            Some(picked) => Ok((frozen, picked)),
             None => Err(CaptureOutcome::canceled()),
         }
     }
 
     fn capture_region(&mut self, settings: &AppSettings) -> CaptureOutcome {
         match self.select_on_frozen(settings) {
-            Ok((frozen, region)) if meets_minimum(settings.format, &region) => {
-                self.finish_image(&frozen.crop(&region), settings)
+            Ok((frozen, picked)) if meets_minimum(settings.format, &picked.rect) => {
+                let mut img = frozen.crop(&picked.rect);
+                if !picked.outline.is_empty() {
+                    // PNG keeps what lies outside the lasso transparent; JPG makes it white.
+                    img.cut_out(&picked.outline, settings.format == OutputFormat::Png);
+                }
+                self.finish_image(&img, settings)
             }
             Ok(_) => CaptureOutcome::canceled(),
             Err(outcome) => outcome,
@@ -123,7 +130,7 @@ impl CaptureCoordinator {
         let (picked, frozen) = match at_once {
             Some(bounds) => (bounds, None),
             None => match self.select_on_frozen(settings) {
-                Ok((frozen, region)) => (region, Some(frozen)),
+                Ok((frozen, picked)) => (picked.rect, Some(frozen)),
                 Err(outcome) => return outcome,
             },
         };
@@ -234,7 +241,7 @@ impl CaptureCoordinator {
         if monitors.len() > 1 {
             // Several screens: the user clicks the one to capture.
             return match self.select_on_frozen(settings) {
-                Ok((frozen, region)) => self.finish_image(&frozen.crop(&region), settings),
+                Ok((frozen, picked)) => self.finish_image(&frozen.crop(&picked.rect), settings),
                 Err(outcome) => outcome,
             };
         }
@@ -616,6 +623,42 @@ mod tests {
         let ev = rec.events();
         assert!(ev.contains(&"select:FullScreen:frozen=true:windows=0:bar".to_string()), "{ev:?}");
         assert!(ev.contains(&"record:0,0,200,100:gif:fps=10:max=15".to_string()), "{ev:?}");
+    }
+
+    #[test]
+    fn lasso_cuts_the_picture_out() {
+        let outline = vec![
+            PixelPoint { x: 10, y: 10 },
+            PixelPoint { x: 49, y: 10 },
+            PixelPoint { x: 10, y: 49 },
+        ];
+        let rect = PixelRect::new(10, 10, 40, 40);
+        for (format, outside) in [(OutputFormat::Png, 0u8), (OutputFormat::Jpg, 255)] {
+            let mut h = CoordinatorHarness::rect(None).lasso(rect, outline.clone());
+            let o = h.run(AppSettings { area: CaptureArea::Lasso, format, ..h.settings() });
+            assert_eq!(o.kind, CaptureOutcomeKind::Saved, "{format:?}");
+            let img = image::open(o.path.unwrap()).unwrap().to_rgba8();
+            assert_eq!(img.dimensions(), (40, 40));
+            assert_eq!(img.get_pixel(5, 5).0[3], 255, "inside stays opaque");
+            let corner = img.get_pixel(38, 38).0;
+            match format {
+                OutputFormat::Png => assert_eq!(corner[3], outside, "{corner:?}"),
+                _ => assert_eq!(corner, [255, 255, 255, 255], "white outside"),
+            }
+        }
+    }
+
+    #[test]
+    fn recordings_never_use_the_lasso() {
+        let mut rec = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
+            .recording(RecordingOutcome::Saved);
+        rec.run(AppSettings {
+            area: CaptureArea::Lasso,
+            format: OutputFormat::Mp4,
+            ..rec.settings()
+        });
+        let ev = rec.events();
+        assert!(ev.contains(&"select:Rectangle:frozen=true:windows=0".to_string()), "{ev:?}");
     }
 
     #[test]

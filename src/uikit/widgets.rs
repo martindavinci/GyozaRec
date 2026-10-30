@@ -32,6 +32,8 @@ pub enum Icon {
     Crop,
     Undo,
     Redo,
+    /// A loop of rope: a free-hand outline.
+    Lasso,
     /// A window with its title bar.
     Window,
     /// Four corners: the whole screen.
@@ -430,6 +432,16 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
         }
         Icon::Redact => {
             p.fill_rounded_rect(RectF { x: cx - 6.5, y: cy - 4.0, w: 13.0, h: 8.0 }, 1.0, color);
+        }
+        Icon::Lasso => {
+            let ring: Vec<(f32, f32)> = (0..=20)
+                .map(|i| {
+                    let t = i as f32 / 20.0 * std::f32::consts::TAU;
+                    (cx + 6.0 * t.cos(), cy - 1.5 + 4.0 * t.sin())
+                })
+                .collect();
+            p.stroke_polyline(&ring, 1.5, color, 255);
+            p.line((cx - 2.5, cy + 2.2), (cx - 4.5, cy + 6.5), 1.5, color);
         }
         Icon::Window => {
             p.stroke_rect(RectF { x: cx - 6.5, y: cy - 5.0, w: 13.0, h: 10.0 }, 1.5, color);

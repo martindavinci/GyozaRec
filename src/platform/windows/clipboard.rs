@@ -29,8 +29,20 @@ pub struct Win32Clipboard;
 impl ClipboardService for Win32Clipboard {
     fn set_image(&self, img: &PixelBuffer) -> bool {
         let Ok(_open) = Clipboard::new_attempts(ATTEMPTS) else { return false };
-        clipboard_win::empty().is_ok()
-            && formats::RawData(formats::CF_DIB).write_clipboard(&dib_bytes(img)).is_ok()
+        if clipboard_win::empty().is_err() {
+            return false;
+        }
+        if img.is_opaque() {
+            return formats::RawData(formats::CF_DIB).write_clipboard(&dib_bytes(img)).is_ok();
+        }
+        // A lasso cut: programs that read PNG keep the transparency, the
+        // others get the picture on white.
+        if let (Some(png), Ok(bytes)) =
+            (clipboard_win::raw::register_format("PNG"), img.encode_png())
+        {
+            let _ = clipboard_win::raw::set_without_clear(png.get(), &bytes);
+        }
+        clipboard_win::raw::set_without_clear(formats::CF_DIB, &dib_bytes(&img.on_white())).is_ok()
     }
 
     fn set_file(&self, path: &Path) -> bool {

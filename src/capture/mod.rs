@@ -56,12 +56,29 @@ pub trait RecordingUi: Send {
     fn record(&mut self, job: RecordingJob) -> RecordingResult;
 }
 
+/// What the user picked, in screen pixels: a rectangle and, with the lasso,
+/// the outline drawn inside it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Selection {
+    pub rect: PixelRect,
+    /// Empty unless the area is the lasso.
+    pub outline: Vec<PixelPoint>,
+}
+
+impl From<PixelRect> for Selection {
+    fn from(rect: PixelRect) -> Selection {
+        Selection { rect, outline: Vec::new() }
+    }
+}
+
 /// What the selection UI needs; owned so it can cross to the UI thread.
 #[derive(Clone, Debug)]
 pub struct SelectionRequest {
     pub area: CaptureArea,
-    /// Show the bar that switches between rectangle, window and full screen.
+    /// Show the bar that switches between the areas.
     pub switcher: bool,
+    /// The bar offers the lasso (pictures only).
+    pub lasso: bool,
     pub frozen: Option<Arc<PixelBuffer>>,
     pub windows: Vec<WindowCandidate>,
     pub monitors: Vec<MonitorInfo>,
@@ -69,7 +86,7 @@ pub struct SelectionRequest {
 
 pub trait SelectionUi: Send {
     /// `None` means the user canceled.
-    fn select_region(&mut self, req: SelectionRequest) -> Option<PixelRect>;
+    fn select_region(&mut self, req: SelectionRequest) -> Option<Selection>;
 }
 
 pub trait ClipboardService: Send {

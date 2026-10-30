@@ -8,8 +8,9 @@ use crate::settings::AppSettings;
 use std::path::PathBuf;
 
 /// Areas in menu order; `Texts::areas` uses the same order.
-pub const AREAS: [CaptureArea; 4] = [
+pub const AREAS: [CaptureArea; 5] = [
     CaptureArea::Rectangle,
+    CaptureArea::Lasso,
     CaptureArea::Window,
     CaptureArea::FullScreen,
     CaptureArea::AllMonitors,
@@ -280,7 +281,10 @@ mod tests {
     fn area_format_and_delay_labels_follow_the_language() {
         let it = Language::It.texts();
         let areas: Vec<_> = AREAS.iter().map(|a| area_label(*a, it)).collect();
-        assert_eq!(areas, ["Rettangolo", "Finestra", "Schermo intero", "Tutti gli schermi"]);
+        assert_eq!(
+            areas,
+            ["Rettangolo", "Lazo", "Finestra", "Schermo intero", "Tutti gli schermi"]
+        );
         let formats: Vec<_> = FORMATS.iter().map(|f| format_label(*f, it)).collect();
         assert_eq!(formats, ["Immagine PNG", "Immagine JPG", "Video MP4", "GIF animata"]);
         assert_eq!(format_label(OutputFormat::Gif, Language::En.texts()), "Animated GIF");

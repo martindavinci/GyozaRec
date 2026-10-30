@@ -58,6 +58,7 @@ fn icons(area: CaptureArea, format: OutputFormat) -> [Icon; 5] {
     };
     let area = match area {
         CaptureArea::Rectangle => Icon::Rectangle,
+        CaptureArea::Lasso => Icon::Lasso,
         CaptureArea::Window => Icon::Window,
         CaptureArea::FullScreen => Icon::FullScreen,
         CaptureArea::AllMonitors => Icon::AllMonitors,

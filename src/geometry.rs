@@ -103,10 +103,28 @@ pub fn local_point(screen: PixelPoint, monitor: PixelRect) -> PixelPoint {
 pub enum CaptureArea {
     #[default]
     Rectangle,
+    /// A free-hand outline; pictures only.
+    Lasso,
     Window,
     FullScreen,
     /// Every monitor at once, as one picture or video.
     AllMonitors,
+}
+
+impl CaptureArea {
+    /// The lasso is for pictures: recordings take a rectangle instead.
+    pub fn for_format(self, format: OutputFormat) -> CaptureArea {
+        if self == CaptureArea::Lasso && format.is_recording() {
+            CaptureArea::Rectangle
+        } else {
+            self
+        }
+    }
+
+    /// Whether menus offer this area for `format`.
+    pub fn offered_for(self, format: OutputFormat) -> bool {
+        self.for_format(format) == self
+    }
 }
 
 /// What a capture produces.

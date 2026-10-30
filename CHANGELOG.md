@@ -2,6 +2,14 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.3] - 2026-10-30
+
+### Added
+- A third look, Slate (blue-grey dark), in "Theme" in Options.
+
+### Changed
+- The area bar during image captures is twice as large, easier to hit.
+
 ## [0.4.2] - 2026-10-30
 
 ### Added
@@ -82,6 +90,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.4.3]: https://github.com/martindavinci/GyozaRec/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/martindavinci/GyozaRec/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/martindavinci/GyozaRec/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/martindavinci/GyozaRec/compare/v0.3.0...v0.4.0

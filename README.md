@@ -25,8 +25,12 @@ A small toolbar, each button with an icon that shows what it is set to:
 - **Options** — save folder, file names (date and time such as `2026-10-26_14-30-05.png`, optionally starting with `GyozaRec_`, or ten random characters such as `k3F9xQ2bTm.png`; a name already taken gets `_2`, `_3`… at the end), copy to clipboard, in-app sounds, cursor in recordings, system audio in MP4s, opening the folder after a recording, what an image capture does (save and open the editor, only save, or only copy and open the editor), asking to save when closing the editor, opening the file after a capture, the notification after a capture, notification area, start with Windows, update check, global shortcuts, JPG quality, frame rate and maximum length of GIFs and videos, language, theme (Automatic follows Windows' app mode: Gyoza when it is light, Slate when it is dark; or always Gyoza (light), Slate (dark, blue-grey) or Toasted (dark, warm brown)); a theme picked there shows at once. **Apply**, next to OK and Cancel, saves the changes and keeps the window open; it stays off until something changes.
 
 <p align="center">
-  <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar" valign="top">
+  <img src="docs/screenshots/toolbar.png" alt="The GyozaRec toolbar, ready to capture an image" valign="top">
   &nbsp;&nbsp;
+  <img src="docs/screenshots/toolbar-record.png" alt="The GyozaRec toolbar in the Slate theme, ready to record an MP4 video" valign="top">
+</p>
+
+<p align="center">
   <img src="docs/screenshots/options.png" alt="The Options window" valign="top">
 </p>
 

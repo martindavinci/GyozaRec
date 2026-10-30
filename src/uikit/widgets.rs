@@ -36,6 +36,8 @@ pub enum Icon {
     Window,
     /// Four corners: the whole screen.
     FullScreen,
+    /// Two screens side by side: every monitor.
+    AllMonitors,
     /// Taking a picture.
     Camera,
     /// A red dot: recording.
@@ -440,6 +442,12 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
             {
                 p.line((x, y), (x + dx * arm, y), 1.5, color);
                 p.line((x, y), (x, y + dy * arm), 1.5, color);
+            }
+        }
+        Icon::AllMonitors => {
+            for x in [cx - 7.0, cx + 1.0] {
+                p.stroke_rect(RectF { x, y: cy - 5.0, w: 6.0, h: 7.5 }, 1.5, color);
+                p.line((x + 1.0, cy + 5.0), (x + 5.0, cy + 5.0), 1.5, color);
             }
         }
         Icon::Camera => {

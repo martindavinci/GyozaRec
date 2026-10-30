@@ -60,6 +60,7 @@ fn icons(area: CaptureArea, format: OutputFormat) -> [Icon; 5] {
         CaptureArea::Rectangle => Icon::Rectangle,
         CaptureArea::Window => Icon::Window,
         CaptureArea::FullScreen => Icon::FullScreen,
+        CaptureArea::AllMonitors => Icon::AllMonitors,
     };
     [capture, area, format, Icon::Timer, Icon::Gear]
 }

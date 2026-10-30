@@ -58,6 +58,12 @@ impl CaptureCoordinator {
             (OutputFormat::Png | OutputFormat::Jpg, CaptureArea::FullScreen) => {
                 self.capture_fullscreen(settings)
             }
+            (OutputFormat::Png | OutputFormat::Jpg, CaptureArea::AllMonitors) => {
+                match self.grabber.grab(self.monitors.virtual_screen(), false) {
+                    Ok(img) => self.finish_image(&img, settings),
+                    Err(err) => CaptureOutcome::failed(err, false),
+                }
+            }
             (OutputFormat::Png | OutputFormat::Jpg, _) => self.capture_region(settings),
             (OutputFormat::Mp4 | OutputFormat::Gif, _) => self.capture_recording(settings),
         }
@@ -72,7 +78,7 @@ impl CaptureCoordinator {
             Ok(frozen) => Arc::new(frozen),
             Err(err) => return Err(CaptureOutcome::failed(err, false)),
         };
-        let switcher = settings.area_switcher && !settings.format.is_recording();
+        let switcher = settings.area_switcher;
         let windows = if settings.area == CaptureArea::Window || switcher {
             self.windows.snapshot()
         } else {
@@ -107,13 +113,19 @@ impl CaptureCoordinator {
         if monitors.is_empty() {
             return CaptureOutcome::failed(crate::UserError::NoMonitor, false);
         }
-        let (picked, frozen) = if settings.area == CaptureArea::FullScreen && monitors.len() == 1 {
-            (monitors[0].bounds, None)
-        } else {
-            match self.select_on_frozen(settings) {
+        // The bar can switch to any area, so even full screen is selected.
+        let at_once = match settings.area {
+            _ if settings.area_switcher => None,
+            CaptureArea::FullScreen if monitors.len() == 1 => Some(monitors[0].bounds),
+            CaptureArea::AllMonitors => Some(self.monitors.virtual_screen()),
+            _ => None,
+        };
+        let (picked, frozen) = match at_once {
+            Some(bounds) => (bounds, None),
+            None => match self.select_on_frozen(settings) {
                 Ok((frozen, region)) => (region, Some(frozen)),
                 Err(outcome) => return outcome,
-            }
+            },
         };
         // A maximized window reaches past the screen edges; record only what is visible.
         let region = picked.clamp_to(&self.monitors.virtual_screen());
@@ -589,14 +601,42 @@ mod tests {
         assert_eq!(o.kind, CaptureOutcomeKind::Saved);
         let ev = h.events();
         assert!(ev.contains(&"select:FullScreen:frozen=true:windows=1:bar".to_string()), "{ev:?}");
+    }
+
+    #[test]
+    fn recordings_offer_the_area_bar_too() {
         let mut rec = CoordinatorHarness::rect(Some(PixelRect::new(0, 0, 200, 100)))
             .recording(RecordingOutcome::Saved);
-        rec.run(AppSettings { format: OutputFormat::Gif, area_switcher: true, ..rec.settings() });
-        assert!(
-            rec.events().contains(&"select:Rectangle:frozen=true:windows=0".to_string()),
-            "recordings keep the plain selection: {:?}",
-            rec.events()
-        );
+        rec.run(AppSettings {
+            area: CaptureArea::FullScreen,
+            format: OutputFormat::Gif,
+            area_switcher: true,
+            ..rec.settings()
+        });
+        let ev = rec.events();
+        assert!(ev.contains(&"select:FullScreen:frozen=true:windows=0:bar".to_string()), "{ev:?}");
+        assert!(ev.contains(&"record:0,0,200,100:gif:fps=10:max=15".to_string()), "{ev:?}");
+    }
+
+    #[test]
+    fn all_monitors_takes_the_whole_desktop_at_once() {
+        let mut h = CoordinatorHarness::two_monitors_cursor_at(PixelPoint { x: 10, y: 10 });
+        let o = h.run(AppSettings { area: CaptureArea::AllMonitors, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let ev = h.events();
+        assert!(ev.contains(&"grab:-1920,0,3840,1080".to_string()), "{ev:?}");
+        assert!(!ev.iter().any(|e| e.starts_with("select:")), "{ev:?}");
+
+        let mut rec = CoordinatorHarness::two_monitors_cursor_at(PixelPoint { x: 10, y: 10 })
+            .recording(RecordingOutcome::Saved);
+        rec.run(AppSettings {
+            area: CaptureArea::AllMonitors,
+            format: OutputFormat::Mp4,
+            ..rec.settings()
+        });
+        let ev = rec.events();
+        assert!(ev.contains(&"record:-1920,0,3840,1080:mp4:fps=30:max=300".to_string()), "{ev:?}");
+        assert!(!ev.iter().any(|e| e.starts_with("select:")), "{ev:?}");
     }
 
     #[test]

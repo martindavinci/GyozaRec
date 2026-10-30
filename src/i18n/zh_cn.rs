@@ -3,7 +3,7 @@ use super::Texts;
 pub(super) const TEXTS: Texts = Texts {
     capture: "捕获",
     options: "选项",
-    areas: ["矩形", "窗口", "全屏"],
+    areas: ["矩形", "窗口", "全屏", "所有屏幕"],
     formats: ["PNG 图片", "JPG 图片", "MP4 视频", "GIF 动图"],
     record: "录制",
     delays: ["无延迟", "1 秒", "2 秒", "3 秒", "4 秒", "5 秒"],

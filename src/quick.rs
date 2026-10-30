@@ -39,8 +39,8 @@ impl QuickAction {
     }
 }
 
-/// The settings for one capture; the saved settings stay untouched. Image
-/// captures offer the area bar, except the one that asks for full screen.
+/// The settings for one capture; the saved settings stay untouched. Captures
+/// and recordings offer the area bar, except those that ask for full screen.
 pub fn apply(action: QuickAction, s: &AppSettings) -> AppSettings {
     let recording = if s.format.is_recording() { s.format } else { OutputFormat::Mp4 };
     let image = if s.format == OutputFormat::Jpg { OutputFormat::Jpg } else { OutputFormat::Png };
@@ -51,7 +51,8 @@ pub fn apply(action: QuickAction, s: &AppSettings) -> AppSettings {
         QuickAction::Record => (s.area, recording),
         QuickAction::RecordFullScreen => (CaptureArea::FullScreen, recording),
     };
-    let area_switcher = matches!(action, QuickAction::Current | QuickAction::Image);
+    let area_switcher =
+        matches!(action, QuickAction::Current | QuickAction::Image | QuickAction::Record);
     AppSettings { area, format, area_switcher, ..s.clone() }
 }
 
@@ -104,7 +105,7 @@ mod tests {
         let base = s(CaptureArea::FullScreen, OutputFormat::Png);
         let offered: Vec<bool> =
             QuickAction::ALL.iter().map(|a| apply(*a, &base).area_switcher).collect();
-        assert_eq!(offered, [true, true, false, false, false]);
+        assert_eq!(offered, [true, true, false, true, false]);
     }
 
     #[test]

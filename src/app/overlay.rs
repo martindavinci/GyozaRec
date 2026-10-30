@@ -33,6 +33,7 @@ fn area_icon(area: CaptureArea) -> Icon {
         CaptureArea::Rectangle => Icon::Rectangle,
         CaptureArea::Window => Icon::Window,
         CaptureArea::FullScreen => Icon::FullScreen,
+        CaptureArea::AllMonitors => Icon::AllMonitors,
     }
 }
 
@@ -216,8 +217,9 @@ impl OverlayWindow {
     }
 }
 
-/// What a hover highlights: the window under the point (Window mode) or the
-/// whole monitor (full-screen monitor pick); nothing while dragging a rectangle.
+/// What a hover highlights: the window under the point (Window mode), the
+/// whole monitor (full-screen monitor pick) or every monitor; nothing while
+/// dragging a rectangle.
 fn initial_hover(
     area: CaptureArea,
     candidates: &[WindowCandidate],
@@ -227,8 +229,17 @@ fn initial_hover(
     match area {
         CaptureArea::Window => hovered_window(candidates, monitors, at),
         CaptureArea::FullScreen => monitor_at(monitors, at),
+        CaptureArea::AllMonitors => union(monitors),
         CaptureArea::Rectangle => None,
     }
+}
+
+/// The smallest rectangle around every monitor.
+fn union(monitors: &[PixelRect]) -> Option<PixelRect> {
+    monitors.iter().copied().reduce(|a, b| {
+        let (x, y) = (a.x.min(b.x), a.y.min(b.y));
+        PixelRect::new(x, y, a.right().max(b.right()) - x, a.bottom().max(b.bottom()) - y)
+    })
 }
 
 pub struct OverlaySession {
@@ -474,13 +485,18 @@ impl OverlaySession {
         true
     }
 
-    /// Starts over with another area; full screen on a single monitor
-    /// captures it at once.
+    /// Starts over with another area; full screen on a single monitor and
+    /// all monitors capture at once.
     fn switch_area(&mut self, index: usize, area: CaptureArea, fonts: &Fonts) {
         self.switched |= area != self.area;
         self.area = area;
-        if area == CaptureArea::FullScreen && self.windows.len() == 1 {
-            let bounds = self.windows[0].monitor.bounds;
+        let monitors: Vec<PixelRect> = self.windows.iter().map(|w| w.monitor.bounds).collect();
+        let at_once = match area {
+            CaptureArea::FullScreen if monitors.len() == 1 => monitors.first().copied(),
+            CaptureArea::AllMonitors => union(&monitors),
+            _ => None,
+        };
+        if let Some(bounds) = at_once {
             self.finish(Some(bounds));
             return;
         }
@@ -547,7 +563,8 @@ mod tests {
         assert_eq!(bar_click(ID_AREA), Some(BarClick::Area(CaptureArea::Rectangle)));
         assert_eq!(bar_click(ID_AREA + 1), Some(BarClick::Area(CaptureArea::Window)));
         assert_eq!(bar_click(ID_AREA + 2), Some(BarClick::Area(CaptureArea::FullScreen)));
-        assert_eq!(bar_click(ID_AREA + 3), None);
+        assert_eq!(bar_click(ID_AREA + 3), Some(BarClick::Area(CaptureArea::AllMonitors)));
+        assert_eq!(bar_click(ID_AREA + 4), None);
         assert_eq!(bar_click(ID_CLOSE), Some(BarClick::Close));
     }
 
@@ -569,13 +586,13 @@ mod tests {
         let close = centre(ID_CLOSE);
         assert!(bar.contains(close));
         assert_eq!(bar.ui.hit_test(bar.local(close).0, bar.local(close).1), Some(ID_CLOSE));
-        let selected: Vec<bool> = (0..3)
+        let selected: Vec<bool> = (0..4)
             .map(|i| match bar.ui.widget(ID_AREA + i).unwrap().kind {
                 WidgetKind::ToolButton { selected, .. } => selected,
                 _ => unreachable!(),
             })
             .collect();
-        assert_eq!(selected, [false, true, false]);
+        assert_eq!(selected, [false, true, false, false]);
     }
 
     #[test]
@@ -584,6 +601,10 @@ mod tests {
         let at = PixelPoint { x: -5, y: 5 };
         assert_eq!(initial_hover(CaptureArea::FullScreen, &[], &monitors, at), Some(monitors[0]));
         assert_eq!(initial_hover(CaptureArea::Rectangle, &[], &monitors, at), None);
+        assert_eq!(
+            initial_hover(CaptureArea::AllMonitors, &[], &monitors, at),
+            Some(PixelRect::new(-1920, 0, 3840, 1080))
+        );
     }
 
     #[test]

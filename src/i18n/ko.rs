@@ -3,7 +3,7 @@ use super::Texts;
 pub(super) const TEXTS: Texts = Texts {
     capture: "캡처",
     options: "옵션",
-    areas: ["사각형", "창", "전체 화면"],
+    areas: ["사각형", "창", "전체 화면", "모든 화면"],
     formats: ["PNG 이미지", "JPG 이미지", "MP4 동영상", "애니메이션 GIF"],
     record: "녹화",
     delays: ["지연 없음", "1초", "2초", "3초", "4초", "5초"],

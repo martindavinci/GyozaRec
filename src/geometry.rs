@@ -105,6 +105,8 @@ pub enum CaptureArea {
     Rectangle,
     Window,
     FullScreen,
+    /// Every monitor at once, as one picture or video.
+    AllMonitors,
 }
 
 /// What a capture produces.

@@ -7,13 +7,16 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The windows' look; automatic is light or dark after Windows' app mode.
+/// The windows' look; automatic is Gyoza or Slate after Windows' app mode.
+/// Stored by these names, whatever Options calls them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemeChoice {
+    /// "Gyoza", the light dough look.
     Light,
+    /// "Toasted", the warm brown dark.
     Dark,
-    /// Blue-grey dark.
+    /// Blue-grey dark, the dark one automatic picks.
     Slate,
     /// Also what an unknown value means, so it never resets the other settings.
     #[default]
@@ -23,12 +26,12 @@ pub enum ThemeChoice {
 
 /// In the order Options lists them.
 pub const THEME_CHOICES: [ThemeChoice; 4] =
-    [ThemeChoice::Auto, ThemeChoice::Light, ThemeChoice::Dark, ThemeChoice::Slate];
+    [ThemeChoice::Auto, ThemeChoice::Light, ThemeChoice::Slate, ThemeChoice::Dark];
 
 impl ThemeChoice {
     pub fn look(self, system_is_dark: bool) -> Look {
         match self {
-            ThemeChoice::Auto if system_is_dark => Look::Dark,
+            ThemeChoice::Auto if system_is_dark => Look::Slate,
             ThemeChoice::Auto | ThemeChoice::Light => Look::Light,
             ThemeChoice::Dark => Look::Dark,
             ThemeChoice::Slate => Look::Slate,
@@ -453,7 +456,7 @@ mod tests {
     fn theme_choice_decides_the_look() {
         use crate::uikit::theme::Look;
         let looks = |c: ThemeChoice| [c.look(false), c.look(true)];
-        assert_eq!(looks(ThemeChoice::Auto), [Look::Light, Look::Dark]);
+        assert_eq!(looks(ThemeChoice::Auto), [Look::Light, Look::Slate]);
         assert_eq!(looks(ThemeChoice::Light), [Look::Light, Look::Light]);
         assert_eq!(looks(ThemeChoice::Dark), [Look::Dark, Look::Dark]);
         assert_eq!(looks(ThemeChoice::Slate), [Look::Slate, Look::Slate]);

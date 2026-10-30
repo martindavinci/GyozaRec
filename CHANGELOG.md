@@ -9,6 +9,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 
 ### Changed
 - Choosing a theme in Options shows it at once; Cancel goes back to the previous one.
+- Themes have names: Gyoza (light), Slate (dark) and Toasted (dark, the former Dark). Automatic now uses Slate when Windows is dark.
 
 ## [0.4.3] - 2026-10-30
 

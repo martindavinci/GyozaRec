@@ -59,7 +59,12 @@ pub(super) const TEXTS: Texts = Texts {
     video_max_seconds: "動画: 最大の長さ (秒)",
     language: "言語",
     theme: "テーマ",
-    theme_choices: ["自動（システム）", "ライト", "ダーク", "スレート"],
+    theme_choices: [
+        "自動（システム）",
+        "ギョーザ（ライト）",
+        "スレート（ダーク）",
+        "トースト（ダーク）",
+    ],
     file_names: "ファイル名",
     file_name_prefix: "先頭に「GyozaRec_」を付ける",
     file_name_styles: ["日時", "ランダム"],

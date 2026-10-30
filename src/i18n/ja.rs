@@ -59,6 +59,7 @@ pub(super) const TEXTS: Texts = Texts {
     video_max_seconds: "動画: 最大の長さ (秒)",
     language: "言語",
     theme: "テーマ",
+    interface_size: "サイズ",
     theme_choices: [
         "自動（システム）",
         "ギョーザ（ライト）",

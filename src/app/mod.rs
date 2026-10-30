@@ -630,8 +630,8 @@ impl App {
         self.apply_theme();
     }
 
-    /// The windows' look, from the setting or from Windows' app mode. While
-    /// Options is open, its choice is tried out before OK.
+    /// The windows' look and size, from the settings or from Windows' app
+    /// mode. While Options is open, its choices are tried out before OK.
     fn apply_theme(&mut self) {
         use gyozarec::settings::ThemeChoice;
         use gyozarec::uikit::theme;
@@ -641,8 +641,16 @@ impl App {
         // Only a dark theme picked by hand darkens title bars; otherwise they
         // stay Windows', which also reports its changes for Automatic.
         let code = u8::from(choice != ThemeChoice::Auto && look.is_dark());
-        let unchanged = TITLE_THEME.swap(code, Ordering::Relaxed) == code && theme::look() == look;
+        let size = self
+            .options
+            .as_ref()
+            .map_or(self.state.settings.interface_size, |o| o.interface_size());
+        let zoom = f32::from(theme::nearest_zoom(size)) / 100.0;
+        let unchanged = TITLE_THEME.swap(code, Ordering::Relaxed) == code
+            && theme::look() == look
+            && theme::zoom() == zoom;
         theme::set_look(look);
+        theme::set_zoom(size);
         if unchanged {
             return;
         }
@@ -1004,6 +1012,12 @@ impl ApplicationHandler<AppEvent> for App {
                 }
             }
             Some(ToolbarAction::Options) => self.open_options(event_loop),
+            Some(ToolbarAction::Zoom(step)) => {
+                let s = &mut self.state.settings;
+                s.interface_size = gyozarec::uikit::theme::step_zoom(s.interface_size, step);
+                self.save_settings();
+                self.apply_theme();
+            }
             None => {}
         }
     }

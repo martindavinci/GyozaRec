@@ -1,6 +1,6 @@
 //! Colors and metrics of the "gyoza" look, light and dark.
 
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU16, Ordering};
 
 /// `0x00RRGGBB`, the softbuffer pixel format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,6 +120,33 @@ pub fn current() -> &'static Theme {
     look().theme()
 }
 
+/// Interface sizes Options offers, in percent of the normal size.
+pub const ZOOMS: [u16; 5] = [100, 125, 150, 175, 200];
+
+static ZOOM: AtomicU16 = AtomicU16::new(100);
+
+/// Draws every window from now on at `percent` of the normal size, on top
+/// of Windows' own display scale.
+pub fn set_zoom(percent: u16) {
+    ZOOM.store(nearest_zoom(percent), Ordering::Relaxed);
+}
+
+/// The interface size as a factor (1.0 is normal).
+pub fn zoom() -> f32 {
+    f32::from(ZOOM.load(Ordering::Relaxed)) / 100.0
+}
+
+/// The allowed size closest to `percent`.
+pub fn nearest_zoom(percent: u16) -> u16 {
+    ZOOMS.into_iter().min_by_key(|z| z.abs_diff(percent)).unwrap_or(100)
+}
+
+/// The next allowed size up (`step` > 0) or down, staying within the list.
+pub fn step_zoom(percent: u16, step: i32) -> u16 {
+    let i = ZOOMS.iter().position(|z| *z == nearest_zoom(percent)).unwrap_or(0) as i32;
+    ZOOMS[(i + step).clamp(0, ZOOMS.len() as i32 - 1) as usize]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,6 +174,13 @@ mod tests {
             assert!(contrast(t.accent, t.bg) >= 3.0, "{:?}", t.accent);
             assert!(contrast(t.disabled_text, t.bg) >= 2.5, "{:?}", t.disabled_text);
         }
+    }
+
+    #[test]
+    fn zoom_snaps_to_the_offered_sizes() {
+        assert_eq!([nearest_zoom(0), nearest_zoom(130), nearest_zoom(999)], [100, 125, 200]);
+        assert_eq!([step_zoom(100, 1), step_zoom(100, -1), step_zoom(200, 1)], [125, 100, 200]);
+        assert_eq!(step_zoom(160, -1), 125, "from the nearest size");
     }
 
     #[test]

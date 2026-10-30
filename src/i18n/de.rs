@@ -66,6 +66,7 @@ pub(super) const TEXTS: Texts = Texts {
     video_max_seconds: "Video: maximale Länge (s)",
     language: "Sprache",
     theme: "Design",
+    interface_size: "Größe",
     theme_choices: [
         "Automatisch (System)",
         "Gyoza (hell)",

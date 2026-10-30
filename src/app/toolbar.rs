@@ -8,8 +8,9 @@ use gyozarec::uikit::painter::{Fonts, Painter};
 use gyozarec::uikit::theme;
 use gyozarec::uikit::widgets::{Icon, Ui, WidgetKind, layout_row};
 use winit::dpi::{LogicalSize, PhysicalPosition};
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{Key, ModifiersState};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowButtons};
 
@@ -36,6 +37,8 @@ pub enum ToolbarAction {
     OpenFolder,
     CancelConversion,
     Download,
+    /// Ctrl + wheel or Ctrl +/-: one interface size up (> 0) or down.
+    Zoom(i32),
 }
 
 pub struct Toolbar {
@@ -43,6 +46,7 @@ pub struct Toolbar {
     ui: Ui,
     logical: (f32, f32),
     cursor: (f32, f32),
+    modifiers: ModifiersState,
 }
 
 /// What each toolbar button shows before its label.
@@ -100,6 +104,12 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     Ui::new(widgets)
 }
 
+/// `size` in winit's logical units, which leave out the interface size.
+fn zoomed(size: (f32, f32)) -> (f32, f32) {
+    let z = gyozarec::uikit::theme::zoom();
+    (size.0 * z, size.1 * z)
+}
+
 fn logical_size(ui: &Ui) -> (f32, f32) {
     let b = ui.bounds();
     ((b.right() + PAD).ceil().max(MIN_WIDTH), (b.bottom() + PAD).ceil())
@@ -113,7 +123,7 @@ impl Toolbar {
         visible: bool,
     ) -> Toolbar {
         let ui = build_ui(state, fonts);
-        let logical = logical_size(&ui);
+        let logical = zoomed(logical_size(&ui));
         let attrs = Window::default_attributes()
             .with_title("GyozaRec")
             .with_window_icon(super::window_icon())
@@ -124,11 +134,18 @@ impl Toolbar {
             .with_inner_size(LogicalSize::new(logical.0, logical.1))
             .with_visible(visible);
         let window = event_loop.create_window(attrs).expect("toolbar window");
-        Toolbar { surface: WindowSurface::new(window), ui, logical, cursor: (-1.0, -1.0) }
+        Toolbar {
+            surface: WindowSurface::new(window),
+            ui,
+            logical,
+            cursor: (-1.0, -1.0),
+            modifiers: ModifiersState::empty(),
+        }
     }
 
+    /// Windows' scale times the interface size.
     fn scale(&self) -> f32 {
-        self.surface.window.scale_factor() as f32
+        self.surface.window.scale_factor() as f32 * gyozarec::uikit::theme::zoom()
     }
 
     /// Rebuilds widgets from `state` and resizes the window to fit them.
@@ -136,7 +153,7 @@ impl Toolbar {
         let mut ui = build_ui(state, fonts);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
-        let logical = logical_size(&self.ui);
+        let logical = zoomed(logical_size(&self.ui));
         if logical != self.logical {
             self.logical = logical;
             let _ = self.surface.window.request_inner_size(LogicalSize::new(logical.0, logical.1));
@@ -201,6 +218,27 @@ impl Toolbar {
                     ID_DOWNLOAD => Some(ToolbarAction::Download),
                     _ => None,
                 };
+            }
+            WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
+            WindowEvent::MouseWheel { delta, .. } if self.modifiers.control_key() => {
+                let up = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => *y,
+                    MouseScrollDelta::PixelDelta(p) => p.y as f32,
+                };
+                if up != 0.0 {
+                    return Some(ToolbarAction::Zoom(if up > 0.0 { 1 } else { -1 }));
+                }
+            }
+            WindowEvent::KeyboardInput { event, .. }
+                if event.state == ElementState::Pressed && self.modifiers.control_key() =>
+            {
+                if let Key::Character(c) = &event.logical_key {
+                    match c.as_str() {
+                        "+" | "=" => return Some(ToolbarAction::Zoom(1)),
+                        "-" => return Some(ToolbarAction::Zoom(-1)),
+                        _ => {}
+                    }
+                }
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 let s = *scale_factor as f32;

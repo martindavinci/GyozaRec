@@ -176,7 +176,7 @@ impl OverlayWindow {
 
     /// A short instruction centred at the top of the monitor.
     fn draw_hint(&mut self, text: &str, size: PixelSize, fonts: &Fonts) {
-        let scale = self.monitor.scale as f32;
+        let scale = self.monitor.scale as f32 * gyozarec::uikit::theme::zoom();
         let (tw, th) = measure_text(fonts, text, LABEL_PX, false);
         let (pad_x, pad_y) = (10.0, 6.0);
         let label = PixelSize {
@@ -195,7 +195,7 @@ impl OverlayWindow {
     }
 
     fn draw_label(&mut self, sel: PixelRect, size: PixelSize, fonts: &Fonts) {
-        let scale = self.monitor.scale as f32;
+        let scale = self.monitor.scale as f32 * gyozarec::uikit::theme::zoom();
         let text = format!("{} × {}", sel.width, sel.height);
         let (tw, th) = measure_text(fonts, &text, LABEL_PX, false);
         let (pad_x, pad_y) = (6.0, 3.0);
@@ -294,7 +294,7 @@ impl OverlaySession {
         if request.switcher {
             let home = windows.iter().position(|w| w.monitor.bounds.contains(cursor)).unwrap_or(0);
             if let Some(w) = windows.get_mut(home) {
-                let scale = w.monitor.scale as f32;
+                let scale = w.monitor.scale as f32 * gyozarec::uikit::theme::zoom();
                 w.bar = Some(AreaBar::new(request.area, w.monitor.bounds.width, scale, fonts));
             }
         }

@@ -42,6 +42,7 @@ const HINT_WIDTH: f32 = 340.0;
 const COLUMN_GAP: f32 = 28.0;
 const ID_LANGUAGE: u32 = 15;
 const ID_THEME: u32 = 24;
+const ID_SIZE: u32 = 26;
 const ID_FILE_NAMES: u32 = 17;
 const ID_NAME_EXAMPLE: u32 = 18;
 const ID_NAME_PREFIX: u32 = 19;
@@ -59,6 +60,8 @@ const NAMES_PREFIX: &str = "opt:names:";
 const IMAGE_PREFIX: &str = "opt:image:";
 /// Menu id prefix for the theme: `opt:theme:<index>`.
 const THEME_PREFIX: &str = "opt:theme:";
+/// Menu id prefix for the interface size: `opt:size:<percent>`.
+const SIZE_PREFIX: &str = "opt:size:";
 
 fn theme_index(form: &OptionsForm) -> usize {
     THEME_CHOICES.iter().position(|t| *t == form.theme).unwrap_or(0)
@@ -227,10 +230,24 @@ pub struct OptionsWindow {
     /// Own fonts, so the native name of any chosen language can be drawn.
     fonts: Fonts,
     ui: Ui,
+    /// Size in winit's logical units, so with the interface size.
     logical: (f32, f32),
+    /// The interface size used here, smaller when the full one would not fit.
+    zoom: f32,
     cursor: (f32, f32),
     /// A newer release, linked next to the version.
     update: Option<gyozarec::presentation::UpdateNote>,
+}
+
+/// The interface size for Options, held back so the window still fits
+/// `monitor` (which leaves room for the taskbar and title bar).
+fn fitting_zoom(size: (f32, f32), monitor: Option<winit::monitor::MonitorHandle>) -> f32 {
+    let zoom = theme::zoom();
+    let Some(m) = monitor else { return zoom };
+    let (s, screen) = (m.scale_factor() as f32, m.size());
+    let fit_h = screen.height as f32 * 0.88 / (size.1 * s);
+    let fit_w = screen.width as f32 * 0.95 / (size.0 * s);
+    zoom.min(fit_h.min(fit_w)).max(1.0)
 }
 
 /// Apply works only when the form differs from what is saved.
@@ -359,6 +376,23 @@ fn build_ui(
         widgets.extend(row);
         widgets.extend(button);
     }
+    // The interface size shares the theme's row: no room for another one.
+    if let Some(theme_button) = widgets.iter().find(|w| w.id == ID_THEME).map(|w| w.rect) {
+        let size = format!("{}%", form.interface_size);
+        let items = vec![
+            (200 + ID_SIZE, label(texts.interface_size)),
+            (ID_SIZE, WidgetKind::Button { label: size, dropdown: true }),
+        ];
+        let row = layout_row(
+            items,
+            theme_button.right() + 16.0,
+            theme_button.y,
+            10.0,
+            fonts,
+            theme::current(),
+        );
+        widgets.extend(row);
+    }
 
     let listed: Vec<(usize, &ShortcutLine)> =
         shortcuts
@@ -440,9 +474,9 @@ fn build_ui(
         row[0].rect.y = row_y + (y - ROW_GAP - row_y - row[0].rect.h) / 2.0;
         widgets.extend(row);
     }
-    // The version, quietly, at the right end of the buttons row.
+    // The version and its author, quietly, at the right end of the buttons row.
     let right_edge = widgets.iter().map(|w| w.rect.right()).fold(0.0, f32::max);
-    let version = format!("GyozaRec {}", env!("CARGO_PKG_VERSION"));
+    let version = version_text();
     let (tw, th) = measure_text(fonts, &version, theme::current().font_px, false);
     let kind = WidgetKind::Label { text: version, color: theme::current().disabled_text };
     let mut label =
@@ -450,6 +484,11 @@ fn build_ui(
     label[0].rect.y = row_y + (y - ROW_GAP - row_y - th) / 2.0;
     widgets.extend(label);
     Ui::new(widgets)
+}
+
+/// "GyozaRec x.y.z · author", as shown at the bottom of Options.
+fn version_text() -> String {
+    format!("GyozaRec {} \u{b7} {}", env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_AUTHORS"))
 }
 
 /// Puts "GyozaRec x.y.z is available" as a link just left of the version.
@@ -495,7 +534,9 @@ impl OptionsWindow {
         let mut ui = build_ui(&form, texts, &shortcuts, &ShortcutEdit::default(), &fonts);
         add_update_link(&mut ui, update.as_ref(), texts, &fonts);
         enable_apply(&mut ui, false);
-        let logical = logical_size(&ui);
+        let size = logical_size(&ui);
+        let zoom = fitting_zoom(size, event_loop.primary_monitor());
+        let logical = (size.0 * zoom, size.1 * zoom);
         let attrs = Window::default_attributes()
             .with_title(texts.options)
             .with_window_icon(super::window_icon())
@@ -517,6 +558,7 @@ impl OptionsWindow {
             fonts,
             ui,
             logical,
+            zoom,
             cursor: (-1.0, -1.0),
             update,
         })
@@ -531,8 +573,9 @@ impl OptionsWindow {
         self.surface.window.id()
     }
 
+    /// Windows' scale times the interface size.
     fn scale(&self) -> f32 {
-        self.surface.window.scale_factor() as f32
+        self.surface.window.scale_factor() as f32 * self.zoom
     }
 
     /// The settings were saved: the form shows them and Apply turns off.
@@ -540,6 +583,11 @@ impl OptionsWindow {
         self.form = OptionsForm::from_settings(settings);
         self.applied = self.form.clone();
         self.rebuild();
+    }
+
+    /// The interface size chosen in the form, not yet accepted.
+    pub fn interface_size(&self) -> u16 {
+        self.form.interface_size
     }
 
     /// The theme chosen in the form, not yet accepted.
@@ -559,7 +607,9 @@ impl OptionsWindow {
         enable_apply(&mut ui, self.form != self.applied);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
-        let logical = logical_size(&self.ui);
+        let size = logical_size(&self.ui);
+        self.zoom = fitting_zoom(size, self.surface.window.current_monitor());
+        let logical = (size.0 * self.zoom, size.1 * self.zoom);
         if logical != self.logical {
             self.logical = logical;
             let _ = self.surface.window.request_inner_size(LogicalSize::new(logical.0, logical.1));
@@ -591,6 +641,11 @@ impl OptionsWindow {
         }
         if let Some(i) = menu_id.strip_prefix(IMAGE_PREFIX).and_then(|v| v.parse::<usize>().ok()) {
             self.form.set_image_action(i.min(2));
+            self.rebuild();
+            return;
+        }
+        if let Some(p) = menu_id.strip_prefix(SIZE_PREFIX).and_then(|v| v.parse::<u16>().ok()) {
+            self.form.interface_size = gyozarec::uikit::theme::nearest_zoom(p);
             self.rebuild();
             return;
         }
@@ -636,6 +691,16 @@ impl OptionsWindow {
                     *text,
                     true,
                     i == self.form.image_action(),
+                    None,
+                ));
+            }
+        } else if id == ID_SIZE {
+            for percent in gyozarec::uikit::theme::ZOOMS {
+                let _ = menu.append(&CheckMenuItem::with_id(
+                    format!("{SIZE_PREFIX}{percent}"),
+                    format!("{percent}%"),
+                    true,
+                    percent == self.form.interface_size,
                     None,
                 ));
             }
@@ -837,6 +902,7 @@ impl OptionsWindow {
             ID_PRINT_SCREEN => self.form.print_screen_captures = !self.form.print_screen_captures,
             id if id == ID_LANGUAGE
                 || id == ID_THEME
+                || id == ID_SIZE
                 || id == ID_FILE_NAMES
                 || id == ID_EDITOR
                 || COMBOS.iter().any(|(cid, _)| *cid == id) =>
@@ -994,11 +1060,11 @@ mod layout_tests {
     }
 
     #[test]
-    fn options_show_the_version() {
+    fn options_show_the_version_and_author() {
         let form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
         let fonts = fonts_for(Language::En, &form);
         let ui = build_ui(&form, Language::En.texts(), &[], &ShortcutEdit::default(), &fonts);
-        let version = format!("GyozaRec {}", env!("CARGO_PKG_VERSION"));
+        let version = format!("GyozaRec {} \u{b7} Martin DaVinci", env!("CARGO_PKG_VERSION"));
         let shown = ui.widget(ID_VERSION).map(|w| w.kind.clone());
         assert!(
             matches!(&shown, Some(WidgetKind::Label { text, .. }) if *text == version),

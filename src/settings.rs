@@ -92,6 +92,8 @@ pub struct AppSettings {
     /// other settings.
     pub language: Option<String>,
     pub theme: ThemeChoice,
+    /// Interface size in percent, on top of Windows' display scale.
+    pub interface_size: u16,
     /// For one capture, never saved: an image selection shows the bar that
     /// switches between rectangle, window and full screen.
     #[serde(skip)]
@@ -134,6 +136,7 @@ impl Default for AppSettings {
             video_max_seconds: 300,
             language: None,
             theme: ThemeChoice::Auto,
+            interface_size: 100,
             area_switcher: false,
         }
     }
@@ -167,6 +170,7 @@ impl AppSettings {
             gif_max_long_side: self.gif_max_long_side.clamp(240, 1920),
             video_fps: nearest_video_fps(self.video_fps),
             video_max_seconds: self.video_max_seconds.clamp(5, 3600),
+            interface_size: crate::uikit::theme::nearest_zoom(self.interface_size),
             ..self
         }
     }
@@ -450,6 +454,18 @@ mod tests {
         fs::write(&p, r#"{ "theme": "sepia", "gif_fps": 15 }"#).unwrap();
         let s = store.load();
         assert_eq!((s.theme, s.gif_fps), (ThemeChoice::Auto, 15));
+    }
+
+    #[test]
+    fn interface_size_defaults_to_normal_and_snaps() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        let store = SettingsStore::new(p.clone(), cap());
+        assert_eq!(store.load().interface_size, 100);
+        fs::write(&p, r#"{ "interface_size": 160 }"#).unwrap();
+        assert_eq!(store.load().interface_size, 150);
+        fs::write(&p, r#"{ "interface_size": 900 }"#).unwrap();
+        assert_eq!(store.load().interface_size, 200);
     }
 
     #[test]

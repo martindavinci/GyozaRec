@@ -101,7 +101,11 @@ impl NoticeWindow {
         texts: &Texts,
     ) -> Option<NoticeWindow> {
         let l = layout((notice.thumbnail.width(), notice.thumbnail.height()));
-        let rect = notice_rect(notice.work_area, notice.scale, l.size);
+        let rect = notice_rect(
+            notice.work_area,
+            notice.scale * f64::from(gyozarec::uikit::theme::zoom()),
+            l.size,
+        );
         let attrs = Window::default_attributes()
             .with_title("GyozaRec")
             .with_decorations(false)
@@ -142,8 +146,9 @@ impl NoticeWindow {
         &self.surface
     }
 
+    /// The monitor's scale times the interface size.
     fn scale(&self) -> f32 {
-        self.notice.scale as f32
+        self.notice.scale as f32 * gyozarec::uikit::theme::zoom()
     }
 
     fn redraw(&mut self, fonts: &Fonts) {

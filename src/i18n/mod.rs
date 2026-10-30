@@ -183,6 +183,8 @@ pub struct Texts {
     pub video_max_seconds: &'static str,
     pub language: &'static str,
     pub theme: &'static str,
+    /// Interface size, next to the theme.
+    pub interface_size: &'static str,
     /// In `settings::THEME_CHOICES` order.
     pub theme_choices: [&'static str; 4],
     pub file_names: &'static str,
@@ -297,6 +299,7 @@ mod tests {
                 t.video_max_seconds,
                 t.language,
                 t.theme,
+                t.interface_size,
                 t.automatic,
                 t.ok,
                 t.apply,

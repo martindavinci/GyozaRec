@@ -484,13 +484,17 @@ impl EditorWindow {
         scale: f64,
         proxy: EventLoopProxy<AppEvent>,
     ) -> Option<EditorWindow> {
+        // Sizes below are in the editor's own units: Windows' scale times the
+        // interface size; winit's logical units know only the first.
+        let zoom = gyozarec::uikit::theme::zoom();
+        let scale = scale * f64::from(zoom);
         let (w, h) = initial_size(image.bounds.size(), work_area, scale);
         let mut attrs = Window::default_attributes()
             .with_title(title(&path, on_disk, texts))
             .with_window_icon(super::window_icon())
             .with_theme(super::title_theme())
-            .with_min_inner_size(LogicalSize::new(360.0, 240.0))
-            .with_inner_size(LogicalSize::new(w, h));
+            .with_min_inner_size(LogicalSize::new(360.0 * zoom, 240.0 * zoom))
+            .with_inner_size(LogicalSize::new(w * zoom, h * zoom));
         if let Some(a) = work_area {
             let (pw, ph) = ((w as f64 * scale) as i32, (h as f64 * scale) as i32);
             let x = a.x + (a.width - pw).max(0) / 2;
@@ -544,8 +548,9 @@ impl EditorWindow {
         self.surface.window.set_visible(visible);
     }
 
+    /// Windows' scale times the interface size.
     fn scale(&self) -> f32 {
-        self.surface.window.scale_factor() as f32
+        self.surface.window.scale_factor() as f32 * gyozarec::uikit::theme::zoom()
     }
 
     fn logical_size(&self) -> (f32, f32) {

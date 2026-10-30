@@ -134,7 +134,7 @@ impl RecordingSession {
         fonts: &Fonts,
     ) -> Option<RecordingSession> {
         let frame = open_frame(event_loop, region);
-        let scale = monitor.scale as f32;
+        let scale = monitor.scale as f32 * gyozarec::uikit::theme::zoom();
         let ui = build_panel_ui(Duration::ZERO, max, false, PanelMode::Normal, texts, fonts);
         let (w, h) = panel_logical_size(max, texts, fonts);
         let size =

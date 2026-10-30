@@ -2,10 +2,11 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] - 2026-10-30
 
 ### Added
 - All monitors, a new area: every monitor at once, as one picture, video or GIF.
+- Lasso, a new area for images: draw any shape while holding the mouse button. Outside it a PNG is transparent and a JPG white; the editor shows the transparent part on a checkerboard, and the clipboard also gets a PNG that keeps it.
 - Recordings show the area bar too (Record, the Record shortcut and the notification area's Record), like image captures.
 
 ## [0.4.5] - 2026-10-30
@@ -113,6 +114,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.5.0]: https://github.com/martindavinci/GyozaRec/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/martindavinci/GyozaRec/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/martindavinci/GyozaRec/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/martindavinci/GyozaRec/compare/v0.4.2...v0.4.3

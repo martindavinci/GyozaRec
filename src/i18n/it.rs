@@ -71,6 +71,7 @@ pub(super) const TEXTS: Texts = Texts {
     automatic: "Automatica (sistema)",
     ok: "OK",
     cancel: "Annulla",
+    apply: "Applica",
     err_empty_area: "l'area di cattura è vuota",
     err_no_monitor: "nessun monitor trovato",
     err_no_frames: "nessun fotogramma registrato",

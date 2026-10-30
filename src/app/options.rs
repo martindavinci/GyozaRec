@@ -47,6 +47,7 @@ const ID_NAME_EXAMPLE: u32 = 18;
 const ID_NAME_PREFIX: u32 = 19;
 const ID_OK: u32 = 20;
 const ID_CANCEL: u32 = 21;
+const ID_APPLY: u32 = 25;
 const ID_VERSION: u32 = 22;
 /// Menu id prefix for value choices: `opt:<combo id>:<value>`.
 pub const MENU_PREFIX: &str = "opt:";
@@ -208,12 +209,16 @@ fn wrap(text: &str, max: f32, fonts: &Fonts) -> Vec<String> {
 pub enum OptionsResult {
     Open,
     Accepted(OptionsForm),
+    /// Apply: like OK, but the window stays open.
+    Applied(OptionsForm),
     Canceled,
 }
 
 pub struct OptionsWindow {
     surface: WindowSurface,
     form: OptionsForm,
+    /// What is saved: Apply is off while the form still matches it.
+    applied: OptionsForm,
     texts: &'static Texts,
     ui_language: Language,
     shortcuts: Vec<ShortcutLine>,
@@ -226,6 +231,13 @@ pub struct OptionsWindow {
     cursor: (f32, f32),
     /// A newer release, linked next to the version.
     update: Option<gyozarec::presentation::UpdateNote>,
+}
+
+/// Apply works only when the form differs from what is saved.
+fn enable_apply(ui: &mut Ui, changed: bool) {
+    if let Some(w) = ui.widget_mut(ID_APPLY) {
+        w.enabled = changed;
+    }
 }
 
 fn label(text: &str) -> WidgetKind {
@@ -411,8 +423,10 @@ fn build_ui(
     y += ROW_GAP;
     let ok = WidgetKind::Button { label: texts.ok.into(), dropdown: false };
     let cancel = WidgetKind::Button { label: texts.cancel.into(), dropdown: false };
+    let apply = WidgetKind::Button { label: texts.apply.into(), dropdown: false };
     let row_y = y;
-    push_row(vec![(ID_OK, ok), (ID_CANCEL, cancel)], PAD, &mut widgets, &mut y);
+    let buttons = vec![(ID_OK, ok), (ID_CANCEL, cancel), (ID_APPLY, apply)];
+    push_row(buttons, PAD, &mut widgets, &mut y);
     // In the buttons row: neither column has room left for small screens.
     #[cfg(feature = "github-updates")]
     {
@@ -420,7 +434,7 @@ fn build_ui(
             label: texts.check_for_updates.into(),
             checked: form.check_for_updates,
         };
-        // Just after Cancel, the last widget pushed.
+        // Just after Apply, the last widget pushed.
         let x = widgets.last().map_or(PAD, |w| w.rect.right()) + 24.0;
         let mut row = layout_row(vec![(ID_UPDATES, check)], x, row_y, 0.0, fonts, theme::current());
         row[0].rect.y = row_y + (y - ROW_GAP - row_y - row[0].rect.h) / 2.0;
@@ -480,6 +494,7 @@ impl OptionsWindow {
         let fonts = fonts_for(ui_language, &form);
         let mut ui = build_ui(&form, texts, &shortcuts, &ShortcutEdit::default(), &fonts);
         add_update_link(&mut ui, update.as_ref(), texts, &fonts);
+        enable_apply(&mut ui, false);
         let logical = logical_size(&ui);
         let attrs = Window::default_attributes()
             .with_title(texts.options)
@@ -492,6 +507,7 @@ impl OptionsWindow {
         let window = event_loop.create_window(attrs).ok()?;
         Some(OptionsWindow {
             surface: WindowSurface::new(window),
+            applied: form.clone(),
             form,
             texts,
             ui_language,
@@ -519,6 +535,13 @@ impl OptionsWindow {
         self.surface.window.scale_factor() as f32
     }
 
+    /// The settings were saved: the form shows them and Apply turns off.
+    pub fn applied(&mut self, settings: &gyozarec::settings::AppSettings) {
+        self.form = OptionsForm::from_settings(settings);
+        self.applied = self.form.clone();
+        self.rebuild();
+    }
+
     /// The theme chosen in the form, not yet accepted.
     pub fn theme(&self) -> gyozarec::settings::ThemeChoice {
         self.form.theme
@@ -533,6 +556,7 @@ impl OptionsWindow {
     fn rebuild(&mut self) {
         let mut ui = build_ui(&self.form, self.texts, &self.shortcuts, &self.edit, &self.fonts);
         add_update_link(&mut ui, self.update.as_ref(), self.texts, &self.fonts);
+        enable_apply(&mut ui, self.form != self.applied);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
         let logical = logical_size(&self.ui);
@@ -724,10 +748,16 @@ impl OptionsWindow {
     }
 
     /// OK: refused while two lines share keys.
-    fn accept(&mut self) -> OptionsResult {
+    /// OK (`close`) or Apply, unless two shortcuts share keys.
+    fn accept(&mut self, close: bool) -> OptionsResult {
         let clashing = clashing_lines(&self.form, &self.shortcuts);
         if clashing.is_empty() {
-            return OptionsResult::Accepted(self.form.clone());
+            let form = self.form.clone();
+            return if close {
+                OptionsResult::Accepted(form)
+            } else {
+                OptionsResult::Applied(form)
+            };
         }
         for id in clashing {
             self.edit.errors.insert(id, self.texts.shortcut_duplicate);
@@ -779,7 +809,8 @@ impl OptionsWindow {
             return OptionsResult::Open;
         }
         match id {
-            ID_OK => return self.accept(),
+            ID_OK => return self.accept(true),
+            ID_APPLY => return self.accept(false),
             ID_CANCEL => return OptionsResult::Canceled,
             ID_BROWSE => self.browse(),
             ID_CLIPBOARD => self.form.copy_to_clipboard = !self.form.copy_to_clipboard,
@@ -853,7 +884,7 @@ impl OptionsWindow {
             {
                 match logical_key {
                     Key::Named(NamedKey::Escape) => return OptionsResult::Canceled,
-                    Key::Named(NamedKey::Enter) => return self.accept(),
+                    Key::Named(NamedKey::Enter) => return self.accept(true),
                     _ => {}
                 }
             }

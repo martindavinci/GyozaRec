@@ -62,6 +62,7 @@ pub(super) const TEXTS: Texts = Texts {
     automatic: "自动（系统）",
     ok: "确定",
     cancel: "取消",
+    apply: "应用",
     err_empty_area: "捕获区域为空",
     err_no_monitor: "未找到显示器",
     err_no_frames: "未录制到任何帧",

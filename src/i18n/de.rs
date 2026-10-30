@@ -78,6 +78,7 @@ pub(super) const TEXTS: Texts = Texts {
     automatic: "Automatisch (System)",
     ok: "OK",
     cancel: "Abbrechen",
+    apply: "Übernehmen",
     err_empty_area: "der Aufnahmebereich ist leer",
     err_no_monitor: "kein Monitor gefunden",
     err_no_frames: "es wurden keine Bilder aufgenommen",

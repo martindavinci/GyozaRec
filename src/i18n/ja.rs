@@ -71,6 +71,7 @@ pub(super) const TEXTS: Texts = Texts {
     automatic: "自動 (システム)",
     ok: "OK",
     cancel: "キャンセル",
+    apply: "適用",
     err_empty_area: "キャプチャ範囲が空です",
     err_no_monitor: "モニターが見つかりません",
     err_no_frames: "フレームが記録されませんでした",

@@ -53,17 +53,13 @@ use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::WindowId;
 
 /// The gyoza icon for title bars and the taskbar (derived from GyozaRec.ico).
-/// What title bars follow: 0 is Windows' own app mode, 1 light, 2 dark.
+/// What title bars follow: 0 is Windows' own app mode, 1 dark.
 static TITLE_THEME: AtomicU8 = AtomicU8::new(0);
 
 /// The title bar look for new and restyled windows; `None` follows Windows,
 /// which also tells the windows when its mode changes.
 pub fn title_theme() -> Option<winit::window::Theme> {
-    match TITLE_THEME.load(Ordering::Relaxed) {
-        1 => Some(winit::window::Theme::Light),
-        2 => Some(winit::window::Theme::Dark),
-        _ => None,
-    }
+    (TITLE_THEME.load(Ordering::Relaxed) == 1).then_some(winit::window::Theme::Dark)
 }
 
 pub fn window_icon() -> Option<winit::window::Icon> {
@@ -591,35 +587,43 @@ impl App {
     }
 
     fn close_options(&mut self, result: OptionsResult) {
-        match result {
+        let (form, close) = match result {
             OptionsResult::Open => return,
-            OptionsResult::Accepted(form) => {
-                let old = self.state.settings.clone();
-                self.state.settings = form.to_settings(&self.state.settings, &self.capture_dir);
-                self.apply_language();
-                self.apply_theme();
-                self.sync_tray();
-                // A changed shortcut Windows refuses keeps its previous keys.
-                let results =
-                    self.shortcuts.apply(effective(&self.state.settings), &mut self.hotkeys);
-                let refused: Vec<&str> =
-                    results.iter().filter(|(_, r)| r.is_err()).map(|(id, _)| *id).collect();
-                if rollback(&mut self.state.settings, &old, &refused) {
-                    self.sync_shortcuts();
-                }
-                self.save_settings();
-                self.sync_autostart();
-                self.refresh_toolbar();
+            OptionsResult::Accepted(form) => (Some(form), true),
+            OptionsResult::Applied(form) => (Some(form), false),
+            OptionsResult::Canceled => (None, true),
+        };
+        if let Some(form) = form {
+            let old = self.state.settings.clone();
+            self.state.settings = form.to_settings(&self.state.settings, &self.capture_dir);
+            self.apply_language();
+            self.apply_theme();
+            self.sync_tray();
+            // A changed shortcut Windows refuses keeps its previous keys.
+            let results = self.shortcuts.apply(effective(&self.state.settings), &mut self.hotkeys);
+            let refused: Vec<&str> =
+                results.iter().filter(|(_, r)| r.is_err()).map(|(id, _)| *id).collect();
+            if rollback(&mut self.state.settings, &old, &refused) {
+                self.sync_shortcuts();
+            }
+            self.save_settings();
+            self.sync_autostart();
+            self.refresh_toolbar();
+            let settings = self.state.settings.clone();
+            if let Some(o) = &mut self.options {
+                o.applied(&settings);
                 if !refused.is_empty() {
                     // Options stays open to say which keys another app holds.
-                    let settings = self.state.settings.clone();
-                    if let Some(o) = &mut self.options {
-                        o.refused(&refused, &settings);
-                    }
-                    return;
+                    o.refused(&refused, &settings);
                 }
             }
-            OptionsResult::Canceled => {}
+            if !refused.is_empty() {
+                return;
+            }
+        }
+        // Apply keeps the window; Cancel after it keeps what was applied.
+        if !close {
+            return;
         }
         self.options = None;
         // Cancel drops the theme being tried out.
@@ -634,12 +638,9 @@ impl App {
         let choice = self.options.as_ref().map_or(self.state.settings.theme, |o| o.theme());
         let system_dark = self.system_theme == Some(winit::window::Theme::Dark);
         let look = choice.look(system_dark);
-        // Automatic leaves title bars to Windows, which reports its changes.
-        let code = match (choice, look.is_dark()) {
-            (ThemeChoice::Auto, _) => 0,
-            (_, false) => 1,
-            (_, true) => 2,
-        };
+        // Only a dark theme picked by hand darkens title bars; otherwise they
+        // stay Windows', which also reports its changes for Automatic.
+        let code = u8::from(choice != ThemeChoice::Auto && look.is_dark());
         let unchanged = TITLE_THEME.swap(code, Ordering::Relaxed) == code && theme::look() == look;
         theme::set_look(look);
         if unchanged {

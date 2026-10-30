@@ -2,14 +2,16 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.4] - 2026-10-30
 
 ### Added
 - Icons on the toolbar buttons: a camera to capture, a red dot to record, the area, the format (image, video, GIF), a timer for the delay and a cog for Options.
+- Apply in Options, next to OK and Cancel: saves and applies the settings and keeps the window open; it is off until something changes.
 
 ### Changed
 - Choosing a theme in Options shows it at once; Cancel goes back to the previous one.
 - Themes have names: Gyoza (light), Slate (dark) and Toasted (dark, the former Dark). Automatic now uses Slate when Windows is dark.
+- Gyoza (light) leaves the title bars to Windows, as before 0.4.2; only a dark theme picked by hand darkens them.
 
 ## [0.4.3] - 2026-10-30
 
@@ -99,6 +101,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.4.4]: https://github.com/martindavinci/GyozaRec/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/martindavinci/GyozaRec/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/martindavinci/GyozaRec/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/martindavinci/GyozaRec/compare/v0.4.0...v0.4.1

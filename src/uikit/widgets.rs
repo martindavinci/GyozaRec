@@ -6,6 +6,9 @@ use super::theme::{Color, Theme};
 const CHECK_BOX: f32 = 16.0;
 const CHECK_GAP: f32 = 6.0;
 const DROPDOWN_EXTRA: f32 = 16.0;
+/// An icon before a button's label: its square and the gap after it.
+const LEAD_ICON: f32 = 14.0;
+const LEAD_GAP: f32 = 6.0;
 
 /// Symbols drawn as vector shapes, so they stay sharp at any scale.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,11 +36,31 @@ pub enum Icon {
     Window,
     /// Four corners: the whole screen.
     FullScreen,
+    /// Taking a picture.
+    Camera,
+    /// A red dot: recording.
+    Record,
+    /// A framed landscape: an image file.
+    Image,
+    /// A movie camera: a video file.
+    Video,
+    /// A strip of film: an animated GIF.
+    Film,
+    /// A clock face: the delay.
+    Timer,
+    /// A cog: the options.
+    Gear,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum WidgetKind {
     Button {
+        label: String,
+        dropdown: bool,
+    },
+    /// A button with an icon before its label.
+    IconLabel {
+        icon: Icon,
         label: String,
         dropdown: bool,
     },
@@ -83,6 +106,11 @@ fn natural_size(kind: &WidgetKind, fonts: &Fonts, theme: &Theme) -> (f32, f32) {
             let (w, _) = measure_text(fonts, label, px, false);
             let extra = if *dropdown { DROPDOWN_EXTRA } else { 0.0 };
             (w + 2.0 * theme.padding + extra, theme.control_height)
+        }
+        WidgetKind::IconLabel { label, dropdown, .. } => {
+            let (w, _) = measure_text(fonts, label, px, false);
+            let extra = if *dropdown { DROPDOWN_EXTRA } else { 0.0 };
+            (LEAD_ICON + LEAD_GAP + w + 2.0 * theme.padding + extra, theme.control_height)
         }
         WidgetKind::IconButton { .. }
         | WidgetKind::ToolButton { .. }
@@ -234,13 +262,23 @@ impl Ui {
                     p.fill_rounded_rect(well, 3.0, theme.text);
                     p.fill_rounded_rect(inset(well, 1.0), 2.5, *color);
                 }
-                WidgetKind::Button { label, dropdown } => {
+                WidgetKind::Button { label, dropdown }
+                | WidgetKind::IconLabel { label, dropdown, .. } => {
                     p.fill_rounded_rect(w.rect, theme.radius, fill);
                     let (tw, th) = measure_text(fonts, label, px, false);
                     let extra = if *dropdown { DROPDOWN_EXTRA } else { 0.0 };
-                    let tx = w.rect.x + (w.rect.w - extra - tw) / 2.0;
+                    let lead = match &w.kind {
+                        WidgetKind::IconLabel { .. } => LEAD_ICON + LEAD_GAP,
+                        _ => 0.0,
+                    };
+                    let left = w.rect.x + (w.rect.w - extra - lead - tw) / 2.0;
+                    if let WidgetKind::IconLabel { icon, .. } = &w.kind {
+                        let square = RectF { x: left, y: w.rect.y, w: LEAD_ICON, h: w.rect.h };
+                        let accent = if w.enabled { theme.accent } else { text_color };
+                        paint_icon(p, *icon, square, text_color, accent);
+                    }
                     let ty = w.rect.y + (w.rect.h - th) / 2.0;
-                    p.text(fonts, label, tx, ty, px, text_color, false);
+                    p.text(fonts, label, left + lead, ty, px, text_color, false);
                     if *dropdown {
                         let cx = w.rect.right() - theme.padding - 4.0;
                         let cy = w.rect.y + w.rect.h / 2.0;
@@ -283,6 +321,16 @@ impl Ui {
             }
         }
     }
+}
+
+/// A closed circle as a polyline.
+fn ring(cx: f32, cy: f32, r: f32) -> Vec<(f32, f32)> {
+    (0..=32)
+        .map(|i| {
+            let (s, c) = (i as f32 * std::f32::consts::TAU / 32.0).sin_cos();
+            (cx + c * r, cy + s * r)
+        })
+        .collect()
 }
 
 fn inset(r: RectF, by: f32) -> RectF {
@@ -392,6 +440,49 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
             {
                 p.line((x, y), (x + dx * arm, y), 1.5, color);
                 p.line((x, y), (x, y + dy * arm), 1.5, color);
+            }
+        }
+        Icon::Camera => {
+            p.stroke_rect(RectF { x: cx - 6.5, y: cy - 3.5, w: 13.0, h: 9.0 }, 1.5, color);
+            p.fill_rounded_rect(RectF { x: cx - 3.0, y: cy - 6.0, w: 6.0, h: 2.5 }, 1.0, color);
+            p.fill_circle(cx, cy + 1.0, 2.5, color);
+        }
+        // Red whatever the accent: what a record button looks like.
+        Icon::Record => p.fill_circle(cx, cy, 5.5, Color(0xE5484D)),
+        Icon::Image => {
+            p.stroke_rect(RectF { x: cx - 6.5, y: cy - 5.0, w: 13.0, h: 10.0 }, 1.5, color);
+            p.fill_triangle(
+                [(cx - 5.0, cy + 4.0), (cx - 1.0, cy - 1.5), (cx + 3.0, cy + 4.0)],
+                color,
+            );
+            p.fill_circle(cx + 3.0, cy - 1.5, 1.5, accent);
+        }
+        Icon::Video => {
+            p.stroke_rect(RectF { x: cx - 6.5, y: cy - 4.0, w: 9.0, h: 8.0 }, 1.5, color);
+            p.fill_triangle([(cx + 3.0, cy), (cx + 6.5, cy - 3.5), (cx + 6.5, cy + 3.5)], color);
+        }
+        Icon::Film => {
+            p.stroke_rect(RectF { x: cx - 4.5, y: cy - 6.0, w: 9.0, h: 12.0 }, 1.5, color);
+            for y in [cy - 2.0, cy + 2.0] {
+                p.line((cx - 4.5, y), (cx + 4.5, y), 1.5, color);
+            }
+            for y in [cy - 4.0, cy, cy + 4.0] {
+                p.fill_rounded_rect(RectF { x: cx - 7.0, y: y - 0.75, w: 1.5, h: 1.5 }, 0.0, color);
+                p.fill_rounded_rect(RectF { x: cx + 5.5, y: y - 0.75, w: 1.5, h: 1.5 }, 0.0, color);
+            }
+        }
+        Icon::Timer => {
+            p.stroke_polyline(&ring(cx, cy + 1.0, 5.5), 1.5, color, 255);
+            p.line((cx, cy + 1.0), (cx, cy - 2.5), 1.5, color);
+            p.line((cx, cy + 1.0), (cx + 2.5, cy + 1.0), 1.5, accent);
+            p.line((cx - 2.0, cy - 6.5), (cx + 2.0, cy - 6.5), 1.5, color);
+        }
+        Icon::Gear => {
+            p.stroke_polyline(&ring(cx, cy, 3.5), 2.0, color, 255);
+            for i in 0..8 {
+                let a = i as f32 * std::f32::consts::FRAC_PI_4;
+                let (s, c) = a.sin_cos();
+                p.line((cx + c * 4.5, cy + s * 4.5), (cx + c * 6.5, cy + s * 6.5), 2.5, color);
             }
         }
         Icon::Crop => {

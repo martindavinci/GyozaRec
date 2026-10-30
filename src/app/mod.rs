@@ -622,13 +622,16 @@ impl App {
             OptionsResult::Canceled => {}
         }
         self.options = None;
+        // Cancel drops the theme being tried out.
+        self.apply_theme();
     }
 
-    /// The windows' look, from the setting or from Windows' app mode.
+    /// The windows' look, from the setting or from Windows' app mode. While
+    /// Options is open, its choice is tried out before OK.
     fn apply_theme(&mut self) {
         use gyozarec::settings::ThemeChoice;
         use gyozarec::uikit::theme;
-        let choice = self.state.settings.theme;
+        let choice = self.options.as_ref().map_or(self.state.settings.theme, |o| o.theme());
         let system_dark = self.system_theme == Some(winit::window::Theme::Dark);
         let look = choice.look(system_dark);
         // Automatic leaves title bars to Windows, which reports its changes.
@@ -689,6 +692,7 @@ impl App {
             if let Some(o) = &mut self.options {
                 o.on_menu(id);
             }
+            self.apply_theme();
             return;
         }
         if id == CONVERT_MENU_ID {

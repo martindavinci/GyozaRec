@@ -2,10 +2,11 @@
 
 use super::surface::WindowSurface;
 use gyozarec::geometry::PixelSize;
+use gyozarec::geometry::{CaptureArea, OutputFormat};
 use gyozarec::presentation::{ToolbarState, area_label, capture_label, delay_label, format_label};
 use gyozarec::uikit::painter::{Fonts, Painter};
 use gyozarec::uikit::theme;
-use gyozarec::uikit::widgets::{Ui, WidgetKind, layout_row};
+use gyozarec::uikit::widgets::{Icon, Ui, WidgetKind, layout_row};
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -44,17 +45,37 @@ pub struct Toolbar {
     cursor: (f32, f32),
 }
 
+/// What each toolbar button shows before its label.
+fn icons(area: CaptureArea, format: OutputFormat) -> [Icon; 5] {
+    let (capture, format) = match format {
+        OutputFormat::Png | OutputFormat::Jpg => (Icon::Camera, Icon::Image),
+        OutputFormat::Mp4 => (Icon::Record, Icon::Video),
+        OutputFormat::Gif => (Icon::Record, Icon::Film),
+    };
+    let area = match area {
+        CaptureArea::Rectangle => Icon::Rectangle,
+        CaptureArea::Window => Icon::Window,
+        CaptureArea::FullScreen => Icon::FullScreen,
+    };
+    [capture, area, format, Icon::Timer, Icon::Gear]
+}
+
 fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let texts = state.texts();
     let s = &state.settings;
-    let button = |label: &str, dropdown: bool| WidgetKind::Button { label: label.into(), dropdown };
+    let [capture, area, format, delay, options] = icons(s.area, s.format);
+    let button = |icon: Icon, label: &str, dropdown: bool| WidgetKind::IconLabel {
+        icon,
+        label: label.into(),
+        dropdown,
+    };
     let mut widgets = layout_row(
         vec![
-            (ID_CAPTURE, button(capture_label(s, texts), false)),
-            (ID_AREA, button(area_label(s.area, texts), true)),
-            (ID_FORMAT, button(format_label(s.format, texts), true)),
-            (ID_DELAY, button(delay_label(s.delay_seconds, texts), true)),
-            (ID_OPTIONS, button(texts.options, false)),
+            (ID_CAPTURE, button(capture, capture_label(s, texts), false)),
+            (ID_AREA, button(area, area_label(s.area, texts), true)),
+            (ID_FORMAT, button(format, format_label(s.format, texts), true)),
+            (ID_DELAY, button(delay, delay_label(s.delay_seconds, texts), true)),
+            (ID_OPTIONS, button(options, texts.options, false)),
         ],
         PAD,
         PAD,

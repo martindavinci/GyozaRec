@@ -69,7 +69,9 @@ fn icons(area: CaptureArea, format: OutputFormat) -> [Icon; 5] {
 fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let texts = state.texts();
     let s = &state.settings;
-    let [capture, area, format, delay, options] = icons(s.area, s.format);
+    // A lasso kept for pictures shows as the rectangle recordings use.
+    let shown = s.area.for_format(s.format);
+    let [capture, area, format, delay, options] = icons(shown, s.format);
     let button = |icon: Icon, label: &str, dropdown: bool| WidgetKind::IconLabel {
         icon,
         label: label.into(),
@@ -78,7 +80,7 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     let mut widgets = layout_row(
         vec![
             (ID_CAPTURE, button(capture, capture_label(s, texts), false)),
-            (ID_AREA, button(area, area_label(s.area, texts), true)),
+            (ID_AREA, button(area, area_label(shown, texts), true)),
             (ID_FORMAT, button(format, format_label(s.format, texts), true)),
             (ID_DELAY, button(delay, delay_label(s.delay_seconds, texts), true)),
             (ID_OPTIONS, button(options, texts.options, false)),
@@ -257,5 +259,28 @@ impl Toolbar {
             _ => {}
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gyozarec::i18n::Language;
+    use gyozarec::settings::AppSettings;
+
+    fn area_shown(area: CaptureArea, format: OutputFormat) -> String {
+        let settings = AppSettings { area, format, ..AppSettings::default() };
+        let ui = build_ui(&ToolbarState::new(settings, Language::En), &Fonts::embedded());
+        match &ui.widget(ID_AREA).unwrap().kind {
+            WidgetKind::IconLabel { label, .. } => label.clone(),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_lasso_kept_for_pictures_shows_as_rectangle_for_recordings() {
+        assert_eq!(area_shown(CaptureArea::Lasso, OutputFormat::Png), "Lasso");
+        assert_eq!(area_shown(CaptureArea::Lasso, OutputFormat::Mp4), "Rectangle");
+        assert_eq!(area_shown(CaptureArea::Window, OutputFormat::Gif), "Window");
     }
 }

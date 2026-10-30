@@ -21,6 +21,8 @@ const LABEL_PX: f32 = 13.0;
 /// Space above the area bar and inside its border, logical units.
 const BAR_TOP: f32 = 12.0;
 const BAR_PAD: f32 = 6.0;
+/// Room for the grip dots at the left of the bar.
+const GRIP: f32 = 10.0;
 /// The bar is drawn this many times the size of the other controls, so it
 /// is easy to hit on a full screen.
 const BAR_ZOOM: f32 = 2.0;
@@ -38,8 +40,8 @@ fn area_icon(area: CaptureArea) -> Icon {
     }
 }
 
-/// The buttons that switch the area, then Close, a gap apart. Without
-/// `lasso` its button is left out; the others keep their ids.
+/// After the grip, the buttons that switch the area, then Close, a gap
+/// apart. Without `lasso` its button is left out; the others keep their ids.
 fn bar_ui(area: CaptureArea, lasso: bool, fonts: &Fonts) -> Ui {
     let t = theme::current();
     let tools = AREAS.iter().enumerate().filter(|(_, a)| lasso || **a != CaptureArea::Lasso).map(
@@ -48,14 +50,15 @@ fn bar_ui(area: CaptureArea, lasso: bool, fonts: &Fonts) -> Ui {
             (ID_AREA + i as u32, kind)
         },
     );
-    let mut widgets = layout_row(tools.collect(), BAR_PAD, BAR_PAD, 4.0, fonts, t);
+    let mut widgets = layout_row(tools.collect(), BAR_PAD + GRIP, BAR_PAD, 4.0, fonts, t);
     let x = widgets.last().map_or(BAR_PAD, |w| w.rect.right()) + 12.0;
     let close = vec![(ID_CLOSE, WidgetKind::IconButton { icon: Icon::Cancel })];
     widgets.extend(layout_row(close, x, BAR_PAD, 0.0, fonts, t));
     Ui::new(widgets)
 }
 
-/// The bar at the top of one monitor that switches the area.
+/// The bar at the top of one monitor that switches the area; it can be
+/// dragged out of the way by anything but its buttons.
 struct AreaBar {
     ui: Ui,
     /// Top-left corner on the monitor, local physical pixels.
@@ -65,6 +68,8 @@ struct AreaBar {
     /// A press started on the bar, so the release belongs to it.
     pressed: bool,
     lasso: bool,
+    /// While the bar is being moved: where it is held, from its corner.
+    grab: Option<PixelPoint>,
 }
 
 impl AreaBar {
@@ -87,7 +92,7 @@ impl AreaBar {
             x: ((monitor_width - size.width) / 2).max(0),
             y: (BAR_TOP * monitor_scale) as i32,
         };
-        AreaBar { ui, origin, size, scale, pressed: false, lasso }
+        AreaBar { ui, origin, size, scale, pressed: false, lasso, grab: None }
     }
 
     fn rebuild(&mut self, area: CaptureArea, fonts: &Fonts) {
@@ -98,6 +103,21 @@ impl AreaBar {
 
     fn contains(&self, p: PixelPoint) -> bool {
         PixelRect::new(self.origin.x, self.origin.y, self.size.width, self.size.height).contains(p)
+    }
+
+    /// `p` (on the bar) is over one of its buttons, not the grip or a gap.
+    fn on_button(&self, p: PixelPoint) -> bool {
+        let (x, y) = self.local(p);
+        self.ui.hit_test(x, y).is_some()
+    }
+
+    /// Follows the pointer at `p` while held, kept on a monitor of `screen` size.
+    fn move_to(&mut self, p: PixelPoint, screen: PixelSize) {
+        let Some(grab) = self.grab else { return };
+        self.origin = PixelPoint {
+            x: (p.x - grab.x).clamp(0, (screen.width - self.size.width).max(0)),
+            y: (p.y - grab.y).clamp(0, (screen.height - self.size.height).max(0)),
+        };
     }
 
     /// `p` in the bar's logical units.
@@ -115,6 +135,12 @@ impl AreaBar {
         painter.clear(t.bg);
         let (w, h) = (self.size.width as f32 / self.scale, self.size.height as f32 / self.scale);
         painter.stroke_rect(RectF { x: 0.5, y: 0.5, w: w - 1.0, h: h - 1.0 }, 1.0, t.disabled_text);
+        for col in 0..2 {
+            for row in -1..=1 {
+                let (x, y) = (BAR_PAD + 2.5 + col as f32 * 4.0, h / 2.0 + row as f32 * 4.0);
+                painter.fill_circle(x, y, 1.0, t.disabled_text);
+            }
+        }
         self.ui.paint(&mut painter, fonts, t);
         painter.blit_into(buffer, width, self.origin);
     }
@@ -154,6 +180,8 @@ struct OverlayWindow {
     bar: Option<AreaBar>,
     /// The pointer is over the bar (not dragging).
     over_bar: bool,
+    /// The pointer shown: crosshair, arrow on the bar's buttons, move elsewhere on it.
+    icon: CursorIcon,
 }
 
 impl OverlayWindow {
@@ -361,6 +389,7 @@ impl OverlaySession {
                 hint: hint.map(str::to_string),
                 bar: None,
                 over_bar: false,
+                icon: CursorIcon::Crosshair,
             });
         }
         if request.switcher {
@@ -508,13 +537,15 @@ impl OverlaySession {
         } else {
             bar.ui.pointer_left()
         };
-        if over != w.over_bar {
-            w.over_bar = over;
-            w.surface.window.set_cursor(if over {
-                CursorIcon::Default
-            } else {
-                CursorIcon::Crosshair
-            });
+        w.over_bar = over;
+        let icon = match (over, over && bar.on_button(p)) {
+            (false, _) => CursorIcon::Crosshair,
+            (true, true) => CursorIcon::Default,
+            (true, false) => CursorIcon::Move,
+        };
+        if icon != w.icon {
+            w.icon = icon;
+            w.surface.window.set_cursor(icon);
         }
         if changed {
             w.surface.window.request_redraw();
@@ -533,9 +564,17 @@ impl OverlaySession {
             if !over {
                 return false;
             }
+            if !bar.on_button(cursor) {
+                let o = bar.origin;
+                bar.grab = Some(PixelPoint { x: cursor.x - o.x, y: cursor.y - o.y });
+                return true;
+            }
             bar.ui.pointer_down(x, y);
             bar.pressed = true;
             w.surface.window.request_redraw();
+            return true;
+        }
+        if bar.grab.take().is_some() {
             return true;
         }
         if !std::mem::take(&mut bar.pressed) {
@@ -582,9 +621,19 @@ impl OverlaySession {
         }
     }
 
+    /// Moves the bar while it is held; `true` while it is.
+    fn drag_bar(&mut self, index: usize, p: PixelPoint) -> bool {
+        let w = &mut self.windows[index];
+        let screen = w.local_bounds().size();
+        let Some(bar) = w.bar.as_mut().filter(|b| b.grab.is_some()) else { return false };
+        bar.move_to(p, screen);
+        w.surface.window.request_redraw();
+        true
+    }
+
     fn pointer_moved(&mut self, index: usize, p: PixelPoint) {
         self.windows[index].cursor = p;
-        if self.bar_hover(index, p) {
+        if self.drag_bar(index, p) || self.bar_hover(index, p) {
             return;
         }
         let w = &mut self.windows[index];
@@ -682,6 +731,32 @@ mod tests {
         assert!(recording.ui.widget(ID_AREA + 1).is_none(), "no lasso for recordings");
         assert!(recording.ui.widget(ID_AREA + 2).is_some());
         assert!(recording.size.width < bar.size.width);
+    }
+
+    #[test]
+    fn the_bar_moves_by_its_grip_and_stays_on_the_monitor() {
+        let fonts = Fonts::embedded();
+        let mut bar = AreaBar::new(CaptureArea::Rectangle, true, 1920, 1.0, &fonts);
+        let grip = PixelPoint { x: bar.origin.x + 10, y: bar.origin.y + bar.size.height / 2 };
+        assert!(bar.contains(grip) && !bar.on_button(grip), "the grip is not a button");
+        let r = bar.ui.widget(ID_CLOSE).unwrap().rect;
+        let close = PixelPoint {
+            x: bar.origin.x + ((r.x + r.w / 2.0) * bar.scale) as i32,
+            y: bar.origin.y + ((r.y + r.h / 2.0) * bar.scale) as i32,
+        };
+        assert!(bar.on_button(close));
+        let screen = PixelSize { width: 1920, height: 1080 };
+        bar.move_to(PixelPoint { x: 500, y: 500 }, screen);
+        assert_eq!(bar.origin.y, 12, "not held: nothing moves");
+        bar.grab = Some(PixelPoint { x: 10, y: 5 });
+        bar.move_to(PixelPoint { x: 500, y: 900 }, screen);
+        assert_eq!(bar.origin, PixelPoint { x: 490, y: 895 });
+        bar.move_to(PixelPoint { x: 5000, y: 5000 }, screen);
+        assert_eq!(
+            bar.origin,
+            PixelPoint { x: 1920 - bar.size.width, y: 1080 - bar.size.height },
+            "kept on the monitor"
+        );
     }
 
     #[test]

@@ -8,6 +8,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - All monitors, a new area: every monitor at once, as one picture, video or GIF.
 - Lasso, a new area for images: draw any shape while holding the mouse button. Outside it a PNG is transparent and a JPG white; the editor shows the transparent part on a checkerboard, and the clipboard also gets a PNG that keeps it.
 - Recordings show the area bar too (Record, the Record shortcut and the notification area's Record), like image captures.
+- The area bar can be dragged out of the way by its dots, for that capture only.
 
 ## [0.4.5] - 2026-10-30
 

@@ -2,6 +2,14 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Icons on the toolbar buttons: a camera to capture, a red dot to record, the area, the format (image, video, GIF), a timer for the delay and a cog for Options.
+
+### Changed
+- Choosing a theme in Options shows it at once; Cancel goes back to the previous one.
+
 ## [0.4.3] - 2026-10-30
 
 ### Added

@@ -520,6 +520,11 @@ impl OptionsWindow {
         self.surface.window.scale_factor() as f32
     }
 
+    /// The theme chosen in the form, not yet accepted.
+    pub fn theme(&self) -> gyozarec::settings::ThemeChoice {
+        self.form.theme
+    }
+
     /// Takes the current light or dark look.
     pub fn restyle(&mut self) {
         self.surface.window.set_theme(super::title_theme());

@@ -2,6 +2,12 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- All monitors, a new area: every monitor at once, as one picture, video or GIF.
+- Recordings show the area bar too (Record, the Record shortcut and the notification area's Record), like image captures.
+
 ## [0.4.5] - 2026-10-30
 
 ### Added

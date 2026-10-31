@@ -123,6 +123,33 @@ fn grow(grey: &[u8], w: usize, h: usize) -> (Vec<u8>, usize, usize) {
     (out, nw, nh)
 }
 
+/// `grey` with every pixel replaced by the darkest one within 1 px: thin or
+/// sparse marks (codes drawn with small dots or triangles) fill their cells.
+fn thicken(grey: &[u8], w: usize, h: usize) -> Vec<u8> {
+    let mut rows = vec![0u8; w * h];
+    for y in 0..h {
+        let row = &grey[y * w..(y + 1) * w];
+        for x in 0..w {
+            rows[y * w + x] =
+                row[x.saturating_sub(1)..=(x + 1).min(w - 1)].iter().copied().min().unwrap_or(255);
+        }
+    }
+    let mut out = vec![0u8; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            out[y * w + x] = (y.saturating_sub(1)..=(y + 1).min(h - 1))
+                .map(|r| rows[r * w + x])
+                .min()
+                .unwrap_or(255);
+        }
+    }
+    out
+}
+
+/// Views up to this size are also read thickened; larger ones are covered
+/// by their shrunk copies, which keeps big screenshots quick.
+const THICKEN_MAX_SIDE: usize = 1200;
+
 /// How the picture is resized before reading: 1 is as is, 2 and 4 shrink,
 /// `GROW` doubles.
 const GROW: usize = 0;
@@ -158,10 +185,16 @@ pub fn scan(img: &PixelBuffer) -> Vec<FoundCode> {
             k => shrink(&grey, w, h, k),
         };
         let back = if k == GROW { 0.5 } else { k as f32 };
-        let inverted: Vec<u8> = view.iter().map(|v| 255 - v).collect();
-        for (l, global) in [(&view, false), (&view, true), (&inverted, false), (&inverted, true)] {
-            for r in detect(l, vw as u32, vh as u32, global) {
-                add(&mut found, &r, back);
+        let mut greys = vec![view.iter().map(|v| 255 - v).collect::<Vec<u8>>()];
+        if vw.max(vh) <= THICKEN_MAX_SIDE {
+            greys.push(thicken(&view, vw, vh));
+        }
+        greys.push(view);
+        for l in &greys {
+            for global in [false, true] {
+                for r in detect(l, vw as u32, vh as u32, global) {
+                    add(&mut found, &r, back);
+                }
             }
         }
     }
@@ -330,6 +363,19 @@ mod tests {
         assert_eq!(scales(100, 100).collect::<Vec<_>>(), [1, GROW]);
         assert_eq!(scales(160, 400).collect::<Vec<_>>(), [1, 2, GROW]);
         assert_eq!(scales(3840, 2160).collect::<Vec<_>>(), [1, 2, 4]);
+    }
+
+    #[test]
+    fn thicken_spreads_dark_pixels_by_one() {
+        let mut grey = vec![255u8; 25];
+        grey[12] = 40; // the middle of 5×5
+        let out = thicken(&grey, 5, 5);
+        for y in 0..5 {
+            for x in 0..5 {
+                let near = (1..=3).contains(&x) && (1..=3).contains(&y);
+                assert_eq!(out[y * 5 + x], if near { 40 } else { 255 }, "({x}, {y})");
+            }
+        }
     }
 
     #[test]

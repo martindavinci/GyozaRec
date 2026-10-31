@@ -127,4 +127,4 @@ cargo xtask dist
 
 ## License
 
-MIT, see [`LICENSE`](LICENSE). The Nunito font is distributed under the SIL Open Font License, see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt).
+MIT, see [`LICENSE`](LICENSE). The Nunito font is distributed under the SIL Open Font License, see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt). The libraries GyozaRec is built from keep their own licenses, listed in [`packaging/THIRD-PARTY-LICENSES.txt`](packaging/THIRD-PARTY-LICENSES.txt) and shipped next to the program (`cargo xtask licenses` refreshes the list).

@@ -1,4 +1,6 @@
-//! Build tasks: `cargo xtask dist` makes the installer and the portable zip.
+//! Build tasks: `cargo xtask dist` makes the installer and the portable zip;
+//! `cargo xtask licenses` refreshes the third-party license notices after a
+//! dependency change (needs `cargo install cargo-about --locked --features cli`).
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -89,8 +91,14 @@ fn dist() -> Result<(), String> {
     };
     let (readme, license, ofl) =
         (text("packaging/README.txt")?, text("LICENSE")?, text("assets/fonts/OFL.txt")?);
-    let extra: [(&str, &[u8]); 4] =
-        [("portable", b""), ("README.txt", &readme), ("LICENSE.txt", &license), ("OFL.txt", &ofl)];
+    let third_party = text(THIRD_PARTY)?;
+    let extra: [(&str, &[u8]); 5] = [
+        ("portable", b""),
+        ("README.txt", &readme),
+        ("LICENSE.txt", &license),
+        ("OFL.txt", &ofl),
+        ("THIRD-PARTY-LICENSES.txt", &third_party),
+    ];
     let zip_path = dist.join(portable_zip_name(&version));
     let exe = root.join("target").join("release").join("gyozarec.exe");
     write_portable_zip(&zip_path, &exe, &extra).map_err(|e| e.to_string())?;
@@ -118,15 +126,36 @@ fn dist() -> Result<(), String> {
     Ok(())
 }
 
+/// The notices of every library in the shipped executable, kept in the
+/// repository so release builds need no extra tool.
+const THIRD_PARTY: &str = "packaging/THIRD-PARTY-LICENSES.txt";
+
+fn licenses() -> Result<(), String> {
+    let root = workspace_root();
+    let about = Command::new("cargo").args(["about", "--version"]).output();
+    if !about.is_ok_and(|o| o.status.success()) {
+        return Err(
+            "cargo-about is missing: cargo install cargo-about --locked --features cli".into()
+        );
+    }
+    run(&root, &["about", "generate", "packaging/about.hbs", "-o", THIRD_PARTY])?;
+    println!("Wrote {THIRD_PARTY}");
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("dist") => dist(),
+        Some("licenses") => licenses(),
         Some("check-tag") => match args.get(1) {
             Some(tag) => current_version().and_then(|v| check_tag(tag, &v)),
             None => Err("usage: cargo xtask check-tag <tag>".into()),
         },
-        _ => Err("usage: cargo xtask dist | cargo xtask check-tag <tag>".into()),
+        _ => {
+            Err("usage: cargo xtask dist | cargo xtask licenses | cargo xtask check-tag <tag>"
+                .into())
+        }
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -181,12 +210,39 @@ mod tests {
         let exe = d.path().join("gyozarec.exe");
         std::fs::write(&exe, b"MZ").unwrap();
         let out = d.path().join("p.zip");
-        let extra: [(&str, &[u8]); 4] =
-            [("portable", b""), ("README.txt", b"x"), ("LICENSE.txt", b"m"), ("OFL.txt", b"y")];
+        let extra: [(&str, &[u8]); 5] = [
+            ("portable", b""),
+            ("README.txt", b"x"),
+            ("LICENSE.txt", b"m"),
+            ("OFL.txt", b"y"),
+            ("THIRD-PARTY-LICENSES.txt", b"t"),
+        ];
         write_portable_zip(&out, &exe, &extra).unwrap();
         let mut z = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
         let names: Vec<String> =
             (0..z.len()).map(|i| z.by_index(i).unwrap().name().unwrap().to_string()).collect();
-        assert_eq!(names, ["gyozarec.exe", "portable", "README.txt", "LICENSE.txt", "OFL.txt"]);
+        assert_eq!(
+            names,
+            [
+                "gyozarec.exe",
+                "portable",
+                "README.txt",
+                "LICENSE.txt",
+                "OFL.txt",
+                "THIRD-PARTY-LICENSES.txt"
+            ]
+        );
+    }
+
+    #[test]
+    fn third_party_notices_cover_the_shipped_libraries() {
+        let root = workspace_root();
+        let text = std::fs::read_to_string(root.join(THIRD_PARTY)).unwrap();
+        for name in ["rxing", "winit", "tiny-skia", "clipboard-win", "image", "gif"] {
+            assert!(
+                text.contains(&format!("  - {name} ")),
+                "{name} missing: run cargo xtask licenses"
+            );
+        }
     }
 }

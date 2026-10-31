@@ -250,6 +250,7 @@ impl RecordingSession {
             }
             WindowEvent::KeyboardInput {
                 event: KeyEvent { logical_key: Key::Named(key), state, .. },
+                is_synthetic: false,
                 ..
             } if *state == ElementState::Pressed => match key {
                 NamedKey::Escape => self.panel_input(PanelInput::Escape, fonts),

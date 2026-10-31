@@ -1027,7 +1027,9 @@ impl EditorWindow {
                 }
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
-            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+            WindowEvent::KeyboardInput { event, is_synthetic: false, .. }
+                if event.state == ElementState::Pressed =>
+            {
                 let typing = self.text.is_some();
                 if let Some(command) = command_for(&event.logical_key, self.modifiers, typing) {
                     return self.run(command);

@@ -940,20 +940,20 @@ impl OptionsWindow {
                 }
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
-            WindowEvent::KeyboardInput { event, .. }
+            WindowEvent::KeyboardInput { event, is_synthetic: false, .. }
                 if event.state == ElementState::Pressed && self.edit.capturing.is_some() =>
             {
                 self.capture_keys(event);
             }
-            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state, .. }, .. }
-                if *state == ElementState::Pressed =>
-            {
-                match logical_key {
-                    Key::Named(NamedKey::Escape) => return OptionsResult::Canceled,
-                    Key::Named(NamedKey::Enter) => return self.accept(true),
-                    _ => {}
-                }
-            }
+            WindowEvent::KeyboardInput {
+                event: KeyEvent { logical_key, state, .. },
+                is_synthetic: false,
+                ..
+            } if *state == ElementState::Pressed => match logical_key {
+                Key::Named(NamedKey::Escape) => return OptionsResult::Canceled,
+                Key::Named(NamedKey::Enter) => return self.accept(true),
+                _ => {}
+            },
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 let s = *scale_factor as f32;
                 let _ = self.surface.window.request_inner_size(winit::dpi::PhysicalSize::new(

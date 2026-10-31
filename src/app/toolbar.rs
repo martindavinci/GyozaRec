@@ -233,7 +233,7 @@ impl Toolbar {
                     return Some(ToolbarAction::Zoom(if up > 0.0 { 1 } else { -1 }));
                 }
             }
-            WindowEvent::KeyboardInput { event, .. }
+            WindowEvent::KeyboardInput { event, is_synthetic: false, .. }
                 if event.state == ElementState::Pressed && self.modifiers.control_key() =>
             {
                 if let Key::Character(c) = &event.logical_key {

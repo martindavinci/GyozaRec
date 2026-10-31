@@ -2,10 +2,11 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.5.1] - 2026-10-31
+## [0.6.0] - 2026-10-31
 
 ### Added
 - The editor reads QR codes and barcodes in the picture (QR, Data Matrix, Aztec, PDF417, EAN, UPC, Code 128 and more): a line under the tool bar shows each one's text with Copy and, for web addresses, Open link. Light codes on a dark or colored background, and codes with very large, very small, rounded, dotted or gradient modules, are read too. Everything is read on this computer.
+- THIRD-PARTY-LICENSES.txt next to the program, in the installer and the portable zip: the licenses of the libraries GyozaRec is built from.
 
 ### Fixed
 - Esc on a question box (such as "Save it?" in the editor) no longer reopens it again and again.
@@ -123,7 +124,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
-[0.5.1]: https://github.com/martindavinci/GyozaRec/compare/v0.5.0...v0.5.1
+[0.6.0]: https://github.com/martindavinci/GyozaRec/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/martindavinci/GyozaRec/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/martindavinci/GyozaRec/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/martindavinci/GyozaRec/compare/v0.4.3...v0.4.4

@@ -66,14 +66,18 @@ fn luma(img: &PixelBuffer) -> Vec<u8> {
 }
 
 /// Every QR code and barcode in `img`, each text once, top to bottom.
+/// Light codes on a dark background (common on dark pages and branded
+/// codes) are read too, from the picture with its greys inverted.
 pub fn scan(img: &PixelBuffer) -> Vec<FoundCode> {
     let (w, h) = (img.width(), img.height());
     if w <= 0 || h <= 0 {
         return Vec::new();
     }
-    let Ok(results) = rxing::helpers::detect_multiple_in_luma(luma(img), w as u32, h as u32) else {
-        return Vec::new();
-    };
+    let grey = luma(img);
+    let inverted: Vec<u8> = grey.iter().map(|v| 255 - v).collect();
+    let results = [grey, inverted].into_iter().flat_map(|l| {
+        rxing::helpers::detect_multiple_in_luma(l, w as u32, h as u32).unwrap_or_default()
+    });
     let mut found: Vec<(f32, FoundCode)> = Vec::new();
     for r in results {
         let text = r.getText().trim().to_string();
@@ -137,6 +141,20 @@ mod tests {
             scan(&img),
             vec![FoundCode { kind: "QR Code", text: "https://example.com/a".into() }]
         );
+    }
+
+    #[test]
+    fn reads_a_light_qr_code_on_a_dark_background() {
+        let mut img = picture_with(
+            &[("https://example.com/dark", BarcodeFormat::QR_CODE, 40, 40)],
+            (300, 300),
+            4,
+        );
+        for p in img.bgra.as_chunks_mut::<4>().0 {
+            let v = 255 - p[0];
+            p.copy_from_slice(&[v, v, v, 255]);
+        }
+        assert_eq!(scan(&img).first().map(|f| f.text.as_str()), Some("https://example.com/dark"));
     }
 
     #[test]

@@ -84,5 +84,7 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save_question: "是否保存对 {name} 的更改？",
     editor_save_new_question: "{name} 尚未保存。是否保存？",
     editor_save_failed: "无法保存图片：{error}",
+    code_copied: "已复制",
+    code_open_link: "打开链接",
     crash_message: "GyozaRec 因错误而退出。详细信息已保存到 {path}",
 };

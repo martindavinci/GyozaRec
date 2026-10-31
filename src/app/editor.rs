@@ -3,6 +3,7 @@
 use super::AppEvent;
 use super::surface::WindowSurface;
 use gyozarec::capture::ClipboardService;
+use gyozarec::codes::FoundCode;
 use gyozarec::editor::{
     Annotation, Document, PALETTE, Point, SIZES, Size, TOOLS, Tool, View, draw, pixel_block,
 };
@@ -36,6 +37,11 @@ const ID_SAVE_AS: u32 = 304;
 const ID_SAVE: u32 = 305;
 const ID_NEW: u32 = 306;
 const ID_OPEN: u32 = 307;
+/// Copy and Open link of each QR code or barcode row, by index.
+const ID_CODE_COPY: u32 = 400;
+const ID_CODE_OPEN: u32 = 450;
+/// Rows of codes shown at most; the rest stay in the picture.
+const MAX_CODES: usize = 3;
 /// The bar's widget ids, for the README screenshot.
 #[cfg(test)]
 pub mod bar_ids {
@@ -197,6 +203,69 @@ fn build_bar(width: f32, s: &BarState, texts: &Texts, fonts: &Fonts) -> Ui {
     }
     widgets.extend(right);
     Ui::new(widgets)
+}
+
+/// `text` on one line, cut with "…" to fit `max_w` logical units.
+fn fit_line(text: &str, max_w: f32, fonts: &Fonts) -> String {
+    let px = theme::current().font_px;
+    let line: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+    if measure_text(fonts, &line, px, false).0 <= max_w {
+        return line;
+    }
+    let chars: Vec<char> = line.chars().collect();
+    let (mut lo, mut hi) = (0, chars.len());
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        let cut = format!("{}…", chars[..mid].iter().collect::<String>().trim_end());
+        if measure_text(fonts, &cut, px, false).0 <= max_w {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    format!("{}…", chars[..lo].iter().collect::<String>().trim_end())
+}
+
+/// One row per QR code or barcode under the bar, from `top`: its kind, its
+/// text cut to the window, Copy and, for web addresses, Open link.
+fn code_rows(
+    top: f32,
+    width: f32,
+    codes: &[FoundCode],
+    copied: Option<usize>,
+    texts: &Texts,
+    fonts: &Fonts,
+) -> Vec<Widget> {
+    let t = theme::current();
+    let mut y = top;
+    let mut widgets = Vec::new();
+    for (i, code) in codes.iter().take(MAX_CODES).enumerate() {
+        let n = i as u32;
+        let copy = if copied == Some(i) { texts.code_copied } else { texts.editor_copy };
+        let button = |label: &str| WidgetKind::Button { label: label.into(), dropdown: false };
+        let mut buttons = vec![(ID_CODE_COPY + n, button(copy))];
+        if code.is_web_link() {
+            buttons.push((ID_CODE_OPEN + n, button(texts.code_open_link)));
+        }
+        let kind = (u32::MAX, WidgetKind::Label { text: code.kind.into(), color: t.accent });
+        let fixed = layout_row(
+            std::iter::once(kind.clone()).chain(buttons.clone()).collect(),
+            0.0,
+            0.0,
+            8.0,
+            fonts,
+            t,
+        );
+        let fixed_w = fixed.last().map_or(0.0, |w| w.rect.right()) + 8.0;
+        let text = fit_line(&code.text, (width - 2.0 * PAD - fixed_w).max(40.0), fonts);
+        let label = (u32::MAX, WidgetKind::Label { text, color: t.text });
+        let items = [kind, label].into_iter().chain(buttons).collect();
+        let row = layout_row(items, PAD, y, 8.0, fonts, t);
+        y = row.iter().map(|w| w.rect.bottom()).fold(y, f32::max) + 4.0;
+        widgets.extend(row);
+    }
+    widgets
 }
 
 /// A drag on the canvas, in image pixels.
@@ -472,6 +541,10 @@ pub struct EditorWindow {
     /// Puts every edit on the clipboard, when copying is on.
     copies: Option<CopyQueue>,
     copied_version: u64,
+    /// QR codes and barcodes read from the picture, once the scan is done.
+    codes: Vec<FoundCode>,
+    /// The code whose text was copied last, marked on its row.
+    copied_code: Option<usize>,
 }
 
 impl EditorWindow {
@@ -508,7 +581,7 @@ impl EditorWindow {
         let window = event_loop.create_window(attrs).ok()?;
         let mut editor = EditorWindow {
             surface: WindowSurface::new(window),
-            doc: Document::new(image),
+            doc: Document::new(image.clone()),
             path,
             on_disk,
             settings,
@@ -527,8 +600,11 @@ impl EditorWindow {
             saves: SaveTracker::default(),
             copies: None,
             copied_version: 0,
+            codes: Vec::new(),
+            copied_code: None,
             proxy,
         };
+        editor.scan_codes(image);
         if settings.copy_to_clipboard {
             editor.copies = Some(CopyQueue::start(editor.fonts.clone(), |img| {
                 Win32Clipboard.set_image(img);
@@ -537,6 +613,25 @@ impl EditorWindow {
         editor.rebuild();
         editor.focus();
         Some(editor)
+    }
+
+    /// Reads QR codes and barcodes on a thread; found ones come back as
+    /// `AppEvent::EditorCodes`.
+    fn scan_codes(&self, image: Arc<PixelBuffer>) {
+        let (proxy, window) = (self.proxy.clone(), self.id());
+        let _ = std::thread::Builder::new().name("gyozarec-codes".into()).spawn(move || {
+            let codes = gyozarec::codes::scan(&image);
+            if !codes.is_empty() {
+                let _ = proxy.send_event(AppEvent::EditorCodes { window, codes });
+            }
+        });
+    }
+
+    /// The scan found these codes: they get rows under the bar.
+    pub fn show_codes(&mut self, codes: Vec<FoundCode>) {
+        self.codes = codes;
+        self.copied_code = None;
+        self.rebuild();
     }
 
     pub fn id(&self) -> WindowId {
@@ -617,7 +712,11 @@ impl EditorWindow {
             self.copied_version = self.doc.version();
             copies.push(self.doc.snapshot());
         }
-        let mut ui = build_bar(self.logical_size().0, &self.bar_state(), self.texts, &self.fonts);
+        let width = self.logical_size().0;
+        let mut ui = build_bar(width, &self.bar_state(), self.texts, &self.fonts);
+        let top = ui.bounds().bottom() + 6.0;
+        let rows = code_rows(top, width, &self.codes, self.copied_code, self.texts, &self.fonts);
+        ui.widgets.extend(rows);
         ui.carry_state_from(&self.ui);
         self.ui = ui;
         self.surface.window.request_redraw();
@@ -914,6 +1013,23 @@ impl EditorWindow {
             ID_NEW => return self.run(EditorCommand::New),
             ID_OPEN => return self.run(EditorCommand::OpenFile),
             ID_SIZE => self.show_size_menu(),
+            id if (ID_CODE_COPY..ID_CODE_COPY + MAX_CODES as u32).contains(&id) => {
+                let i = (id - ID_CODE_COPY) as usize;
+                if let Some(code) = self.codes.get(i)
+                    && Win32Clipboard.set_text(&code.text)
+                {
+                    self.copied_code = Some(i);
+                }
+            }
+            id if (ID_CODE_OPEN..ID_CODE_OPEN + MAX_CODES as u32).contains(&id) => {
+                if let Some(code) = self.codes.get((id - ID_CODE_OPEN) as usize)
+                    && code.is_web_link()
+                {
+                    use gyozarec::capture::FileRevealer;
+                    let link = std::path::Path::new(code.text.trim());
+                    gyozarec::platform::ExplorerRevealer.open(link);
+                }
+            }
             id if (ID_TOOL..ID_TOOL + TOOLS.len() as u32).contains(&id) => {
                 self.commit_text();
                 self.tool = TOOLS[(id - ID_TOOL) as usize];
@@ -1261,6 +1377,64 @@ mod tests {
         }
     }
 
+    fn code(kind: &'static str, text: &str) -> FoundCode {
+        FoundCode { kind, text: text.into() }
+    }
+
+    #[test]
+    fn code_rows_offer_open_link_only_for_web_addresses() {
+        let fonts = Fonts::for_languages(&Language::ALL);
+        let codes = [code("QR Code", "https://example.com"), code("EAN-13", "5901234123457")];
+        let rows = Ui::new(code_rows(50.0, 900.0, &codes, None, Language::En.texts(), &fonts));
+        assert!(rows.widget(ID_CODE_COPY).is_some() && rows.widget(ID_CODE_OPEN).is_some());
+        assert!(rows.widget(ID_CODE_COPY + 1).is_some());
+        assert!(rows.widget(ID_CODE_OPEN + 1).is_none(), "a number is not a link");
+        let (first, second) =
+            (rows.widget(ID_CODE_COPY).unwrap().rect, rows.widget(ID_CODE_COPY + 1).unwrap().rect);
+        assert!(first.y >= 50.0 && second.y >= first.bottom(), "one row each, below the bar");
+    }
+
+    #[test]
+    fn code_rows_fit_the_window_in_every_language() {
+        let fonts = Fonts::for_languages(&Language::ALL);
+        let long = format!("https://example.com/{}", "a".repeat(400));
+        let codes = [code("QR Code", &long)];
+        for lang in Language::ALL {
+            let rows = code_rows(0.0, 500.0, &codes, Some(0), lang.texts(), &fonts);
+            let right = rows.iter().map(|w| w.rect.right()).fold(0.0, f32::max);
+            assert!(right <= 500.0 - PAD + 0.5, "{lang:?}: {right}");
+            let copied = rows.iter().find(|w| w.id == ID_CODE_COPY).unwrap();
+            let label =
+                WidgetKind::Button { label: lang.texts().code_copied.into(), dropdown: false };
+            assert_eq!(copied.kind, label, "{lang:?}");
+        }
+    }
+
+    #[test]
+    fn code_rows_show_at_most_three_codes_on_one_line_each() {
+        let fonts = Fonts::embedded();
+        let codes: Vec<_> = (0..5).map(|i| code("QR Code", &format!("line {i}\nnext"))).collect();
+        let rows = code_rows(0.0, 900.0, &codes, None, Language::En.texts(), &fonts);
+        assert_eq!(rows.iter().filter(|w| w.id >= ID_CODE_COPY && w.id < ID_CODE_OPEN).count(), 3);
+        let texts: Vec<_> = rows
+            .iter()
+            .filter_map(|w| match &w.kind {
+                WidgetKind::Label { text, .. } if text.starts_with("line") => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(texts, ["line 0 next", "line 1 next", "line 2 next"]);
+    }
+
+    #[test]
+    fn fit_line_keeps_short_text_and_cuts_long_text() {
+        let fonts = Fonts::embedded();
+        assert_eq!(fit_line("short", 500.0, &fonts), "short");
+        let cut = fit_line(&"x".repeat(300), 120.0, &fonts);
+        assert!(cut.ends_with('…') && cut.len() < 300);
+        assert!(measure_text(&fonts, &cut, theme::current().font_px, false).0 <= 120.0);
+    }
+
     /// Draws the editor offscreen into `%TEMP%\gyozarec-editor-<lang>.png`.
     #[test]
     #[ignore = "desktop"]
@@ -1307,7 +1481,20 @@ mod tests {
                 can_redo: false,
                 saving: false,
             };
-            let ui = build_bar(1000.0, &state, lang.texts(), &fonts);
+            let mut ui = build_bar(1000.0, &state, lang.texts(), &fonts);
+            let codes = [
+                code("QR Code", "https://github.com/martindavinci/GyozaRec/releases/latest"),
+                code("EAN-13", "5901234123457"),
+            ];
+            let rows = code_rows(
+                ui.bounds().bottom() + 6.0,
+                1000.0,
+                &codes,
+                Some(1),
+                lang.texts(),
+                &fonts,
+            );
+            ui.widgets.extend(rows);
             let top = ui.bounds().bottom() + PAD;
             let size = PixelSize { width: 1000, height: 640 };
             let mut p = Painter::new(size, 1.0);

@@ -93,5 +93,7 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save_question: "Salvar as alterações em {name}?",
     editor_save_new_question: "{name} ainda não foi salva. Salvar?",
     editor_save_failed: "Não foi possível salvar a imagem: {error}",
+    code_copied: "Copiado",
+    code_open_link: "Abrir link",
     crash_message: "O GyozaRec foi fechado por causa de um erro. Os detalhes foram salvos em {path}",
 };

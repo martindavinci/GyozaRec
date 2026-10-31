@@ -98,5 +98,7 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save_question: "¿Guardar los cambios en {name}?",
     editor_save_new_question: "{name} aún no se ha guardado. ¿Guardarla?",
     editor_save_failed: "No se pudo guardar la imagen: {error}",
+    code_copied: "Copiado",
+    code_open_link: "Abrir enlace",
     crash_message: "GyozaRec se cerró por un error. Los detalles se guardaron en {path}",
 };

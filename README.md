@@ -53,6 +53,7 @@ With **Image captures** set to **Copy and open the editor, don't save**, nothing
 </p>
 
 - Tools: **arrow**, **rectangle**, **pen**, **highlighter**, **text** (click, type, Enter), **pixelate** (coarser with a bigger size), **redact** (a solid box in the chosen color) and **crop**; six colors and three sizes.
+- **QR codes and barcodes** in the picture are read as it opens (QR, Micro QR, Data Matrix, Aztec, PDF417, EAN, UPC, Code 39/93/128, ITF, Codabar…): each gets a line under the tool bar with its text, **Copy** and, for web addresses (http and https only), **Open link**. Nothing is opened until you click, and the reading happens on your computer.
 - **Undo** and **Redo** (Ctrl+Z, Ctrl+Y). With **Copy to clipboard** on, every change also goes to the clipboard, so the edited image is always ready to paste.
 - **New** (Ctrl+N) captures another image with the current area; the editor gives way to it when it has nothing unsaved. **Open…** (Ctrl+O) edits a PNG or JPG from disk in another window.
 - **Save** (Ctrl+S) overwrites the capture and copies it again when **Copy to clipboard** is on; **Save as…** (Ctrl+Shift+S) writes a PNG or JPG elsewhere; **Copy** (Ctrl+C) copies the edited image.

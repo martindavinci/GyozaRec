@@ -98,5 +98,7 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save_question: "Enregistrer les modifications de {name} ?",
     editor_save_new_question: "{name} n’a pas encore été enregistrée. L’enregistrer ?",
     editor_save_failed: "Impossible d’enregistrer l’image : {error}",
+    code_copied: "Copié",
+    code_open_link: "Ouvrir le lien",
     crash_message: "GyozaRec s'est arrêté à cause d'une erreur. Les détails ont été enregistrés dans {path}",
 };

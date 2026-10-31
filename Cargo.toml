@@ -45,6 +45,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = "0.4"
 dirs = "7"
+# QR codes and barcodes in the editor; decoding only, no image codecs.
+rxing = { version = "0.9", default-features = false, features = ["decoders", "multi_barcode_readers", "full_barcode_format_support", "encoding_rs"] }
 thiserror = "2"
 
 [target.'cfg(windows)'.dependencies]
@@ -72,6 +74,7 @@ windows = { version = "0.62", features = [
 
 [dev-dependencies]
 tempfile = "3"
+rxing = { version = "0.9", default-features = false, features = ["encoders"] }
 
 [build-dependencies]
 embed-resource = "3"
@@ -80,3 +83,6 @@ embed-resource = "3"
 lto = true
 codegen-units = 1
 strip = true
+
+[profile.release.package.rxing]
+opt-level = "s"

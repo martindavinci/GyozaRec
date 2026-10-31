@@ -220,6 +220,10 @@ pub struct Texts {
     pub editor_save_new_question: &'static str,
     /// `{error}` is the reason.
     pub editor_save_failed: &'static str,
+    /// On a QR code or barcode's row in the editor, once its text is copied.
+    pub code_copied: &'static str,
+    /// Opens a web address read from a QR code in the browser.
+    pub code_open_link: &'static str,
     /// Shown when the app ends on an error; `{path}` is the crash log.
     pub crash_message: &'static str,
 }
@@ -331,6 +335,8 @@ mod tests {
                 t.editor_copy,
                 t.editor_save_question,
                 t.editor_save_failed,
+                t.code_copied,
+                t.code_open_link,
                 t.err_video_unreadable,
                 t.convert_video,
                 t.converting,

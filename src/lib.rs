@@ -3,6 +3,7 @@ pub mod autostart;
 pub mod bridge;
 pub mod capture;
 pub mod clock;
+pub mod codes;
 pub mod convert;
 pub mod crash;
 pub mod editor;

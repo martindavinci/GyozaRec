@@ -26,6 +26,14 @@ fn dib_bytes(img: &PixelBuffer) -> Vec<u8> {
 
 pub struct Win32Clipboard;
 
+impl Win32Clipboard {
+    /// Puts `text` on the clipboard as Unicode text.
+    pub fn set_text(&self, text: &str) -> bool {
+        let Ok(_open) = Clipboard::new_attempts(ATTEMPTS) else { return false };
+        clipboard_win::empty().is_ok() && formats::Unicode.write_clipboard(&text).is_ok()
+    }
+}
+
 impl ClipboardService for Win32Clipboard {
     fn set_image(&self, img: &PixelBuffer) -> bool {
         let Ok(_open) = Clipboard::new_attempts(ATTEMPTS) else { return false };

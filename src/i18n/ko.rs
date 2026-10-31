@@ -84,5 +84,7 @@ pub(super) const TEXTS: Texts = Texts {
     editor_save_question: "{name}의 변경 내용을 저장할까요?",
     editor_save_new_question: "{name}을(를) 아직 저장하지 않았습니다. 저장할까요?",
     editor_save_failed: "이미지를 저장할 수 없습니다: {error}",
+    code_copied: "복사됨",
+    code_open_link: "링크 열기",
     crash_message: "오류로 인해 GyozaRec이 종료되었습니다. 자세한 내용은 {path}에 저장되었습니다",
 };

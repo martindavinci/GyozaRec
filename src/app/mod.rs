@@ -94,6 +94,11 @@ pub enum AppEvent {
         version: u64,
         result: Result<(), String>,
     },
+    /// QR codes or barcodes read from an editor's picture.
+    EditorCodes {
+        window: WindowId,
+        codes: Vec<gyozarec::codes::FoundCode>,
+    },
 }
 
 /// News from the video conversion thread.
@@ -897,6 +902,11 @@ impl ApplicationHandler<AppEvent> for App {
                     && self.editors[i].saved(version, result) == editor::EditorResult::Closed
                 {
                     self.editors.remove(i);
+                }
+            }
+            AppEvent::EditorCodes { window, codes } => {
+                if let Some(e) = self.editors.iter_mut().find(|e| e.id() == window) {
+                    e.show_codes(codes);
                 }
             }
             AppEvent::Instance(InstanceCommand::Quick(action)) => self.start_quick(action),

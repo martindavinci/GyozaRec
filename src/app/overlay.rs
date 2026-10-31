@@ -500,6 +500,7 @@ impl OverlaySession {
             }
             WindowEvent::KeyboardInput {
                 event: KeyEvent { logical_key: Key::Named(NamedKey::Escape), state, .. },
+                is_synthetic: false,
                 ..
             } if *state == ElementState::Pressed => self.finish(None),
             WindowEvent::MouseInput {

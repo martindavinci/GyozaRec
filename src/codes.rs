@@ -102,11 +102,42 @@ fn shrink(grey: &[u8], w: usize, h: usize, k: usize) -> (Vec<u8>, usize, usize) 
     (out, nw, nh)
 }
 
-/// Sizes the picture is read at: whole, and smaller where it stays big
-/// enough. Shrinking blends stylised modules (rounded, gradient, gaps) into
-/// solid cells that the readers recognise.
+/// `grey` (`w` × `h`) at twice its size, by bilinear interpolation.
+fn grow(grey: &[u8], w: usize, h: usize) -> (Vec<u8>, usize, usize) {
+    let (nw, nh) = (w * 2, h * 2);
+    let at = |x: usize, y: usize| f32::from(grey[y * w + x]);
+    let mut out = Vec::with_capacity(nw * nh);
+    for y in 0..nh {
+        let fy = ((y as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (h - 1) as f32);
+        let (y0, ay) = (fy as usize, fy.fract());
+        let y1 = (y0 + 1).min(h - 1);
+        for x in 0..nw {
+            let fx = ((x as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (w - 1) as f32);
+            let (x0, ax) = (fx as usize, fx.fract());
+            let x1 = (x0 + 1).min(w - 1);
+            let top = at(x0, y0) * (1.0 - ax) + at(x1, y0) * ax;
+            let bottom = at(x0, y1) * (1.0 - ax) + at(x1, y1) * ax;
+            out.push((top * (1.0 - ay) + bottom * ay).round() as u8);
+        }
+    }
+    (out, nw, nh)
+}
+
+/// How the picture is resized before reading: 1 is as is, 2 and 4 shrink,
+/// `GROW` doubles.
+const GROW: usize = 0;
+
+/// Sizes the picture is read at: whole; smaller where it stays big enough,
+/// which blends stylised modules (rounded, gradient, gaps) into solid cells;
+/// doubled when small, which gives tiny modules (dense codes of 3–4 px per
+/// module) the size the readers need.
 fn scales(w: usize, h: usize) -> impl Iterator<Item = usize> {
-    [1, 2, 4].into_iter().filter(move |k| *k == 1 || w.min(h) / k >= 60)
+    let small = w.max(h) <= 600;
+    [1, 2, 4, GROW].into_iter().filter(move |k| match *k {
+        1 => true,
+        GROW => small,
+        k => w.min(h) / k >= 60,
+    })
 }
 
 /// Every QR code and barcode in `img`, each text once, top to bottom.
@@ -121,12 +152,16 @@ pub fn scan(img: &PixelBuffer) -> Vec<FoundCode> {
     let grey = luma(img);
     let mut found: Vec<(f32, FoundCode)> = Vec::new();
     for k in scales(w, h) {
-        let (small, sw, sh) = if k == 1 { (grey.clone(), w, h) } else { shrink(&grey, w, h, k) };
-        let inverted: Vec<u8> = small.iter().map(|v| 255 - v).collect();
-        for (l, global) in [(&small, false), (&small, true), (&inverted, false), (&inverted, true)]
-        {
-            for r in detect(l, sw as u32, sh as u32, global) {
-                add(&mut found, &r, k as f32);
+        let (view, vw, vh) = match k {
+            1 => (grey.clone(), w, h),
+            GROW => grow(&grey, w, h),
+            k => shrink(&grey, w, h, k),
+        };
+        let back = if k == GROW { 0.5 } else { k as f32 };
+        let inverted: Vec<u8> = view.iter().map(|v| 255 - v).collect();
+        for (l, global) in [(&view, false), (&view, true), (&inverted, false), (&inverted, true)] {
+            for r in detect(l, vw as u32, vh as u32, global) {
+                add(&mut found, &r, back);
             }
         }
     }
@@ -135,7 +170,7 @@ pub fn scan(img: &PixelBuffer) -> Vec<FoundCode> {
 }
 
 /// Keeps `r` unless its text is already there, with its top edge in the
-/// picture's own pixels (`k` is how much it was shrunk).
+/// picture's own pixels (`k` turns the read view's pixels back into them).
 fn add(found: &mut Vec<(f32, FoundCode)>, r: &rxing::RXingResult, k: f32) {
     let text = r.getText().trim().to_string();
     if text.is_empty() || found.iter().any(|(_, f)| f.text == text) {
@@ -291,10 +326,18 @@ mod tests {
     }
 
     #[test]
-    fn small_pictures_are_read_only_whole() {
-        assert_eq!(scales(100, 100).collect::<Vec<_>>(), [1]);
-        assert_eq!(scales(160, 400).collect::<Vec<_>>(), [1, 2]);
+    fn small_pictures_are_also_read_doubled_and_large_ones_shrunk() {
+        assert_eq!(scales(100, 100).collect::<Vec<_>>(), [1, GROW]);
+        assert_eq!(scales(160, 400).collect::<Vec<_>>(), [1, 2, GROW]);
         assert_eq!(scales(3840, 2160).collect::<Vec<_>>(), [1, 2, 4]);
+    }
+
+    #[test]
+    fn grow_doubles_and_blends_between_pixels() {
+        let (out, w, h) = grow(&[0, 200], 2, 1);
+        assert_eq!((w, h), (4, 2));
+        assert_eq!(&out[..4], [0, 50, 150, 200]);
+        assert_eq!(out[..4], out[4..]);
     }
 
     #[test]

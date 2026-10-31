@@ -65,6 +65,50 @@ fn luma(img: &PixelBuffer) -> Vec<u8> {
         .collect()
 }
 
+/// Codes in a grey picture. The local threshold copes with uneven light;
+/// the global one with modules larger than its blocks (a QR code opened full
+/// size), where the local one sees no contrast.
+fn detect(grey: &[u8], w: u32, h: u32, global: bool) -> Vec<rxing::RXingResult> {
+    use rxing::common::{GlobalHistogramBinarizer, HybridBinarizer};
+    use rxing::multi::{GenericMultipleBarcodeReader, MultipleBarcodeReader};
+    let Ok(source) = rxing::Luma8LuminanceSource::new(grey.to_vec(), w, h) else {
+        return Vec::new();
+    };
+    let mut reader = GenericMultipleBarcodeReader::new(rxing::MultiUseMultiFormatReader::default());
+    let hints = rxing::DecodeHints { TryHarder: Some(true), ..Default::default() };
+    let found = if global {
+        let mut bitmap = rxing::BinaryBitmap::new(GlobalHistogramBinarizer::new(source));
+        reader.decode_multiple_with_hints(&mut bitmap, &hints)
+    } else {
+        let mut bitmap = rxing::BinaryBitmap::new(HybridBinarizer::new(source));
+        reader.decode_multiple_with_hints(&mut bitmap, &hints)
+    };
+    found.unwrap_or_default()
+}
+
+/// `grey` (`w` × `h`) at 1/`k` of its size, each pixel the mean of a k×k block.
+fn shrink(grey: &[u8], w: usize, h: usize, k: usize) -> (Vec<u8>, usize, usize) {
+    let (nw, nh) = (w / k, h / k);
+    let mut out = Vec::with_capacity(nw * nh);
+    for y in 0..nh {
+        for x in 0..nw {
+            let block = (0..k).flat_map(|dy| {
+                let row = (y * k + dy) * w + x * k;
+                grey[row..row + k].iter().map(|v| u32::from(*v))
+            });
+            out.push((block.sum::<u32>() / (k * k) as u32) as u8);
+        }
+    }
+    (out, nw, nh)
+}
+
+/// Sizes the picture is read at: whole, and smaller where it stays big
+/// enough. Shrinking blends stylised modules (rounded, gradient, gaps) into
+/// solid cells that the readers recognise.
+fn scales(w: usize, h: usize) -> impl Iterator<Item = usize> {
+    [1, 2, 4].into_iter().filter(move |k| *k == 1 || w.min(h) / k >= 60)
+}
+
 /// Every QR code and barcode in `img`, each text once, top to bottom.
 /// Light codes on a dark background (common on dark pages and branded
 /// codes) are read too, from the picture with its greys inverted.
@@ -73,22 +117,32 @@ pub fn scan(img: &PixelBuffer) -> Vec<FoundCode> {
     if w <= 0 || h <= 0 {
         return Vec::new();
     }
+    let (w, h) = (w as usize, h as usize);
     let grey = luma(img);
-    let inverted: Vec<u8> = grey.iter().map(|v| 255 - v).collect();
-    let results = [grey, inverted].into_iter().flat_map(|l| {
-        rxing::helpers::detect_multiple_in_luma(l, w as u32, h as u32).unwrap_or_default()
-    });
     let mut found: Vec<(f32, FoundCode)> = Vec::new();
-    for r in results {
-        let text = r.getText().trim().to_string();
-        if text.is_empty() || found.iter().any(|(_, f)| f.text == text) {
-            continue;
+    for k in scales(w, h) {
+        let (small, sw, sh) = if k == 1 { (grey.clone(), w, h) } else { shrink(&grey, w, h, k) };
+        let inverted: Vec<u8> = small.iter().map(|v| 255 - v).collect();
+        for (l, global) in [(&small, false), (&small, true), (&inverted, false), (&inverted, true)]
+        {
+            for r in detect(l, sw as u32, sh as u32, global) {
+                add(&mut found, &r, k as f32);
+            }
         }
-        let top = r.getRXingResultPoints().iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
-        found.push((top, FoundCode { kind: kind_name(r.getBarcodeFormat()), text }));
     }
     found.sort_by(|a, b| a.0.total_cmp(&b.0));
     found.into_iter().map(|(_, f)| f).collect()
+}
+
+/// Keeps `r` unless its text is already there, with its top edge in the
+/// picture's own pixels (`k` is how much it was shrunk).
+fn add(found: &mut Vec<(f32, FoundCode)>, r: &rxing::RXingResult, k: f32) {
+    let text = r.getText().trim().to_string();
+    if text.is_empty() || found.iter().any(|(_, f)| f.text == text) {
+        return;
+    }
+    let top = r.getRXingResultPoints().iter().map(|p| p.y * k).fold(f32::INFINITY, f32::min);
+    found.push((top, FoundCode { kind: kind_name(r.getBarcodeFormat()), text }));
 }
 
 #[cfg(test)]
@@ -158,6 +212,20 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_qr_code_with_very_large_modules() {
+        // About 45 px per module, like a QR code opened full size in a viewer.
+        let text = "http://www.example.it/it/qrcode";
+        let img = picture_with(&[(text, BarcodeFormat::QR_CODE, 0, 0)], (1600, 1600), 42);
+        let mut tinted = img.clone();
+        for p in tinted.bgra.as_chunks_mut::<4>().0 {
+            if p[0] == 0 {
+                p.copy_from_slice(&[0, 128, 255, 255]); // orange modules
+            }
+        }
+        assert_eq!(scan(&tinted).first().map(|f| f.text.as_str()), Some(text));
+    }
+
+    #[test]
     fn reads_an_ean13_barcode() {
         let img = picture_with(&[("5901234123457", BarcodeFormat::EAN_13, 30, 30)], (400, 140), 2);
         assert_eq!(scan(&img), vec![FoundCode { kind: "EAN-13", text: "5901234123457".into() }]);
@@ -214,6 +282,19 @@ mod tests {
             }
         }
         assert_eq!(scan(&img).first().map(|f| f.text.as_str()), Some("lasso"));
+    }
+
+    #[test]
+    fn shrink_averages_blocks() {
+        let grey = [0, 255, 10, 10, 255, 0, 10, 10];
+        assert_eq!(shrink(&grey, 4, 2, 2), (vec![127, 10], 2, 1));
+    }
+
+    #[test]
+    fn small_pictures_are_read_only_whole() {
+        assert_eq!(scales(100, 100).collect::<Vec<_>>(), [1]);
+        assert_eq!(scales(160, 400).collect::<Vec<_>>(), [1, 2]);
+        assert_eq!(scales(3840, 2160).collect::<Vec<_>>(), [1, 2, 4]);
     }
 
     #[test]

@@ -5,7 +5,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 ## [0.5.1] - 2026-10-31
 
 ### Added
-- The editor reads QR codes and barcodes in the picture (QR, Data Matrix, Aztec, PDF417, EAN, UPC, Code 128 and more): a line under the tool bar shows each one's text with Copy and, for web addresses, Open link. Light codes on a dark or colored background, and codes with very large, rounded or gradient modules, are read too. Everything is read on this computer.
+- The editor reads QR codes and barcodes in the picture (QR, Data Matrix, Aztec, PDF417, EAN, UPC, Code 128 and more): a line under the tool bar shows each one's text with Copy and, for web addresses, Open link. Light codes on a dark or colored background, and codes with very large, very small, rounded or gradient modules, are read too. Everything is read on this computer.
 
 ### Fixed
 - Esc on a question box (such as "Save it?" in the editor) no longer reopens it again and again.

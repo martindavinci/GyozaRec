@@ -127,4 +127,4 @@ cargo xtask dist
 
 ## License
 
-GPL-3.0-or-later, see [`LICENSE`](LICENSE). The name "GyozaRec", the name "Martin DaVinci" and the GyozaRec logo are not licensed as trademarks: a modified version you distribute needs a different name and a different icon, see [`TRADEMARKS.md`](TRADEMARKS.md). The Nunito font is distributed under the SIL Open Font License, see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt).
+GPL-3.0-or-later, see [`LICENSE`](LICENSE). The name "GyozaRec", the name "Martin DaVinci" and the GyozaRec logo are not licensed as trademarks: a modified version you distribute needs a different name and a different icon, see [`TRADEMARKS.md`](TRADEMARKS.md). The Nunito font is distributed under the SIL Open Font License, see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt). The libraries GyozaRec is built from keep their own licenses, listed in [`packaging/THIRD-PARTY-LICENSES.txt`](packaging/THIRD-PARTY-LICENSES.txt) and shipped next to the program (`cargo xtask licenses` refreshes the list).

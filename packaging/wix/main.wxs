@@ -93,6 +93,16 @@
             </Component>
         </DirectoryRef>
 
+        <!-- The licenses of the libraries inside gyozarec.exe (cargo xtask licenses). -->
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="ThirdPartyNotices" Guid="07FF26F6-EFF0-452D-BFB8-7869B3B19E1A" Win64="$(var.Win64)">
+                <File Id="ThirdPartyTxt" Name="THIRD-PARTY-LICENSES.txt"
+                      Source="$(var.RepoRoot)packaging\THIRD-PARTY-LICENSES.txt"/>
+                <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}"
+                               Name="ThirdPartyNotices" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="StartMenuShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut"
@@ -113,6 +123,7 @@
         <Feature Id="MainProgram" Title="{{product_name}}" Level="1" Absent="disallow" AllowAdvertise="no">
             <ComponentRef Id="MainExecutable"/>
             <ComponentRef Id="LicenseNotices"/>
+            <ComponentRef Id="ThirdPartyNotices"/>
             <ComponentRef Id="StartMenuShortcut"/>
         </Feature>
 

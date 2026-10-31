@@ -9,3 +9,4 @@ If the folder is not writable (for example inside Program Files), move it elsewh
 
 GyozaRec: GPL-3.0-or-later, see LICENSE.txt.
 Nunito font: SIL Open Font License, see OFL.txt.
+Other libraries: see THIRD-PARTY-LICENSES.txt.

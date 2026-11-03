@@ -108,7 +108,7 @@ Requires Windows 10 (version 2004 or later) or Windows 11, 64-bit. macOS and Lin
 
 If GyozaRec ever stops because of an error, the details are saved to `crash.log` next to the settings; attaching it to a bug report helps.
 
-**Accessibility:** the interface is drawn by GyozaRec itself, so screen readers cannot read it yet and the windows do not support moving between controls with Tab.
+**Accessibility:** the windows are drawn by GyozaRec itself, so screen readers cannot read them and Tab does not move between their controls. Captures can also start without them: from the [command line](#command-line), from the notification area icon's menu, or with global shortcuts (turned on in **Options**).
 
 ## Building
 

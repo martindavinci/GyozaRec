@@ -103,6 +103,15 @@
             </Component>
         </DirectoryRef>
 
+        <!-- The copyright notice and the GPL section 7(e) term on the names and logos. -->
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="TrademarksNotice" Guid="909A328C-72E3-4484-BA3C-6706751CA07D" Win64="$(var.Win64)">
+                <File Id="TrademarksTxt" Name="TRADEMARKS.txt" Source="$(var.RepoRoot)TRADEMARKS.md"/>
+                <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}"
+                               Name="TrademarksNotice" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="StartMenuShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut"
@@ -124,6 +133,7 @@
             <ComponentRef Id="MainExecutable"/>
             <ComponentRef Id="LicenseNotices"/>
             <ComponentRef Id="ThirdPartyNotices"/>
+            <ComponentRef Id="TrademarksNotice"/>
             <ComponentRef Id="StartMenuShortcut"/>
         </Feature>
 

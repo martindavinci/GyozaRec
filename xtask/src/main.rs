@@ -93,10 +93,12 @@ fn dist() -> Result<(), String> {
     let (readme, license, ofl) =
         (text("packaging/README.txt")?, text("LICENSE")?, text("assets/fonts/OFL.txt")?);
     let third_party = text(THIRD_PARTY)?;
-    let extra: [(&str, &[u8]); 5] = [
+    let trademarks = text("TRADEMARKS.md")?;
+    let extra: [(&str, &[u8]); 6] = [
         ("portable", b""),
         ("README.txt", &readme),
         ("LICENSE.txt", &license),
+        ("TRADEMARKS.txt", &trademarks),
         ("OFL.txt", &ofl),
         ("THIRD-PARTY-LICENSES.txt", &third_party),
     ];
@@ -211,10 +213,11 @@ mod tests {
         let exe = d.path().join("gyozarec.exe");
         std::fs::write(&exe, b"MZ").unwrap();
         let out = d.path().join("p.zip");
-        let extra: [(&str, &[u8]); 5] = [
+        let extra: [(&str, &[u8]); 6] = [
             ("portable", b""),
             ("README.txt", b"x"),
             ("LICENSE.txt", b"m"),
+            ("TRADEMARKS.txt", b"n"),
             ("OFL.txt", b"y"),
             ("THIRD-PARTY-LICENSES.txt", b"t"),
         ];
@@ -229,6 +232,7 @@ mod tests {
                 "portable",
                 "README.txt",
                 "LICENSE.txt",
+                "TRADEMARKS.txt",
                 "OFL.txt",
                 "THIRD-PARTY-LICENSES.txt"
             ]

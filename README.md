@@ -64,7 +64,7 @@ With **Image captures** set to **Copy and open the editor, don't save**, nothing
 
 GyozaRec stays in the notification area: closing the toolbar hides it, a click on the icon brings it back, and the icon's menu offers every kind of capture, **Options** and **Exit**. Turn this off in **Options** to make closing the toolbar quit the app.
 
-Global shortcuts are off by default; turn them on in **Options**, where each one can also be switched off on its own or given new keys (click its keys and press the new combination; **Reset shortcuts** restores these defaults):
+Global shortcuts are on by default; turn them off in **Options**, where each one can also be switched off on its own or given new keys (click its keys and press the new combination; **Reset shortcuts** restores these defaults):
 
 | Shortcut | Action |
 |---|---|

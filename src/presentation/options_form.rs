@@ -225,13 +225,13 @@ mod tests {
         let mut f = OptionsForm::from_settings(&base);
         assert_eq!(
             (f.keep_in_tray, f.shortcuts_enabled, f.print_screen_captures),
-            (true, false, false)
+            (true, true, false)
         );
-        (f.keep_in_tray, f.shortcuts_enabled, f.print_screen_captures) = (false, true, true);
+        (f.keep_in_tray, f.shortcuts_enabled, f.print_screen_captures) = (false, false, true);
         let s = f.to_settings(&base, &cap());
         assert_eq!(
             (s.keep_in_tray, s.shortcuts_enabled, s.print_screen_captures),
-            (false, true, true)
+            (false, false, true)
         );
     }
 

@@ -11,6 +11,7 @@
 
 use super::AppEvent;
 use super::editor::{EditorSettings, EditorWindow};
+use super::options::ShortcutLine;
 use gyozarec::capture::ScreenGrabber;
 use gyozarec::editor::{Annotation, PALETTE};
 use gyozarec::geometry::{PixelPoint, PixelRect, PixelSize};
@@ -319,15 +320,27 @@ impl ApplicationHandler<AppEvent> for OptionsShot {
             ..Default::default()
         };
         let form = gyozarec::presentation::OptionsForm::from_settings(&settings);
-        let options = super::options::OptionsWindow::open(
-            event_loop,
-            0,
-            form,
-            Language::En,
-            Vec::new(),
-            None,
-        )
-        .expect("options window");
+        // Every shortcut free, as on a computer where no other app took them.
+        let texts = Language::En.texts();
+        let mut lines: Vec<ShortcutLine> = gyozarec::shortcuts::SHORTCUTS
+            .iter()
+            .zip(texts.quick_actions)
+            .map(|(b, label)| ShortcutLine {
+                id: b.id,
+                label,
+                print_screen: false,
+                available: true,
+            })
+            .collect();
+        lines.push(ShortcutLine {
+            id: gyozarec::shortcuts::PRINT_SCREEN.id,
+            label: texts.quick_actions[0],
+            print_screen: true,
+            available: true,
+        });
+        let options =
+            super::options::OptionsWindow::open(event_loop, 0, form, Language::En, lines, None)
+                .expect("options window");
         options.window().set_window_level(WindowLevel::AlwaysOnTop);
         self.options = Some(options);
         self.opened = Some(Instant::now());

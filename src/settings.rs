@@ -129,7 +129,7 @@ impl Default for AppSettings {
             last_update_check: None,
             keep_in_tray: true,
             start_with_windows: false,
-            shortcuts_enabled: false,
+            shortcuts_enabled: true,
             shortcut_keys: Default::default(),
             shortcuts_disabled: Default::default(),
             print_screen_captures: false,
@@ -331,14 +331,14 @@ mod tests {
     }
 
     #[test]
-    fn legacy_settings_get_tray_on_and_shortcuts_off() {
+    fn legacy_settings_get_tray_and_shortcuts_on() {
         let d = tempdir().unwrap();
         let p = d.path().join("s.json");
         fs::write(&p, r#"{ "gif_fps": 15 }"#).unwrap();
         let s = SettingsStore::new(p, cap()).load();
         assert_eq!(
             (s.keep_in_tray, s.shortcuts_enabled, s.print_screen_captures),
-            (true, false, false)
+            (true, true, false)
         );
     }
 

@@ -63,6 +63,9 @@ pub struct AppSettings {
     pub edit_before_saving: bool,
     /// Closing the editor asks to save a picture that is unsaved or edited.
     pub editor_asks_to_save: bool,
+    /// An image capture closes the editors of earlier captures that have
+    /// nothing to save, so one window holds the latest capture.
+    pub reuse_editor: bool,
     /// A notification with a thumbnail after each saved capture.
     pub show_notification: bool,
     /// Once a day, ask GitHub whether a newer release exists.
@@ -118,6 +121,7 @@ impl Default for AppSettings {
             open_editor_after_capture: true,
             edit_before_saving: false,
             editor_asks_to_save: true,
+            reuse_editor: true,
             show_notification: true,
             check_for_updates: true,
             file_names: crate::output::FileNames::DateTime,
@@ -304,6 +308,14 @@ mod tests {
         fs::write(&p, r#"{ "gif_fps": 15 }"#).unwrap();
         let s = SettingsStore::new(p, cap()).load();
         assert_eq!((s.edit_before_saving, s.editor_asks_to_save), (false, true));
+    }
+
+    #[test]
+    fn old_settings_reuse_the_editor() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "editor_asks_to_save": false }"#).unwrap();
+        assert!(SettingsStore::new(p, cap()).load().reuse_editor);
     }
 
     #[test]

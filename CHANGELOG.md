@@ -2,6 +2,11 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- "Replace the previous editor" in Options, next to "Image captures" (on by default): each new capture closes the editors of earlier captures that have nothing to save, so captures no longer pile up in a window each. Editors with unsaved changes, and pictures opened with Open… or from the notification, stay open.
+
 ## [0.6.0] - 2026-10-31
 
 ### Added

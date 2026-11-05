@@ -25,6 +25,7 @@ pub(super) const TEXTS: Texts = Texts {
     after_image_capture: "截图",
     image_capture_actions: ["保存并打开编辑器", "仅保存", "复制并打开编辑器（不保存）"],
     editor_asks_to_save: "关闭编辑器时，询问是否保存未保存或已编辑的图片",
+    reuse_editor: "替换上一个编辑器",
     show_notification: "捕获后显示通知",
     check_for_updates: "检查更新",
     update_available: "GyozaRec {version} 已发布",

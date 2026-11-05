@@ -48,6 +48,7 @@ pub struct OptionsForm {
     pub open_editor_after_capture: bool,
     pub edit_before_saving: bool,
     pub editor_asks_to_save: bool,
+    pub reuse_editor: bool,
     pub theme: crate::settings::ThemeChoice,
     pub interface_size: u16,
     pub show_notification: bool,
@@ -100,6 +101,7 @@ impl OptionsForm {
             open_editor_after_capture: s.open_editor_after_capture,
             edit_before_saving: s.edit_before_saving,
             editor_asks_to_save: s.editor_asks_to_save,
+            reuse_editor: s.reuse_editor,
             theme: s.theme,
             interface_size: s.interface_size,
             show_notification: s.show_notification,
@@ -135,6 +137,7 @@ impl OptionsForm {
             open_editor_after_capture: self.open_editor_after_capture,
             edit_before_saving: self.edit_before_saving,
             editor_asks_to_save: self.editor_asks_to_save,
+            reuse_editor: self.reuse_editor,
             theme: self.theme,
             interface_size: self.interface_size,
             show_notification: self.show_notification,
@@ -269,6 +272,15 @@ mod tests {
         f.editor_asks_to_save = false;
         let s = f.to_settings(&base, &cap());
         assert!(s.edit_before_saving && !s.editor_asks_to_save);
+    }
+
+    #[test]
+    fn reuse_editor_defaults_on_and_roundtrips() {
+        let base = AppSettings::defaults(&cap());
+        let mut f = OptionsForm::from_settings(&base);
+        assert!(f.reuse_editor);
+        f.reuse_editor = false;
+        assert!(!f.to_settings(&base, &cap()).reuse_editor);
     }
 
     #[test]

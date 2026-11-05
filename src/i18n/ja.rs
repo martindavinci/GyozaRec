@@ -29,6 +29,7 @@ pub(super) const TEXTS: Texts = Texts {
         "コピーしてエディターを開く（保存しない）",
     ],
     editor_asks_to_save: "エディターを閉じるとき、未保存や編集済みの画像の保存を確認する",
+    reuse_editor: "前のエディターを置き換える",
     show_notification: "キャプチャ後に通知を表示",
     check_for_updates: "更新を確認する",
     update_available: "GyozaRec {version} が利用可能です",

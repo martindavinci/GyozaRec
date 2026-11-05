@@ -70,6 +70,13 @@ pub fn window_icon() -> Option<winit::window::Icon> {
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
 
+/// Whether an editor closes for the one a new image capture just opened:
+/// never with something to save; otherwise when New in it asked for the
+/// capture (`replaced`), or when it shows an earlier capture and `reuse` is on.
+fn gives_way(dirty: bool, replaced: bool, from_capture: bool, reuse: bool) -> bool {
+    !dirty && (replaced || (reuse && from_capture))
+}
+
 /// Format menu item that converts a video to GIF.
 const CONVERT_MENU_ID: &str = "convert";
 
@@ -380,7 +387,8 @@ impl App {
         self.refresh_toolbar();
     }
 
-    /// Opens an editor on an image, saved at `path` unless `on_disk` is false.
+    /// Opens an editor on an image, saved at `path` unless `on_disk` is false;
+    /// true if its window opened.
     #[allow(clippy::too_many_arguments)]
     fn open_editor(
         &mut self,
@@ -390,7 +398,7 @@ impl App {
         on_disk: bool,
         work_area: Option<gyozarec::geometry::PixelRect>,
         scale: f64,
-    ) {
+    ) -> bool {
         let fonts = self
             .editor_fonts
             .get_or_insert_with(|| Arc::new(Fonts::for_languages(&Language::ALL)))
@@ -414,7 +422,9 @@ impl App {
             scale,
             self.proxy.clone(),
         );
+        let ok = opened.is_some();
         self.editors.extend(opened);
+        ok
     }
 
     /// Asks GitHub for a newer release, at most once a day.
@@ -454,7 +464,7 @@ impl App {
             gyozarec::presentation::NoticeKind::Image => match gyozarec::editor::load(&n.path) {
                 Ok(img) => {
                     let area = Some(n.work_area);
-                    self.open_editor(event_loop, Arc::new(img), n.path, true, area, n.scale)
+                    self.open_editor(event_loop, Arc::new(img), n.path, true, area, n.scale);
                 }
                 Err(err) => {
                     self.state.set_error(&err.to_string());
@@ -771,14 +781,19 @@ impl App {
             }
             UiRequest::OpenEditor { image, path, on_disk, work_area, scale } => {
                 if !self.exit_pending {
-                    self.open_editor(event_loop, image, path, on_disk, Some(work_area), scale);
-                    self.focus_editor = true;
-                    if let Some(old) = self.replace_editor.take()
-                        && let Some(i) = self.editors.iter().position(|e| e.id() == old)
-                        && !self.editors[i].is_dirty()
-                    {
-                        self.editors.remove(i);
+                    let replaced = self.replace_editor.take();
+                    if self.open_editor(event_loop, image, path, on_disk, Some(work_area), scale) {
+                        let reuse = self.state.settings.reuse_editor;
+                        let new = self.editors.last_mut().expect("just opened");
+                        new.from_capture = true;
+                        let new = new.id();
+                        self.editors.retain(|e| {
+                            let replaced = Some(e.id()) == replaced;
+                            e.id() == new
+                                || !gives_way(e.is_dirty(), replaced, e.from_capture, reuse)
+                        });
                     }
+                    self.focus_editor = true;
                 }
             }
             UiRequest::Select { request, reply } => {
@@ -977,7 +992,7 @@ impl ApplicationHandler<AppEvent> for App {
                     let scale = self.editors[i].scale_factor();
                     match gyozarec::editor::load(&path) {
                         Ok(img) => {
-                            self.open_editor(event_loop, Arc::new(img), path, true, None, scale)
+                            self.open_editor(event_loop, Arc::new(img), path, true, None, scale);
                         }
                         Err(err) => gyozarec::platform::show_error_box(&err.to_string()),
                     }
@@ -1036,5 +1051,21 @@ impl ApplicationHandler<AppEvent> for App {
             }
             None => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::gives_way;
+
+    #[test]
+    fn a_new_capture_replaces_clean_capture_editors() {
+        // dirty, replaced (New), from_capture, reuse
+        assert!(gives_way(false, false, true, true));
+        assert!(!gives_way(false, false, true, false), "reuse off keeps them");
+        assert!(!gives_way(false, false, false, true), "Open… editors stay");
+        assert!(!gives_way(true, false, true, true), "unsaved work stays");
+        assert!(gives_way(false, true, false, false), "New replaces its own editor");
+        assert!(!gives_way(true, true, true, true), "even New keeps unsaved work");
     }
 }

@@ -546,6 +546,8 @@ pub struct EditorWindow {
     codes: Vec<FoundCode>,
     /// The code whose text was copied last, marked on its row.
     copied_code: Option<usize>,
+    /// Opened by an image capture, not by Open… or the notification.
+    pub from_capture: bool,
 }
 
 impl EditorWindow {
@@ -603,6 +605,7 @@ impl EditorWindow {
             copied_version: 0,
             codes: Vec::new(),
             copied_code: None,
+            from_capture: false,
             proxy,
         };
         editor.scan_codes(image);

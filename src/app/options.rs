@@ -37,6 +37,7 @@ const ID_EDITOR: u32 = 32;
 const ID_NOTICE: u32 = 33;
 const ID_UPDATES: u32 = 34;
 const ID_ASK_TO_SAVE: u32 = 36;
+const ID_REUSE_EDITOR: u32 = 37;
 const ID_UPDATE_LINK: u32 = 23;
 /// Widest hint line before wrapping, in logical pixels.
 const HINT_WIDTH: f32 = 340.0;
@@ -307,14 +308,16 @@ fn build_ui(
     }
 
     // Saving, opening the editor, or both: one choice for two settings.
+    // Replacing the previous editor sits beside it, only when one opens.
     let action = texts.image_capture_actions[form.image_action()];
     let action = WidgetKind::Button { label: action.into(), dropdown: true };
-    push_row(
-        vec![(103, label(texts.after_image_capture)), (ID_EDITOR, action)],
-        PAD,
-        &mut widgets,
-        &mut y,
-    );
+    let mut row = vec![(103, label(texts.after_image_capture)), (ID_EDITOR, action)];
+    if form.image_action() != 1 {
+        let reuse =
+            WidgetKind::Check { label: texts.reuse_editor.into(), checked: form.reuse_editor };
+        row.push((ID_REUSE_EDITOR, reuse));
+    }
+    push_row(row, PAD, &mut widgets, &mut y);
 
     let checks = [
         (ID_CLIPBOARD, texts.copy_to_clipboard, form.copy_to_clipboard),
@@ -897,6 +900,7 @@ impl OptionsWindow {
                 }
             }
             ID_ASK_TO_SAVE => self.form.editor_asks_to_save = !self.form.editor_asks_to_save,
+            ID_REUSE_EDITOR => self.form.reuse_editor = !self.form.reuse_editor,
             ID_TRAY => self.form.keep_in_tray = !self.form.keep_in_tray,
             ID_AUTOSTART => self.form.start_with_windows = !self.form.start_with_windows,
             ID_SHORTCUTS => self.form.shortcuts_enabled = !self.form.shortcuts_enabled,

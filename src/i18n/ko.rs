@@ -25,6 +25,7 @@ pub(super) const TEXTS: Texts = Texts {
     after_image_capture: "이미지 캡처",
     image_capture_actions: ["저장하고 편집기 열기", "저장", "복사하고 편집기 열기(저장 안 함)"],
     editor_asks_to_save: "편집기를 닫을 때 저장하지 않았거나 편집한 이미지 저장 묻기",
+    reuse_editor: "이전 편집기를 대체",
     show_notification: "캡처 후 알림 표시",
     check_for_updates: "업데이트 확인",
     update_available: "GyozaRec {version}을(를) 사용할 수 있습니다",

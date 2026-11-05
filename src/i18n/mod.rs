@@ -150,6 +150,7 @@ pub struct Texts {
     /// In `OptionsForm::image_action` order.
     pub image_capture_actions: [&'static str; 3],
     pub editor_asks_to_save: &'static str,
+    pub reuse_editor: &'static str,
     pub show_notification: &'static str,
     pub check_for_updates: &'static str,
     /// `{version}` is the new version number.
@@ -329,6 +330,7 @@ mod tests {
                 t.notice_open,
                 t.after_image_capture,
                 t.editor_asks_to_save,
+                t.reuse_editor,
                 t.not_saved_status,
                 t.editor_save_new_question,
                 t.editor_save,

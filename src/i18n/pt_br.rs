@@ -29,6 +29,7 @@ pub(super) const TEXTS: Texts = Texts {
         "Copiar e abrir o editor, sem salvar",
     ],
     editor_asks_to_save: "Editor: perguntar se salva imagens não salvas ou editadas",
+    reuse_editor: "Substituir o editor anterior",
     show_notification: "Mostrar uma notificação após a captura",
     check_for_updates: "Procurar atualizações",
     update_available: "GyozaRec {version} está disponível",

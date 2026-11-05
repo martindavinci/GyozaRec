@@ -3,6 +3,11 @@
 //! annotations, and a label for every button around it. Run on purpose
 //! only (it opens a window for two seconds):
 //! `cargo test --bin gyozarec readme_editor_screenshot -- --ignored`
+//!
+//! Also `docs/screenshots/options.png`: the real Options window with the
+//! default settings, in English and the light theme, saving to a neutral
+//! `C:\Users\you\Pictures\GyozaRec`:
+//! `cargo test --bin gyozarec readme_options_screenshot -- --ignored`
 
 use super::AppEvent;
 use super::editor::{EditorSettings, EditorWindow};
@@ -295,6 +300,79 @@ fn readme_editor_screenshot() {
         fonts: Arc::new(Fonts::embedded()),
     };
     event_loop.run_app(&mut shot).expect("run");
+}
+
+struct OptionsShot {
+    options: Option<super::options::OptionsWindow>,
+    opened: Option<Instant>,
+}
+
+impl ApplicationHandler<AppEvent> for OptionsShot {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.options.is_some() {
+            return;
+        }
+        gyozarec::uikit::theme::set_look(gyozarec::uikit::theme::Look::Light);
+        let settings = gyozarec::settings::AppSettings {
+            save_folder: std::path::PathBuf::from(r"C:\Users\you\Pictures\GyozaRec"),
+            language: Some("en".into()),
+            ..Default::default()
+        };
+        let form = gyozarec::presentation::OptionsForm::from_settings(&settings);
+        let options = super::options::OptionsWindow::open(
+            event_loop,
+            0,
+            form,
+            Language::En,
+            Vec::new(),
+            None,
+        )
+        .expect("options window");
+        options.window().set_window_level(WindowLevel::AlwaysOnTop);
+        self.options = Some(options);
+        self.opened = Some(Instant::now());
+        event_loop
+            .set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(100)));
+    }
+
+    fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        if let Some(o) = &mut self.options {
+            let _ = o.handle(&event);
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(opened) = self.opened else { return };
+        if opened.elapsed() < Duration::from_secs(2) {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + Duration::from_millis(100),
+            ));
+            return;
+        }
+        if let Some(o) = self.options.take() {
+            let frame = frame_bounds(o.hwnd());
+            let shot = gyozarec::platform::GdiGrabber.grab(frame, false).expect("grab");
+            let (w, h) = (frame.width as u32, frame.height as u32);
+            let img = image::RgbImage::from_fn(w, h, |x, y| {
+                let p = PixelPoint { x: frame.x + x as i32, y: frame.y + y as i32 };
+                let [b, g, r, _] = shot.pixel(p);
+                image::Rgb([r, g, b])
+            });
+            let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("docs/screenshots/options.png");
+            img.save(&out).expect("save");
+            eprintln!("wrote {} ({w}×{h})", out.display());
+        }
+        event_loop.exit();
+    }
+}
+
+#[test]
+#[ignore = "desktop"]
+fn readme_options_screenshot() {
+    let event_loop =
+        EventLoop::<AppEvent>::with_user_event().with_any_thread(true).build().expect("event loop");
+    event_loop.run_app(&mut OptionsShot { options: None, opened: None }).expect("run");
 }
 
 #[test]

@@ -577,6 +577,16 @@ impl OptionsWindow {
         self.surface.window.id()
     }
 
+    #[cfg(test)]
+    pub fn window(&self) -> &Window {
+        &self.surface.window
+    }
+
+    #[cfg(test)]
+    pub fn hwnd(&self) -> isize {
+        self.surface.hwnd()
+    }
+
     /// Windows' scale times the interface size.
     fn scale(&self) -> f32 {
         self.surface.window.scale_factor() as f32 * self.zoom

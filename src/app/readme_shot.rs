@@ -115,6 +115,7 @@ fn labels() -> Vec<(u32, &'static str)> {
     out.extend([
         (ids::SWATCH + 2, "Colors"),
         (ids::SIZE, "Size"),
+        (ids::ROTATE, "Rotate"),
         (ids::UNDO, "Undo"),
         (ids::REDO, "Redo"),
         (ids::NEW, "Capture again"),

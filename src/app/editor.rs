@@ -38,6 +38,7 @@ const ID_SAVE_AS: u32 = 304;
 const ID_SAVE: u32 = 305;
 const ID_NEW: u32 = 306;
 const ID_OPEN: u32 = 307;
+const ID_ROTATE: u32 = 308;
 /// Copy and Open link of each QR code or barcode row, by index.
 const ID_CODE_COPY: u32 = 400;
 const ID_CODE_OPEN: u32 = 450;
@@ -51,6 +52,7 @@ pub mod bar_ids {
     pub const SIZE: u32 = super::ID_SIZE;
     pub const UNDO: u32 = super::ID_UNDO;
     pub const REDO: u32 = super::ID_REDO;
+    pub const ROTATE: u32 = super::ID_ROTATE;
     pub const NEW: u32 = super::ID_NEW;
     pub const OPEN: u32 = super::ID_OPEN;
     pub const COPY: u32 = super::ID_COPY;
@@ -84,6 +86,10 @@ pub enum EditorResult {
 pub enum EditorCommand {
     Undo,
     Redo,
+    /// A quarter turn, clockwise or not.
+    Rotate {
+        clockwise: bool,
+    },
     Save,
     SaveAs,
     Copy,
@@ -109,6 +115,7 @@ pub fn command_for(key: &Key, mods: ModifiersState, typing: bool) -> Option<Edit
         ("c", _) if !typing => Some(EditorCommand::Copy),
         ("n", false) => Some(EditorCommand::New),
         ("o", false) => Some(EditorCommand::OpenFile),
+        ("r", shift) => Some(EditorCommand::Rotate { clockwise: !shift }),
         _ => None,
     }
 }
@@ -170,6 +177,7 @@ fn build_bar(width: f32, s: &BarState, texts: &Texts, fonts: &Fonts) -> Ui {
     let size_label = texts.editor_sizes[SIZES.iter().position(|z| *z == s.size).unwrap_or(1)];
     let history = vec![
         (ID_SIZE, WidgetKind::Button { label: size_label.into(), dropdown: true }),
+        (ID_ROTATE, WidgetKind::IconButton { icon: Icon::Rotate }),
         (ID_UNDO, WidgetKind::IconButton { icon: Icon::Undo }),
         (ID_REDO, WidgetKind::IconButton { icon: Icon::Redo }),
     ];
@@ -979,6 +987,12 @@ impl EditorWindow {
                 self.commit_text();
                 self.doc.redo();
             }
+            EditorCommand::Rotate { clockwise } => {
+                self.commit_text();
+                // A drag in progress has points on the picture before the turn.
+                self.drag = None;
+                self.doc.rotate(clockwise, &self.fonts);
+            }
             EditorCommand::Save => self.start_save(self.path.clone(), false),
             EditorCommand::SaveAs => self.save_as(),
             EditorCommand::Copy => self.copy(),
@@ -1011,6 +1025,7 @@ impl EditorWindow {
         match id {
             ID_UNDO => return self.run(EditorCommand::Undo),
             ID_REDO => return self.run(EditorCommand::Redo),
+            ID_ROTATE => return self.run(EditorCommand::Rotate { clockwise: true }),
             ID_COPY => return self.run(EditorCommand::Copy),
             ID_SAVE_AS => return self.run(EditorCommand::SaveAs),
             ID_SAVE => return self.run(EditorCommand::Save),
@@ -1321,6 +1336,9 @@ mod tests {
         assert_eq!(command_for(&key("c"), ctrl, true), None, "copy belongs to the text");
         assert_eq!(command_for(&key("n"), ctrl, false), Some(EditorCommand::New));
         assert_eq!(command_for(&key("o"), ctrl, true), Some(EditorCommand::OpenFile));
+        let turn = |clockwise| Some(EditorCommand::Rotate { clockwise });
+        assert_eq!(command_for(&key("r"), ctrl, false), turn(true));
+        assert_eq!(command_for(&key("R"), ctrl_shift, false), turn(false));
         assert_eq!(command_for(&key("s"), ModifiersState::empty(), true), None, "plain s is typed");
         let esc = Key::Named(NamedKey::Escape);
         assert_eq!(command_for(&esc, ModifiersState::empty(), false), Some(EditorCommand::Close));

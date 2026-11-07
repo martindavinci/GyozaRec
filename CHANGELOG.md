@@ -2,6 +2,11 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Rotate in the editor: the button next to the size turns the picture a quarter turn clockwise (Ctrl+R; Ctrl+Shift+R the other way), with what is drawn on it and the crop. Undo turns it back.
+
 ## [0.7.0] - 2026-11-05
 
 ### Added

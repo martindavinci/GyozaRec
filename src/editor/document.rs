@@ -11,7 +11,23 @@ use std::sync::Arc;
 #[derive(Clone, Debug, PartialEq)]
 enum Step {
     Add(Annotation),
-    Crop { before: Option<PixelRect>, after: PixelRect },
+    Crop {
+        before: Option<PixelRect>,
+        after: PixelRect,
+    },
+    /// A quarter turn: the drawings become part of the turned picture.
+    Rotate {
+        before: Box<Picture>,
+        after: Box<Picture>,
+    },
+}
+
+/// Everything a rotation changes.
+#[derive(Clone, Debug, PartialEq)]
+struct Picture {
+    base: Arc<PixelBuffer>,
+    annotations: Vec<Annotation>,
+    crop: Option<PixelRect>,
 }
 
 pub struct Document {
@@ -68,10 +84,37 @@ impl Document {
         self.redo.clear();
     }
 
+    /// Turns the picture a quarter turn; what was drawn turns with it and
+    /// can no longer be undone one by one until the turn is undone.
+    pub fn rotate(&mut self, clockwise: bool, fonts: &Fonts) {
+        let full = self.image_rect();
+        let drawn = super::draw::flatten(&self.base, &self.annotations, full, fonts);
+        let after = Picture {
+            base: Arc::new(drawn.rotated(clockwise)),
+            annotations: Vec::new(),
+            crop: self.crop.map(|c| rotate_rect(c, full, clockwise)),
+        };
+        let step = Step::Rotate { before: Box::new(self.picture()), after: Box::new(after) };
+        self.apply(&step);
+        self.undo.push(step);
+        self.redo.clear();
+    }
+
+    fn picture(&self) -> Picture {
+        Picture { base: self.base.clone(), annotations: self.annotations.clone(), crop: self.crop }
+    }
+
+    fn set_picture(&mut self, p: &Picture) {
+        self.base = p.base.clone();
+        self.annotations = p.annotations.clone();
+        self.crop = p.crop;
+    }
+
     fn apply(&mut self, step: &Step) {
         match step {
             Step::Add(a) => self.annotations.push(a.clone()),
             Step::Crop { after, .. } => self.crop = Some(*after),
+            Step::Rotate { after, .. } => self.set_picture(after),
         }
         self.version += 1;
     }
@@ -91,6 +134,7 @@ impl Document {
                 self.annotations.pop();
             }
             Step::Crop { before, .. } => self.crop = *before,
+            Step::Rotate { before, .. } => self.set_picture(before),
         }
         self.redo.push(step);
         self.version += 1;
@@ -142,6 +186,15 @@ impl Document {
     /// The capture with every annotation drawn in order, cropped.
     pub fn flatten(&self, fonts: &Fonts) -> PixelBuffer {
         super::draw::flatten(&self.base, &self.annotations, self.visible_rect(), fonts)
+    }
+}
+
+/// `r`, inside a `full` picture at (0, 0), after a quarter turn.
+fn rotate_rect(r: PixelRect, full: PixelRect, clockwise: bool) -> PixelRect {
+    if clockwise {
+        PixelRect::new(full.height - r.y - r.height, r.x, r.height, r.width)
+    } else {
+        PixelRect::new(r.y, full.width - r.x - r.width, r.height, r.width)
     }
 }
 
@@ -213,6 +266,30 @@ mod tests {
         d.mark_saved_at(saving);
         assert!(d.is_dirty());
         assert_eq!(d.snapshot().annotations(), d.annotations());
+    }
+
+    #[test]
+    fn rotation_turns_picture_drawings_and_crop_and_undoes() {
+        let fonts = Fonts::embedded();
+        let mut d = doc(100, 80);
+        d.add(Annotation::Redact { a: (0.0, 0.0), b: (10.0, 10.0), color: PALETTE[4] });
+        d.crop_to((0.0, 0.0), (50.0, 40.0));
+        let before = d.flatten(&fonts);
+        d.rotate(true, &fonts);
+        assert_eq!(d.image_rect(), PixelRect::new(0, 0, 80, 100));
+        assert!(d.annotations().is_empty(), "the drawings are part of the picture now");
+        assert_eq!(d.visible_rect(), PixelRect::new(40, 0, 40, 50));
+        let turned = d.flatten(&fonts);
+        assert_eq!(turned, before.rotated(true), "the same picture, turned");
+        assert_eq!(turned.pixel(PixelPoint { x: 35, y: 2 }), [0, 0, 0, 255], "the box went right");
+        d.rotate(false, &fonts);
+        assert_eq!(d.flatten(&fonts), before);
+        assert!(d.undo() && d.undo());
+        assert_eq!(d.annotations().len(), 1);
+        assert_eq!(d.visible_rect(), PixelRect::new(0, 0, 50, 40));
+        assert_eq!(d.image_rect(), PixelRect::new(0, 0, 100, 80));
+        assert!(d.redo());
+        assert_eq!(d.flatten(&fonts), turned);
     }
 
     #[test]

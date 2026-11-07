@@ -86,6 +86,21 @@ impl PixelBuffer {
         PixelBuffer::new(bounds, out.into_raw())
     }
 
+    /// The picture turned a quarter turn, at the same origin.
+    pub fn rotated(&self, clockwise: bool) -> PixelBuffer {
+        let (w, h) = (self.width().max(0) as usize, self.height().max(0) as usize);
+        let src = self.bgra.as_chunks::<4>().0;
+        let mut out = vec![[0u8; 4]; w * h];
+        // The turned picture is `h` wide and `w` tall.
+        for (i, px) in src.iter().enumerate() {
+            let (x, y) = (i % w, i / w);
+            let (nx, ny) = if clockwise { (h - 1 - y, x) } else { (y, w - 1 - x) };
+            out[ny * h + nx] = *px;
+        }
+        let bounds = PixelRect::new(self.bounds.x, self.bounds.y, h as i32, w as i32);
+        PixelBuffer::new(bounds, out.into_flattened())
+    }
+
     pub fn to_rgba(&self) -> Vec<u8> {
         let mut out = self.bgra.clone();
         for px in out.as_chunks_mut::<4>().0 {
@@ -214,6 +229,26 @@ impl PixelBuffer {
 mod tests {
     use super::*;
     use crate::geometry::{PixelPoint, PixelRect, PixelSize};
+
+    #[test]
+    fn rotation_moves_corners_and_swaps_the_size() {
+        let mut buf = PixelBuffer::solid(PixelRect::new(0, 0, 3, 2), 0, 0, 0);
+        buf.put_pixel(PixelPoint { x: 0, y: 0 }, [1, 1, 1, 255]);
+        buf.put_pixel(PixelPoint { x: 2, y: 0 }, [2, 2, 2, 255]);
+        let cw = buf.rotated(true);
+        assert_eq!(cw.bounds, PixelRect::new(0, 0, 2, 3));
+        assert_eq!(cw.pixel(PixelPoint { x: 1, y: 0 }), [1, 1, 1, 255], "top-left goes top-right");
+        assert_eq!(cw.pixel(PixelPoint { x: 1, y: 2 }), [2, 2, 2, 255]);
+        let ccw = buf.rotated(false);
+        assert_eq!(
+            ccw.pixel(PixelPoint { x: 0, y: 2 }),
+            [1, 1, 1, 255],
+            "top-left goes bottom-left"
+        );
+        assert_eq!(ccw.pixel(PixelPoint { x: 0, y: 0 }), [2, 2, 2, 255]);
+        assert_eq!(cw.rotated(false), buf);
+        assert_eq!(cw.rotated(true).rotated(true).rotated(true), buf);
+    }
 
     #[test]
     fn crop_uses_screen_coordinates_with_negative_origin() {

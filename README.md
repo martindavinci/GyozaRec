@@ -53,6 +53,7 @@ With **Image captures** set to **Copy and open the editor, don't save**, nothing
 
 - Tools: **arrow**, **rectangle**, **pen**, **highlighter**, **text** (click, type, Enter), **pixelate** (coarser with a bigger size), **redact** (a solid box in the chosen color) and **crop**; six colors and three sizes.
 - **QR codes and barcodes** in the picture are read as it opens (QR, Micro QR, Data Matrix, Aztec, PDF417, EAN, UPC, Code 39/93/128, ITF, Codabar…): each gets a line under the tool bar with its text, **Copy** and, for web addresses (http and https only), **Open link**. Nothing is opened until you click, and the reading happens on your computer.
+- **Rotate** turns the picture a quarter turn clockwise (Ctrl+R; Ctrl+Shift+R turns it the other way), with what is drawn on it.
 - **Undo** and **Redo** (Ctrl+Z, Ctrl+Y). With **Copy to clipboard** on, every change also goes to the clipboard, so the edited image is always ready to paste.
 - **New** (Ctrl+N) captures another image with the current area; the editor gives way to it when it has nothing unsaved. **Open…** (Ctrl+O) edits a PNG or JPG from disk in another window.
 - With **Replace the previous editor** on in **Options** (the default), every image capture takes the place of the editors of earlier captures that have nothing to save, so only the latest one stays open. Editors with unsaved changes, and pictures opened with **Open…** or from the notification, are left alone.

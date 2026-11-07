@@ -33,6 +33,8 @@ pub enum Icon {
     Crop,
     Undo,
     Redo,
+    /// A circling arrow: a quarter turn clockwise.
+    Rotate,
     /// A loop of rope: a free-hand outline.
     Lasso,
     /// A window with its title bar.
@@ -382,6 +384,22 @@ fn paint_icon(p: &mut Painter, icon: Icon, rect: RectF, color: Color, accent: Co
             p.line((cx - 5.0, cy - 1.0), (cx + 2.0, cy - 1.0), 2.0, color);
             p.fill_triangle(
                 [(cx + 6.5, cy - 1.0), (cx + 2.0, cy - 5.5), (cx + 2.0, cy + 3.5)],
+                color,
+            );
+        }
+        Icon::Rotate => {
+            // From the bottom, clockwise round the left and the top, ending
+            // top-right with the head pointing on down.
+            use std::f32::consts::PI;
+            let arc: Vec<(f32, f32)> = (0..=16)
+                .map(|i| {
+                    let t = PI / 2.0 + i as f32 / 16.0 * 1.25 * PI;
+                    (cx + 5.0 * t.cos(), cy + 1.0 + 5.0 * t.sin())
+                })
+                .collect();
+            p.stroke_polyline(&arc, 2.0, color, 255);
+            p.fill_triangle(
+                [(cx + 6.5, cy + 0.5), (cx + 5.0, cy - 5.5), (cx + 0.5, cy - 1.0)],
                 color,
             );
         }

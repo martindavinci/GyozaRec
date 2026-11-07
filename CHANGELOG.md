@@ -7,6 +7,9 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 ### Added
 - Rotate in the editor: the button next to the size turns the picture a quarter turn clockwise (Ctrl+R; Ctrl+Shift+R the other way), with what is drawn on it and the crop. Undo turns it back.
 
+### Fixed
+- System audio in MP4s no longer crackles: packets from the output device now join without a missing or repeated sample between them (by their timestamps alone, since some devices, such as a 384 kHz DAC, mark every packet as a break in the sound), the track follows the device's clock with an inaudible speed adjustment instead, and devices running above 48 kHz (such as 384 kHz DACs) are low-pass filtered before going down to 48 kHz, so high frequencies no longer fold back as noise.
+
 ## [0.7.0] - 2026-11-05
 
 ### Added

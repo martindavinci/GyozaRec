@@ -3,6 +3,7 @@
 //! that turns them into a contiguous 48 kHz track aligned with the video.
 
 mod downmix;
+mod resample;
 mod stamps;
 mod timeline;
 
@@ -33,6 +34,7 @@ pub struct PcmChunk {
     pub samples: Vec<f32>,
     /// When its first sample was captured, on the recording clock.
     pub at: Duration,
+    /// What the device says; not trusted, some devices set it on every packet.
     pub discontinuity: bool,
 }
 

@@ -2,6 +2,7 @@
 //! Places audio packets by their capture time and turns them into one
 //! contiguous 48 kHz stereo track on the video's active timeline.
 
+use super::resample::Resampler;
 use super::{OUT_RATE, PcmChunk};
 use std::time::Duration;
 
@@ -67,31 +68,90 @@ pub struct Timeline {
     latency: Duration,
     committed: u64,
     placed: Vec<Placed>,
+    resamplers: Vec<(u8, Resampler)>,
 }
 
+/// A run of one source's audio: packets that followed each other, laid end
+/// to end so no frame is lost or repeated between them.
 struct Placed {
     source: u8,
     at: Duration,
+    /// Frames already taken off the front.
+    skipped: u64,
     /// Stereo frames at `OUT_RATE`.
     frames: Vec<[f32; 2]>,
 }
 
-impl Timeline {
-    pub fn new(latency: Duration) -> Timeline {
-        Timeline { latency, committed: 0, placed: Vec::new() }
+impl Placed {
+    /// When frame `k` of the run (counting the skipped ones) was captured.
+    fn time_of(&self, k: u64) -> Duration {
+        self.at + frame_time(k)
     }
 
+    /// When the run's next frame would be.
+    fn end(&self) -> Duration {
+        self.time_of(self.skipped + self.frames.len() as u64)
+    }
+}
+
+/// A packet this far from where its source's run would put it starts a new
+/// run: a real gap (or overlap), not clock jitter.
+const SNAP_SECS: f64 = 0.03;
+/// How fast a run follows its source's clock: an error is taken back over
+/// about this long.
+const FOLLOW_SECS: f64 = 2.0;
+
+impl Timeline {
+    pub fn new(latency: Duration) -> Timeline {
+        Timeline { latency, committed: 0, placed: Vec::new(), resamplers: Vec::new() }
+    }
+
+    /// Adds a packet to its source's run when it follows on from it, nudging
+    /// the run's speed toward the packet's timestamp; otherwise a new run
+    /// starts at the packet's timestamp.
     pub fn push(&mut self, chunk: PcmChunk) {
+        if chunk.rate == 0 || chunk.channels == 0 {
+            return;
+        }
         let stereo = super::to_stereo(&chunk.samples, chunk.channels, chunk.channel_mask);
-        let frames = resample(&stereo, chunk.rate);
-        if !frames.is_empty() {
-            self.placed.push(Placed { source: chunk.source, at: chunk.at, frames });
+        let input = stereo.as_chunks::<2>().0;
+        if input.is_empty() {
+            return;
+        }
+        let slot = match self.resamplers.iter().position(|(s, _)| *s == chunk.source) {
+            Some(i) => i,
+            None => {
+                self.resamplers.push((chunk.source, Resampler::new(chunk.rate)));
+                self.resamplers.len() - 1
+            }
+        };
+        let resampler = &mut self.resamplers[slot].1;
+        let run = self.placed.iter().rposition(|p| p.source == chunk.source);
+        // Seconds the packet comes after where the run expects it. Only the
+        // timestamps decide: some devices flag every packet as a
+        // discontinuity (a 384 kHz DAC did), which would restart the run,
+        // and its filter, every 10 ms.
+        let late = run.filter(|_| resampler.rate() == chunk.rate).map(|i| {
+            let expected = self.placed[i].end().as_secs_f64() + resampler.pending();
+            chunk.at.as_secs_f64() - expected
+        });
+        match (run, late) {
+            (Some(i), Some(late)) if late.abs() <= SNAP_SECS => {
+                resampler.set_speed(late / FOLLOW_SECS);
+                let frames = resampler.process(input);
+                self.placed[i].frames.extend(frames);
+            }
+            _ => {
+                *resampler = Resampler::new(chunk.rate);
+                let frames = resampler.process(input);
+                self.placed.push(Placed { source: chunk.source, at: chunk.at, skipped: 0, frames });
+            }
         }
     }
 
     /// Commits audio up to `now - latency` (or up to `now` when `final_`):
-    /// each packet's frames land at their capture time mapped through the
-    /// pauses, the first packet of a source to claim a frame keeps it, holes
+    /// each run's frames land at their capture time mapped through the
+    /// pauses, the first run of a source to claim a frame keeps it, holes
     /// stay silent, and frames before the committed point are dropped.
     pub fn drain(
         &mut self,
@@ -118,8 +178,12 @@ impl Timeline {
             };
             let buffer = &mut sources[slot].1;
             for (k, frame) in p.frames.iter().enumerate() {
-                let Some(active) = pauses.map(p.at + frame_time(k as u64)) else { continue };
-                let index = to_frame_round(active);
+                let k = p.skipped + k as u64;
+                let t = p.time_of(k);
+                let Some(active) = pauses.map(t) else { continue };
+                // Counted from the run's start, so neighbours stay neighbours.
+                let shift = nanos(t) - nanos(active);
+                let Some(index) = frame_index(nanos(p.at) - shift, k) else { continue };
                 if index >= self.committed && index < target {
                     let cell = &mut buffer[(index - self.committed) as usize];
                     cell.get_or_insert(*frame);
@@ -140,9 +204,32 @@ impl Timeline {
         Some(AudioOut { samples, start_frame })
     }
 
-    /// Packets that ended before the horizon are fully committed or dropped.
+    /// Frames well before the horizon are committed or dropped: they go.
+    /// Emptied runs go too, except each source's latest, which the next
+    /// packet continues.
     fn prune(&mut self, horizon: Duration) {
-        self.placed.retain(|p| p.at + frame_time(p.frames.len() as u64) > horizon);
+        // Two frames of margin: a frame that rounds up to the horizon is not
+        // committed yet.
+        let keep_from = horizon.saturating_sub(frame_time(2));
+        for p in &mut self.placed {
+            if keep_from > p.at {
+                let before = to_frame_floor(keep_from - p.at) + 1;
+                let gone = before.saturating_sub(p.skipped).min(p.frames.len() as u64);
+                p.frames.drain(..gone as usize);
+                p.skipped += gone;
+            }
+        }
+        let latest: Vec<usize> = self
+            .resamplers
+            .iter()
+            .filter_map(|(s, _)| self.placed.iter().rposition(|p| p.source == *s))
+            .collect();
+        let mut i = 0;
+        self.placed.retain(|p| {
+            let keep = !p.frames.is_empty() || latest.contains(&i);
+            i += 1;
+            keep
+        });
     }
 }
 
@@ -154,31 +241,19 @@ fn to_frame_floor(d: Duration) -> u64 {
     (d.as_nanos() * u128::from(OUT_RATE) / 1_000_000_000) as u64
 }
 
-fn to_frame_round(d: Duration) -> u64 {
-    ((d.as_nanos() * u128::from(OUT_RATE) + 500_000_000) / 1_000_000_000) as u64
+fn nanos(d: Duration) -> i128 {
+    d.as_nanos() as i128
+}
+
+/// The output frame nearest to `start_ns` plus `frame` frames, exactly:
+/// frame `k + 1` of a run always lands right after frame `k`.
+fn frame_index(start_ns: i128, frame: u64) -> Option<u64> {
+    let num = start_ns * i128::from(OUT_RATE) + i128::from(frame) * 1_000_000_000 + 500_000_000;
+    (num >= 0).then_some((num / 1_000_000_000) as u64)
 }
 
 fn to_i16(v: f32) -> i16 {
     (v.clamp(-1.0, 1.0) * f32::from(i16::MAX)).round() as i16
-}
-
-/// Interleaved stereo at `rate` to stereo frames at `OUT_RATE` (linear).
-fn resample(stereo: &[f32], rate: u32) -> Vec<[f32; 2]> {
-    let input: Vec<[f32; 2]> = stereo.as_chunks::<2>().0.to_vec();
-    if rate == OUT_RATE || input.len() < 2 || rate == 0 {
-        return input;
-    }
-    let out_len = (input.len() as u64 * u64::from(OUT_RATE) / u64::from(rate)) as usize;
-    let step = f64::from(rate) / f64::from(OUT_RATE);
-    (0..out_len)
-        .map(|j| {
-            let pos = j as f64 * step;
-            let i = (pos as usize).min(input.len() - 2);
-            let frac = (pos - i as f64).min(1.0) as f32;
-            let (a, b) = (input[i], input[i + 1]);
-            [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac]
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -214,7 +289,69 @@ mod tests {
             t.push(chunk(400 + i * 10, 10, 0.5));
         }
         assert!(t.drain(ms(2000), &p, false).is_none());
-        assert!(t.placed.is_empty(), "{} packets kept", t.placed.len());
+        let kept: usize = t.placed.iter().map(|r| r.frames.len()).sum();
+        assert_eq!((kept, t.placed.len()), (0, 1), "only the run to continue is kept");
+    }
+
+    /// Packets stamped a little early or late (device and scheduling
+    /// jitter) must join seamlessly: one missing frame is a click.
+    #[test]
+    fn jittery_timestamps_leave_no_holes() {
+        let mut t = Timeline::new(Duration::ZERO);
+        for i in 0..100u64 {
+            // Up to ±0.3 ms off, which used to leave or overlap a frame.
+            let jitter = (i * 7_919) % 600;
+            let mut c = chunk(0, 10, 0.5);
+            c.at = Duration::from_micros(1_000 + i * 10_000 + jitter - 300);
+            t.push(c);
+        }
+        let out = t.drain(ms(1_000), &PauseHistory::new(Duration::ZERO), true).unwrap();
+        let quiet: Vec<usize> =
+            (48..frames(&out) - 48).filter(|&i| out.samples[i * 2] < 16_000).collect();
+        assert!(quiet.is_empty(), "silent frames at {quiet:?}");
+    }
+
+    /// A 384 kHz output device as measured: stamps jittering by a fraction
+    /// of a millisecond, an 8 ms step early on (the stamp correction
+    /// learning), and every packet flagged as a discontinuity. A tone comes
+    /// out as a tone, with no click anywhere.
+    #[test]
+    fn a_384_khz_device_gives_a_smooth_track() {
+        let rate = 384_000u32;
+        let mut t = Timeline::new(Duration::ZERO);
+        let mut phase = 0usize;
+        for i in 0..50u64 {
+            // 10 ms packets, a little fast against the stamps, jittering.
+            let n = if i % 10 == 0 { 3_841 } else { 3_840 };
+            let samples: Vec<f32> = (phase..phase + n)
+                .flat_map(|k| {
+                    let v =
+                        0.5 * (k as f64 * 1_000.0 / f64::from(rate) * std::f64::consts::TAU).sin();
+                    [v as f32, v as f32]
+                })
+                .collect();
+            phase += n;
+            let jitter = Duration::from_micros((i * 4_051) % 400);
+            let learned = if i >= 3 { ms(8) } else { Duration::ZERO };
+            t.push(PcmChunk {
+                source: 0,
+                rate,
+                channels: 2,
+                channel_mask: 0,
+                samples,
+                at: ms(10 + i * 10) + jitter - learned,
+                discontinuity: true,
+            });
+        }
+        assert_eq!(t.placed.len(), 1, "one run: the flags and the step do not split it");
+        let out = t.drain(ms(500), &PauseHistory::new(Duration::ZERO), true).unwrap();
+        let left: Vec<f32> = out.samples.iter().step_by(2).map(|s| f32::from(*s)).collect();
+        let body = &left[480..left.len() - 480];
+        // A 0.5 sine at 1 kHz moves at most 0.5·2π/48 ≈ 0.065 a frame.
+        let jump = body.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0f32, f32::max);
+        assert!(jump < 0.07 * 32_767.0, "a click of {}", jump / 32_767.0);
+        let peak = body.iter().fold(0f32, |m, s| m.max(s.abs()));
+        assert!((peak / 32_767.0 - 0.5).abs() < 0.02, "the tone at {}", peak / 32_767.0);
     }
 
     #[test]
@@ -278,21 +415,23 @@ mod tests {
         let mut pauses = PauseHistory::new(Duration::ZERO);
         let pause_spans = [(2_000, 3_000), (5_000, 6_500), (7_000, 7_200)];
         let clicks_ms = [1_000u64, 4_000, 8_000];
-        // 10 ms packets carrying 2% more frames than nominal (device clock skew),
-        // with a click 100 frames into the packet that starts at each click time.
+        // 10 ms packets carrying 0.2 % more frames than nominal (device clock
+        // skew, far more than real devices show), with a click 100 frames into
+        // the packet that starts at each click time.
         let mut packets = Vec::new();
+        let mut arrival = 0;
         for i in 0..1_000u64 {
             let at = i * 10;
             let mut c = chunk(at, 0, 0.0);
-            c.samples = vec![0.01; 490];
+            c.samples = vec![0.01; 481];
             if clicks_ms.contains(&at) {
-                c.samples[100] = 1.0;
+                c.samples[100..103].fill(1.0);
             }
-            // Delivered up to 250 ms late, in a scrambled order.
-            let delay = (i * 37) % 250;
-            packets.push((at + delay, c));
+            // Delivered in capture order (one source never reorders), up to
+            // 250 ms late and in bursts.
+            arrival = (at + (i * 37) % 250).max(arrival);
+            packets.push((arrival, c));
         }
-        packets.sort_by_key(|(arrival, _)| *arrival);
         let mut t = Timeline::new(ms(300));
         let mut out = Vec::new();
         let mut next = packets.into_iter().peekable();
@@ -319,11 +458,11 @@ mod tests {
         if let Some(o) = t.drain(ms(10_000), &pauses, true) {
             out.extend(o.samples);
         }
-        let found: Vec<f64> = out
-            .chunks(2)
-            .enumerate()
-            .filter(|(_, f)| f[0] > 30_000)
-            .map(|(i, _)| i as f64 / 48.0)
+        // Where each click starts.
+        let loud: Vec<bool> = out.chunks(2).map(|f| f[0] > 30_000).collect();
+        let found: Vec<f64> = (0..loud.len())
+            .filter(|&i| loud[i] && (i == 0 || !loud[i - 1]))
+            .map(|i| i as f64 / 48.0)
             .collect();
         // Expected active times: the click plus 100 frames, minus earlier pauses.
         let expected = [1_000.0, 4_000.0 - 1_000.0, 8_000.0 - 1_000.0 - 1_500.0 - 200.0];

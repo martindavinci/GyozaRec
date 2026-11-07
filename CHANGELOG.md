@@ -2,7 +2,7 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.8.0] - 2026-11-07
 
 ### Added
 - Rotate in the editor: the button next to the size turns the picture a quarter turn clockwise (Ctrl+R; Ctrl+Shift+R the other way), with what is drawn on it and the crop. Undo turns it back.
@@ -140,6 +140,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.8.0]: https://github.com/martindavinci/GyozaRec/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/martindavinci/GyozaRec/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/martindavinci/GyozaRec/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/martindavinci/GyozaRec/compare/v0.4.5...v0.5.0

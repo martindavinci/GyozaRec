@@ -2,6 +2,11 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Open image…** at the bottom right of the toolbar, next to the status line, and in the notification area menu: it opens a PNG or JPG from disk in the editor, without capturing first.
+
 ## [0.9.0] - 2026-11-27
 
 ### Added

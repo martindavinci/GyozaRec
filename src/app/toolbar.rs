@@ -27,6 +27,7 @@ const ID_FOLDER: u32 = 6;
 const ID_FORMAT: u32 = 7;
 const ID_CANCEL_CONVERT: u32 = 8;
 const ID_DOWNLOAD: u32 = 9;
+const ID_OPEN_IMAGE: u32 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolbarAction {
@@ -38,6 +39,8 @@ pub enum ToolbarAction {
     OpenFolder,
     CancelConversion,
     Download,
+    /// Edit a PNG or JPG from disk.
+    OpenImage,
     /// Ctrl + wheel or Ctrl +/-: one interface size up (> 0) or down.
     Zoom(i32),
 }
@@ -105,7 +108,16 @@ fn build_ui(state: &ToolbarState, fonts: &Fonts) -> Ui {
     } else if state.last_saved.is_some() {
         row2.push((ID_FOLDER, WidgetKind::Link { text: texts.open_folder.into() }));
     }
-    widgets.extend(layout_row(row2, PAD, row1_bottom + 8.0, 12.0, fonts, theme::current()));
+    let row1_right = widgets.iter().map(|w| w.rect.right()).fold(0.0, f32::max);
+    let open = (ID_OPEN_IMAGE, button(Icon::Image, texts.open_image, false));
+    row2.push(open);
+    let mut row2 = layout_row(row2, PAD, row1_bottom + 8.0, 12.0, fonts, theme::current());
+    // Open image sits at the right edge, or after the status when it is long.
+    if let [.., before, open] = row2.as_mut_slice() {
+        open.rect.x = (row1_right - open.rect.w).max(before.rect.right() + 12.0);
+        open.enabled = !state.busy;
+    }
+    widgets.extend(row2);
     Ui::new(widgets)
 }
 
@@ -221,6 +233,7 @@ impl Toolbar {
                     ID_FOLDER => Some(ToolbarAction::OpenFolder),
                     ID_CANCEL_CONVERT => Some(ToolbarAction::CancelConversion),
                     ID_DOWNLOAD => Some(ToolbarAction::Download),
+                    ID_OPEN_IMAGE => Some(ToolbarAction::OpenImage),
                     _ => None,
                 };
             }
@@ -276,6 +289,51 @@ mod tests {
             WidgetKind::IconLabel { label, .. } => label.clone(),
             other => panic!("{other:?}"),
         }
+    }
+
+    fn row1_right(ui: &Ui) -> f32 {
+        ui.widget(ID_OPTIONS).unwrap().rect.right()
+    }
+
+    #[test]
+    fn open_image_sits_at_the_bottom_right_in_every_language() {
+        for language in Language::ALL {
+            let state = ToolbarState::new(AppSettings::default(), language);
+            let ui = build_ui(&state, &Fonts::embedded());
+            let open = ui.widget(ID_OPEN_IMAGE).expect("open image button");
+            assert!(open.rect.y > ui.widget(ID_CAPTURE).unwrap().rect.bottom(), "{language:?}");
+            assert!((open.rect.right() - row1_right(&ui)).abs() < 0.01, "{language:?}");
+            // The toolbar stays as wide as its first row.
+            assert!(ui.bounds().right() < row1_right(&ui) + 0.01, "{language:?}");
+            match &open.kind {
+                WidgetKind::IconLabel { label, .. } => assert_eq!(label, state.texts().open_image),
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn open_image_stays_after_a_save_without_covering_the_status() {
+        for language in Language::ALL {
+            let mut state = ToolbarState::new(AppSettings::default(), language);
+            let texts = state.texts();
+            state.status =
+                format!("{}2026-11-27_18-09-33.png{}", texts.saved_prefix, texts.copied_suffix);
+            state.last_saved = Some("C:/x/2026-11-27_18-09-33.png".into());
+            let ui = build_ui(&state, &Fonts::embedded());
+            let open = ui.widget(ID_OPEN_IMAGE).expect("open image button").rect;
+            let folder = ui.widget(ID_FOLDER).expect("open folder link").rect;
+            assert!(open.x >= folder.right() + 8.0, "{language:?}: covers the link");
+            assert!(open.right() >= row1_right(&ui), "{language:?}");
+        }
+    }
+
+    #[test]
+    fn open_image_is_off_while_busy() {
+        let mut state = ToolbarState::new(AppSettings::default(), Language::En);
+        state.busy = true;
+        let ui = build_ui(&state, &Fonts::embedded());
+        assert!(!ui.widget(ID_OPEN_IMAGE).unwrap().enabled);
     }
 
     #[test]

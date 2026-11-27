@@ -88,6 +88,7 @@ pub(super) const TEXTS: Texts = Texts {
     err_capture_failed: "キャプチャが予期せず停止しました",
     err_video_unreadable: "この動画を読み込めません",
     convert_video: "動画を GIF に変換…",
+    open_image: "画像を開く…",
     converting: "GIF に変換中… {percent}%",
     conversion_canceled: "変換を取り消しました",
     editor_save: "保存",

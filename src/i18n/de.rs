@@ -95,6 +95,7 @@ pub(super) const TEXTS: Texts = Texts {
     err_capture_failed: "die Aufnahme wurde unerwartet abgebrochen",
     err_video_unreadable: "dieses Video kann nicht gelesen werden",
     convert_video: "Video in GIF umwandeln…",
+    open_image: "Bild öffnen…",
     converting: "Umwandlung in GIF… {percent} %",
     conversion_canceled: "Umwandlung abgebrochen",
     editor_save: "Speichern",

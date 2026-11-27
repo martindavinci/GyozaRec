@@ -83,6 +83,7 @@ pub(super) const TEXTS: Texts = Texts {
     err_capture_failed: "the capture stopped unexpectedly",
     err_video_unreadable: "this video can't be read",
     convert_video: "Convert a video to GIF…",
+    open_image: "Open image…",
     converting: "Converting to GIF… {percent}%",
     conversion_canceled: "Conversion canceled",
     editor_save: "Save",

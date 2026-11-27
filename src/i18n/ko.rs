@@ -79,6 +79,7 @@ pub(super) const TEXTS: Texts = Texts {
     err_capture_failed: "캡처가 예기치 않게 중지되었습니다",
     err_video_unreadable: "이 동영상을 읽을 수 없습니다",
     convert_video: "동영상을 GIF로 변환…",
+    open_image: "이미지 열기…",
     converting: "GIF로 변환 중… {percent}%",
     conversion_canceled: "변환이 취소되었습니다",
     editor_save: "저장",

@@ -12,12 +12,14 @@ pub const SHOW: &str = "tray:show";
 pub const OPTIONS: &str = "tray:options";
 pub const EXIT: &str = "tray:exit";
 pub const CONVERT: &str = "tray:convert";
+pub const OPEN_IMAGE: &str = "tray:open-image";
 
 /// What a tray menu id asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayCommand {
     Quick(QuickAction),
     Convert,
+    OpenImage,
     Show,
     Options,
     Exit,
@@ -29,6 +31,7 @@ pub fn command(menu_id: &str) -> Option<TrayCommand> {
         OPTIONS => Some(TrayCommand::Options),
         EXIT => Some(TrayCommand::Exit),
         CONVERT => Some(TrayCommand::Convert),
+        OPEN_IMAGE => Some(TrayCommand::OpenImage),
         other => {
             let name = other.strip_prefix(MENU_PREFIX)?;
             QuickAction::from_name(name).map(TrayCommand::Quick)
@@ -60,6 +63,7 @@ pub fn create(texts: &Texts) -> Option<TrayIcon> {
         menu.append(item).ok()?;
     }
     menu.append(&MenuItem::with_id(CONVERT, texts.convert_video, true, None)).ok()?;
+    menu.append(&MenuItem::with_id(OPEN_IMAGE, texts.open_image, true, None)).ok()?;
     menu.append(&PredefinedMenuItem::separator()).ok()?;
     menu.append(&MenuItem::with_id(SHOW, texts.tray_show, true, None)).ok()?;
     menu.append(&MenuItem::with_id(OPTIONS, texts.options, true, None)).ok()?;
@@ -88,6 +92,7 @@ mod tests {
         assert_eq!(command(OPTIONS), Some(TrayCommand::Options));
         assert_eq!(command(EXIT), Some(TrayCommand::Exit));
         assert_eq!(command(CONVERT), Some(TrayCommand::Convert));
+        assert_eq!(command(OPEN_IMAGE), Some(TrayCommand::OpenImage));
         assert_eq!(command("tray:nope"), None);
         assert_eq!(command("area:1"), None);
     }

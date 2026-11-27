@@ -79,6 +79,7 @@ pub(super) const TEXTS: Texts = Texts {
     err_capture_failed: "捕获意外停止",
     err_video_unreadable: "无法读取此视频",
     convert_video: "将视频转换为 GIF…",
+    open_image: "打开图片…",
     converting: "正在转换为 GIF… {percent}%",
     conversion_canceled: "已取消转换",
     editor_save: "保存",

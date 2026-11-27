@@ -702,6 +702,7 @@ impl App {
             match command {
                 TrayCommand::Quick(action) => self.start_quick(action),
                 TrayCommand::Convert => self.start_conversion(),
+                TrayCommand::OpenImage => self.open_image(event_loop),
                 TrayCommand::Show => self.activate(),
                 TrayCommand::Options => {
                     self.activate();
@@ -861,6 +862,29 @@ impl App {
                 }
             }
             Activation::ShowToolbar => self.show_toolbar(),
+        }
+    }
+
+    /// Asks for a PNG or JPG and opens an editor on it.
+    fn open_image(&mut self, event_loop: &ActiveEventLoop) {
+        if self.options.is_some() || self.exit_pending {
+            return;
+        }
+        let texts = self.state.texts();
+        let Some(path) = rfd::FileDialog::new()
+            .set_title(texts.open_image)
+            .set_directory(&self.state.settings.save_folder)
+            .add_filter("PNG, JPG", &["png", "jpg", "jpeg"])
+            .pick_file()
+        else {
+            return;
+        };
+        let scale = self.toolbar.as_ref().map_or(1.0, |t| t.surface.window.scale_factor());
+        match gyozarec::editor::load(&path) {
+            Ok(img) => {
+                self.open_editor(event_loop, Arc::new(img), path, true, None, scale);
+            }
+            Err(err) => gyozarec::platform::show_error_box(&err.to_string()),
         }
     }
 
@@ -1037,6 +1061,7 @@ impl ApplicationHandler<AppEvent> for App {
                 | ToolbarAction::DelayMenu),
             ) => self.show_menu(action),
             Some(ToolbarAction::OpenFolder) => self.open_folder(),
+            Some(ToolbarAction::OpenImage) => self.open_image(event_loop),
             Some(ToolbarAction::Download) => {
                 if let Some(page) = self.state.update.as_ref().and_then(|u| u.safe_page()) {
                     use gyozarec::capture::FileRevealer;

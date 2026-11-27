@@ -213,6 +213,8 @@ pub struct Texts {
     pub err_capture_failed: &'static str,
     pub err_video_unreadable: &'static str,
     pub convert_video: &'static str,
+    /// Toolbar button and tray entry: edit a PNG or JPG from disk.
+    pub open_image: &'static str,
     /// `{percent}` is the progress, 0 to 100.
     pub converting: &'static str,
     pub conversion_canceled: &'static str,
@@ -353,6 +355,7 @@ mod tests {
                 t.code_open_link,
                 t.err_video_unreadable,
                 t.convert_video,
+                t.open_image,
                 t.converting,
                 t.conversion_canceled,
             ];

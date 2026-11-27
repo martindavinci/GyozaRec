@@ -1188,9 +1188,12 @@ mod layout_tests {
                 .collect();
             let fonts = fonts_for(lang, &form);
             let edit = ShortcutEdit::default();
-            let (w, h) = logical_size(&build_ui(&form, texts, &lines, &edit, &fonts));
-            assert!(h <= 560.0, "{lang:?}: {h} logical pixels high");
-            assert!(w <= 1000.0, "{lang:?}: {w} logical pixels wide");
+            for theme in THEME_CHOICES {
+                let form = OptionsForm { theme, ..form.clone() };
+                let (w, h) = logical_size(&build_ui(&form, texts, &lines, &edit, &fonts));
+                assert!(h <= 560.0, "{lang:?} {theme:?}: {h} logical pixels high");
+                assert!(w <= 1000.0, "{lang:?} {theme:?}: {w} logical pixels wide");
+            }
         }
     }
 }

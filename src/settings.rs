@@ -19,6 +19,10 @@ pub enum ThemeChoice {
     Dark,
     /// Blue-grey dark, the dark one automatic picks.
     Slate,
+    /// Neutral light, white and grey.
+    Paper,
+    /// High contrast on black.
+    Contrast,
     /// Also what an unknown value means, so it never resets the other settings.
     #[default]
     #[serde(other)]
@@ -26,8 +30,14 @@ pub enum ThemeChoice {
 }
 
 /// In the order Options lists them.
-pub const THEME_CHOICES: [ThemeChoice; 4] =
-    [ThemeChoice::Auto, ThemeChoice::Light, ThemeChoice::Slate, ThemeChoice::Dark];
+pub const THEME_CHOICES: [ThemeChoice; 6] = [
+    ThemeChoice::Auto,
+    ThemeChoice::Light,
+    ThemeChoice::Paper,
+    ThemeChoice::Slate,
+    ThemeChoice::Dark,
+    ThemeChoice::Contrast,
+];
 
 impl ThemeChoice {
     pub fn look(self, system_is_dark: bool) -> Look {
@@ -36,6 +46,8 @@ impl ThemeChoice {
             ThemeChoice::Auto | ThemeChoice::Light => Look::Light,
             ThemeChoice::Dark => Look::Dark,
             ThemeChoice::Slate => Look::Slate,
+            ThemeChoice::Paper => Look::Paper,
+            ThemeChoice::Contrast => Look::Contrast,
         }
     }
 }
@@ -147,7 +159,7 @@ impl Default for AppSettings {
             video_split_mb: 20,
             language: None,
             theme: ThemeChoice::Auto,
-            interface_size: 100,
+            interface_size: 125,
             area_switcher: false,
         }
     }
@@ -488,10 +500,13 @@ mod tests {
     }
 
     #[test]
-    fn interface_size_defaults_to_normal_and_snaps() {
+    fn interface_size_defaults_to_125_and_snaps() {
         let d = tempdir().unwrap();
         let p = d.path().join("s.json");
         let store = SettingsStore::new(p.clone(), cap());
+        assert_eq!(store.load().interface_size, 125);
+        // A size saved before stays.
+        fs::write(&p, r#"{ "interface_size": 100 }"#).unwrap();
         assert_eq!(store.load().interface_size, 100);
         fs::write(&p, r#"{ "interface_size": 160 }"#).unwrap();
         assert_eq!(store.load().interface_size, 150);
@@ -507,6 +522,31 @@ mod tests {
         assert_eq!(looks(ThemeChoice::Light), [Look::Light, Look::Light]);
         assert_eq!(looks(ThemeChoice::Dark), [Look::Dark, Look::Dark]);
         assert_eq!(looks(ThemeChoice::Slate), [Look::Slate, Look::Slate]);
+        assert_eq!(looks(ThemeChoice::Paper), [Look::Paper, Look::Paper]);
+        assert_eq!(looks(ThemeChoice::Contrast), [Look::Contrast, Look::Contrast]);
+    }
+
+    #[test]
+    fn new_themes_are_stored_by_name_and_listed_in_options() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        let store = SettingsStore::new(p.clone(), cap());
+        for (name, choice) in [("paper", ThemeChoice::Paper), ("contrast", ThemeChoice::Contrast)] {
+            fs::write(&p, format!(r#"{{ "theme": "{name}" }}"#)).unwrap();
+            assert_eq!(store.load().theme, choice);
+            assert!(THEME_CHOICES.contains(&choice));
+        }
+        assert_eq!(
+            THEME_CHOICES,
+            [
+                ThemeChoice::Auto,
+                ThemeChoice::Light,
+                ThemeChoice::Paper,
+                ThemeChoice::Slate,
+                ThemeChoice::Dark,
+                ThemeChoice::Contrast,
+            ]
+        );
     }
 
     #[test]

@@ -195,7 +195,7 @@ pub struct Texts {
     /// Interface size, next to the theme.
     pub interface_size: &'static str,
     /// In `settings::THEME_CHOICES` order.
-    pub theme_choices: [&'static str; 4],
+    pub theme_choices: [&'static str; 6],
     pub file_names: &'static str,
     pub file_name_prefix: &'static str,
     /// In `FILE_NAMES` order: date and time, random.

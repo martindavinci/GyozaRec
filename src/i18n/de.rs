@@ -76,8 +76,10 @@ pub(super) const TEXTS: Texts = Texts {
     theme_choices: [
         "Automatisch (System)",
         "Gyoza (hell)",
+        "Papier (hell)",
         "Schiefer (dunkel)",
         "Geröstet (dunkel)",
+        "Hoher Kontrast (dunkel)",
     ],
     file_names: "Dateinamen",
     file_name_prefix: "Mit \"GyozaRec_\" beginnen",

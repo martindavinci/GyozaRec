@@ -69,8 +69,10 @@ pub(super) const TEXTS: Texts = Texts {
     theme_choices: [
         "自動（システム）",
         "ギョーザ（ライト）",
+        "ペーパー（ライト）",
         "スレート（ダーク）",
         "トースト（ダーク）",
+        "ハイコントラスト（ダーク）",
     ],
     file_names: "ファイル名",
     file_name_prefix: "先頭に「GyozaRec_」を付ける",

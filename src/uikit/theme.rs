@@ -81,27 +81,61 @@ pub const SLATE: Theme = Theme {
     ..GYOZA
 };
 
+/// Neutral light: white and grey, for those who want a plain light look.
+pub const PAPER: Theme = Theme {
+    bg: Color(0xF7F7F8),
+    button: Color(0xE6E7EA),
+    button_hover: Color(0xD9DBE0),
+    button_pressed: Color(0xC9CCD3),
+    text: Color(0x1F2328),
+    disabled_text: Color(0x8C929C),
+    accent: Color(0x2F6FEB),
+    error: Color(0xC62828),
+    canvas: Color(0xE4E6EA),
+    check_well: Color(0xFFFFFF),
+    ..GYOZA
+};
+
+/// High contrast on black, after Windows' Night contrast theme.
+pub const CONTRAST: Theme = Theme {
+    bg: Color(0x000000),
+    button: Color(0x1A1A1A),
+    button_hover: Color(0x3A3A00),
+    button_pressed: Color(0x005A66),
+    text: Color(0xFFFFFF),
+    disabled_text: Color(0x3FF23F),
+    accent: Color(0xFFFF00),
+    error: Color(0xFF6060),
+    canvas: Color(0x000000),
+    check_well: Color(0x000000),
+    ..GYOZA
+};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Look {
     Light,
     Dark,
     Slate,
+    Paper,
+    Contrast,
 }
 
 impl Look {
-    const ALL: [Look; 3] = [Look::Light, Look::Dark, Look::Slate];
+    const ALL: [Look; 5] = [Look::Light, Look::Dark, Look::Slate, Look::Paper, Look::Contrast];
 
     pub fn theme(self) -> &'static Theme {
         match self {
             Look::Light => &GYOZA,
             Look::Dark => &GYOZA_DARK,
             Look::Slate => &SLATE,
+            Look::Paper => &PAPER,
+            Look::Contrast => &CONTRAST,
         }
     }
 
     /// Dark title bars go with it.
     pub fn is_dark(self) -> bool {
-        self != Look::Light
+        !matches!(self, Look::Light | Look::Paper)
     }
 }
 
@@ -187,8 +221,10 @@ mod tests {
     #[test]
     fn each_look_has_its_colors() {
         let bgs: Vec<Color> = Look::ALL.iter().map(|l| l.theme().bg).collect();
-        assert_eq!(bgs, [GYOZA.bg, GYOZA_DARK.bg, SLATE.bg]);
-        assert_eq!(Look::ALL.map(Look::is_dark), [false, true, true]);
+        assert_eq!(bgs, [GYOZA.bg, GYOZA_DARK.bg, SLATE.bg, PAPER.bg, CONTRAST.bg]);
+        assert_eq!(Look::ALL.map(Look::is_dark), [false, true, true, false, true]);
+        assert_eq!(PAPER.control_height, GYOZA.control_height, "same sizes");
+        assert_eq!(CONTRAST.control_height, GYOZA.control_height, "same sizes");
         assert_eq!(SLATE.control_height, GYOZA.control_height, "same sizes");
     }
 }

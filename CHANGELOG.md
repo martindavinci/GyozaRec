@@ -2,6 +2,14 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Two themes in Options: **Paper**, a neutral light look in white and grey, and **High contrast**, white and yellow on black.
+
+### Changed
+- The interface size is 125 % for new installations; settings saved before keep their size.
+
 ## [0.10.0] - 2026-11-28
 
 ### Added

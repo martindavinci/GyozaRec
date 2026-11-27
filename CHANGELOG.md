@@ -2,7 +2,7 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.11.0] - 2026-11-28
 
 ### Added
 - Two themes in Options: **Paper**, a neutral light look in white and grey, and **High contrast**, white and yellow on black.
@@ -159,6 +159,7 @@ All notable changes to GyozaRec are listed here. The format follows [Keep a Chan
 - Interface in nine languages, detected from Windows.
 - Per-user MSI installer and portable zip.
 
+[0.11.0]: https://github.com/martindavinci/GyozaRec/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/martindavinci/GyozaRec/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/martindavinci/GyozaRec/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/martindavinci/GyozaRec/compare/v0.7.0...v0.8.0

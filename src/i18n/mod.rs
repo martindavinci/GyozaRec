@@ -158,6 +158,10 @@ pub struct Texts {
     pub download: &'static str,
     pub notice_edit: &'static str,
     pub notice_open: &'static str,
+    /// Beside `notice_open` on a video's notification.
+    pub notice_reveal: &'static str,
+    /// `{count}` is how many files a split recording has.
+    pub notice_parts: &'static str,
     pub keep_in_tray: &'static str,
     pub start_with_windows: &'static str,
     pub shortcuts_enabled: &'static str,
@@ -183,6 +187,9 @@ pub struct Texts {
     pub gif_max_long_side: &'static str,
     pub video_fps: &'static str,
     pub video_max_seconds: &'static str,
+    /// The part-size dropdown's choice for "don't split".
+    pub video_split_off: &'static str,
+    pub video_split_mb: &'static str,
     pub language: &'static str,
     pub theme: &'static str,
     /// Interface size, next to the theme.
@@ -303,6 +310,8 @@ mod tests {
                 t.gif_max_long_side,
                 t.video_fps,
                 t.video_max_seconds,
+                t.video_split_off,
+                t.video_split_mb,
                 t.language,
                 t.theme,
                 t.interface_size,
@@ -328,6 +337,8 @@ mod tests {
                 t.show_notification,
                 t.notice_edit,
                 t.notice_open,
+                t.notice_reveal,
+                t.notice_parts,
                 t.after_image_capture,
                 t.editor_asks_to_save,
                 t.reuse_editor,
@@ -383,6 +394,7 @@ mod tests {
                 t.err_video_size.contains("{w}") && t.err_video_size.contains("{h}"),
                 "{lang:?}"
             );
+            assert!(t.notice_parts.contains("{count}"), "{lang:?}");
             assert!(!lang.native_name().is_empty());
         }
     }

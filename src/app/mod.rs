@@ -774,7 +774,8 @@ impl App {
             UiRequest::Notify(n) => {
                 if !self.exit_pending {
                     self.notice = None;
-                    self.notice = notice::NoticeWindow::open(event_loop, n, self.state.texts());
+                    self.notice =
+                        notice::NoticeWindow::open(event_loop, n, self.state.texts(), &self.fonts);
                     let generation = self.notice_timer.start();
                     self.schedule_notice_timeout(generation);
                 }
@@ -947,6 +948,11 @@ impl ApplicationHandler<AppEvent> for App {
                 notice::NoticeAction::Open => {
                     if let Some(n) = self.notice.take() {
                         self.open_notice(event_loop, n.notice);
+                    }
+                }
+                notice::NoticeAction::Reveal => {
+                    if let Some(n) = self.notice.take() {
+                        gyozarec::platform::reveal_in_explorer(&n.notice.path);
                     }
                 }
                 notice::NoticeAction::Close => self.notice = None,

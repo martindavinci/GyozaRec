@@ -91,6 +91,10 @@ pub struct AppSettings {
     pub gif_max_long_side: u32,
     pub video_fps: u32,
     pub video_max_seconds: u32,
+    /// Splits MP4 recordings into files of at most `video_split_mb` MB.
+    pub video_split: bool,
+    /// 10–2000; 1 MB = 1,048,576 bytes.
+    pub video_split_mb: u32,
     /// Interface language code (`it`, `pt-BR`…); absent or unknown means
     /// "follow Windows". Kept as text so an unknown code never resets the
     /// other settings.
@@ -139,6 +143,8 @@ impl Default for AppSettings {
             gif_max_long_side: 800,
             video_fps: 30,
             video_max_seconds: 300,
+            video_split: false,
+            video_split_mb: 20,
             language: None,
             theme: ThemeChoice::Auto,
             interface_size: 100,
@@ -175,6 +181,7 @@ impl AppSettings {
             gif_max_long_side: self.gif_max_long_side.clamp(240, 1920),
             video_fps: nearest_video_fps(self.video_fps),
             video_max_seconds: self.video_max_seconds.clamp(5, 3600),
+            video_split_mb: self.video_split_mb.clamp(10, 2000),
             interface_size: crate::uikit::theme::nearest_zoom(self.interface_size),
             ..self
         }
@@ -400,6 +407,17 @@ mod tests {
             (5, 5, 30, 1920, 5)
         );
         assert_eq!(s.save_folder, cap());
+    }
+
+    #[test]
+    fn video_split_size_is_clamped() {
+        let d = tempdir().unwrap();
+        let p = d.path().join("s.json");
+        fs::write(&p, r#"{ "video_split": true, "video_split_mb": 0 }"#).unwrap();
+        let s = SettingsStore::new(p.clone(), cap()).load();
+        assert_eq!((s.video_split, s.video_split_mb), (true, 10));
+        fs::write(&p, r#"{ "video_split_mb": 99999 }"#).unwrap();
+        assert_eq!(SettingsStore::new(p, cap()).load().video_split_mb, 2000);
     }
 
     #[test]

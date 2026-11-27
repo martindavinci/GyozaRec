@@ -3,7 +3,9 @@
 
 use crate::geometry::PixelSize;
 use crate::pixels::PixelBuffer;
-use crate::recording::{FrameSink, bitrate};
+use crate::recording::{
+    AUDIO_BITRATE, FrameSink, PartSink, PathTaken, SplitSink, bitrate, split_reserve,
+};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use windows::Win32::Media::MediaFoundation::{
@@ -132,7 +134,7 @@ impl Writer {
 
             // Both streams must exist before BeginWriting.
             let audio_stream = if audio {
-                let output = audio_type(&MFAudioFormat_AAC, 24_000)?; // 192 kbit/s
+                let output = audio_type(&MFAudioFormat_AAC, AUDIO_BITRATE / 8)?;
                 let s = writer.AddStream(&output)?;
                 let input = audio_type(&MFAudioFormat_PCM, AUDIO_RATE * AUDIO_CHANNELS * 2)?;
                 input.SetUINT32(&MF_MT_AUDIO_BLOCK_ALIGNMENT, AUDIO_CHANNELS * 2)?;
@@ -287,6 +289,30 @@ impl FrameSink for Mp4Sink {
             None => Err(crate::Error::from(crate::UserError::NoFrames)),
         }
     }
+}
+
+impl PartSink for Mp4Sink {
+    /// What is on disk so far; the encoder still holds the last moments.
+    fn bytes(&self) -> u64 {
+        std::fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0)
+    }
+}
+
+/// An MP4 recording split into files of at most `limit` bytes, starting at `first`.
+pub fn split_mp4_sink(
+    first: &Path,
+    size: PixelSize,
+    fps: u32,
+    audio: bool,
+    limit: u64,
+) -> crate::Result<SplitSink> {
+    let check = Mp4Sink::new(first, size, fps, audio)?;
+    let reserve = split_reserve(limit, bitrate(check.size, fps), audio);
+    let open = Box::new(move |path: &Path| {
+        Ok(Box::new(Mp4Sink::new(path, size, fps, audio)?) as Box<dyn PartSink>)
+    });
+    let taken: PathTaken = Box::new(|path: &Path| path.exists());
+    SplitSink::new(first.to_path_buf(), limit, reserve, audio, open, taken)
 }
 
 /// First video frame of an MP4 file, decoded to BGRA (used to verify output).
@@ -490,6 +516,62 @@ mod tests {
             let hns = |v: i64| Duration::from_nanos(v.max(0) as u64 * 100);
             Ok((hns(total), hns(first.unwrap_or(0))))
         }
+    }
+
+    /// Noise the encoder cannot squeeze, so the parts fill at its real bitrate.
+    fn noise(size: PixelSize, seed: u64) -> PixelBuffer {
+        let mut frame = PixelBuffer::solid(PixelRect::new(0, 0, size.width, size.height), 0, 0, 0);
+        let mut x = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        for px in frame.bgra.as_chunks_mut::<4>().0 {
+            x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            px[..3].copy_from_slice(&(x >> 40).to_le_bytes()[..3]);
+        }
+        frame
+    }
+
+    #[test]
+    #[ignore = "desktop"]
+    fn split_recording_keeps_every_part_under_the_limit() {
+        let d = tempdir().unwrap();
+        let first = d.path().join("clip.mp4");
+        let size = PixelSize { width: 640, height: 480 };
+        let limit = 1024 * 1024;
+        let mut s = split_mp4_sink(&first, size, 30, true, limit).unwrap();
+        let silence = vec![0i16; 480 * 2]; // 10 ms
+        let seconds = 8u64;
+        let mut next_audio = 0u64;
+        for f in 0..seconds * 30 {
+            let t = Duration::from_millis(f * 1000 / 30);
+            s.push(&noise(size, f), t).unwrap();
+            // The audio runs 300 ms behind the video, as in a real recording.
+            while (next_audio * 10 + 300) < t.as_millis() as u64 {
+                s.push_audio(&silence, next_audio * 480).unwrap();
+                next_audio += 1;
+            }
+        }
+        while next_audio < seconds * 100 {
+            s.push_audio(&silence, next_audio * 480).unwrap();
+            next_audio += 1;
+        }
+        s.finish().unwrap();
+        let parts = s.files();
+        drop(s);
+        assert!(parts.len() >= 2, "{parts:?}");
+        let mut audio = Duration::ZERO;
+        for p in &parts {
+            let bytes = fs::metadata(p).unwrap().len();
+            assert!(bytes <= limit, "{} is {bytes} bytes", p.display());
+            assert_eq!(probe_mp4(p).unwrap(), size);
+            let (duration, first) = probe_audio(p).unwrap();
+            assert!(
+                first <= Duration::from_millis(50),
+                "{} audio starts at {first:?}",
+                p.display()
+            );
+            audio += duration;
+        }
+        let total = audio.as_secs_f64();
+        assert!((total - seconds as f64).abs() <= 0.2, "audio of all parts lasts {total} s");
     }
 
     #[test]

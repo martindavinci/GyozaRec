@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The notification after a capture: thumbnail, file name, click to open.
+//! The notification after a capture: thumbnail, file name, click to open;
+//! a video's also offers to open its folder.
 
 use super::surface::WindowSurface;
 use gyozarec::i18n::Texts;
 use gyozarec::pixels::PixelBuffer;
 use gyozarec::presentation::{Notice, NoticeKind, notice_rect, shorten_middle};
-use gyozarec::uikit::painter::{Fonts, Painter, RectF};
+use gyozarec::uikit::painter::{Fonts, Painter, RectF, measure_text};
 use gyozarec::uikit::theme;
 use gyozarec::uikit::widgets::{Icon, Ui, Widget, WidgetKind};
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -20,11 +21,15 @@ const THUMB: (f32, f32) = (240.0, 135.0);
 const LINE: f32 = 18.0;
 const NAME_CHARS: usize = 30;
 const ID_CLOSE: u32 = 1;
+/// Between "Click to open" and "Open folder".
+const SEPARATOR: &str = " — ";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum NoticeAction {
     None,
     Open,
+    /// Show the file in its folder.
+    Reveal,
     Close,
     /// The pointer entered (`true`) or left the notification.
     Hover(bool),
@@ -52,6 +57,35 @@ pub fn layout(thumbnail: (i32, i32)) -> NoticeLayout {
     NoticeLayout { size: (WIDTH, hint_y + LINE + PAD), thumb, close, name_y, hint_y }
 }
 
+/// Where "Open folder" goes: after "<open> — " on the hint line.
+pub fn reveal_rect(l: &NoticeLayout, open: &str, reveal: &str, fonts: &Fonts) -> RectF {
+    let px = theme::current().font_px;
+    let x = PAD + measure_text(fonts, &format!("{open}{SEPARATOR}"), px, false).0;
+    let (w, h) = measure_text(fonts, reveal, px, false);
+    RectF { x, y: l.hint_y, w, h: h.max(LINE) }
+}
+
+/// What a click at `(x, y)` does; the close button is handled by its widget.
+fn click(l: &NoticeLayout, reveal: Option<RectF>, x: f32, y: f32) -> NoticeAction {
+    if l.close.contains(x, y) {
+        NoticeAction::None
+    } else if reveal.is_some_and(|r| r.contains(x, y)) {
+        NoticeAction::Reveal
+    } else {
+        NoticeAction::Open
+    }
+}
+
+/// The file name, shortened, with the number of files of a split recording.
+fn name_line(name: &str, parts: usize, texts: &Texts) -> String {
+    if parts <= 1 {
+        return shorten_middle(name, NAME_CHARS);
+    }
+    let count = texts.notice_parts.replace("{count}", &parts.to_string());
+    let room = NAME_CHARS.saturating_sub(count.chars().count() + 3).max(8);
+    format!("{} · {count}", shorten_middle(name, room))
+}
+
 fn close_button(l: &NoticeLayout) -> Ui {
     let close = Widget {
         id: ID_CLOSE,
@@ -62,15 +96,24 @@ fn close_button(l: &NoticeLayout) -> Ui {
     Ui::new(vec![close])
 }
 
+/// The words of a notification.
+#[derive(Clone, Copy)]
+struct Lines<'a> {
+    name: &'a str,
+    hint: &'a str,
+    /// "Open folder" and where it goes, on a video's notification.
+    reveal: Option<(&'a str, RectF)>,
+}
+
 fn paint_notice(
     p: &mut Painter,
     l: &NoticeLayout,
     ui: &Ui,
     thumbnail: &PixelBuffer,
-    name: &str,
-    hint: &str,
+    lines: Lines,
     fonts: &Fonts,
 ) {
+    let Lines { name, hint, reveal } = lines;
     p.clear(theme::current().bg);
     let (w, h) = l.size;
     p.stroke_rect(
@@ -80,7 +123,17 @@ fn paint_notice(
     );
     p.text(fonts, name, PAD, l.name_y, theme::current().font_px, theme::current().text, true);
     p.image(thumbnail, l.thumb);
-    p.text(fonts, hint, PAD, l.hint_y, theme::current().font_px, theme::current().accent, false);
+    let (px, accent) = (theme::current().font_px, theme::current().accent);
+    match reveal {
+        Some((text, rect)) => {
+            p.text(fonts, &format!("{hint}{SEPARATOR}"), PAD, l.hint_y, px, accent, false);
+            p.text(fonts, text, rect.x, rect.y, px, accent, false);
+            // Underlined: it is a separate link, not part of the hint.
+            let y = rect.y + px + 2.0;
+            p.line((rect.x, y), (rect.right(), y), 1.0, accent);
+        }
+        None => p.text(fonts, hint, PAD, l.hint_y, px, accent, false),
+    }
     ui.paint(p, fonts, theme::current());
 }
 
@@ -91,6 +144,8 @@ pub struct NoticeWindow {
     ui: Ui,
     name: String,
     hint: &'static str,
+    /// "Open folder" and where it is, on a video's notification.
+    reveal: Option<(&'static str, RectF)>,
     cursor: (f32, f32),
     inside: bool,
 }
@@ -100,6 +155,7 @@ impl NoticeWindow {
         event_loop: &ActiveEventLoop,
         notice: Notice,
         texts: &Texts,
+        fonts: &Fonts,
     ) -> Option<NoticeWindow> {
         let l = layout((notice.thumbnail.width(), notice.thumbnail.height()));
         let rect = notice_rect(
@@ -126,14 +182,18 @@ impl NoticeWindow {
             NoticeKind::Image => texts.notice_edit,
             NoticeKind::Video => texts.notice_open,
         };
+        let reveal = (notice.kind == NoticeKind::Video)
+            .then(|| (texts.notice_reveal, reveal_rect(&l, hint, texts.notice_reveal, fonts)));
+        let name = name_line(&name, notice.parts, texts);
         let ui = close_button(&l);
         Some(NoticeWindow {
             surface,
             notice,
             layout: l,
             ui,
-            name: shorten_middle(&name, NAME_CHARS),
+            name,
             hint,
+            reveal,
             cursor: (-1.0, -1.0),
             inside: false,
         })
@@ -163,8 +223,7 @@ impl NoticeWindow {
             &self.layout,
             &self.ui,
             &self.notice.thumbnail,
-            &self.name,
-            self.hint,
+            Lines { name: &self.name, hint: self.hint, reveal: self.reveal },
             fonts,
         );
         let mut pixels = vec![0u32; (size.width * size.height) as usize];
@@ -201,10 +260,12 @@ impl NoticeWindow {
                 }
                 return match self.ui.pointer_up(self.cursor.0, self.cursor.1) {
                     Some(ID_CLOSE) => NoticeAction::Close,
-                    _ if !self.layout.close.contains(self.cursor.0, self.cursor.1) => {
-                        NoticeAction::Open
-                    }
-                    _ => NoticeAction::None,
+                    _ => click(
+                        &self.layout,
+                        self.reveal.map(|(_, r)| r),
+                        self.cursor.0,
+                        self.cursor.1,
+                    ),
                 };
             }
             _ => {}
@@ -228,6 +289,43 @@ mod tests {
         assert!(wide.close.right() <= WIDTH - PAD + 0.01);
     }
 
+    #[test]
+    fn open_folder_sits_after_the_open_hint_and_has_its_own_click() {
+        let fonts = Fonts::embedded();
+        let l = layout((320, 180));
+        let r = reveal_rect(&l, "Click to open", "Open folder", &fonts);
+        let open_w = measure_text(&fonts, "Click to open", theme::current().font_px, false).0;
+        assert!(r.x > PAD + open_w && r.y == l.hint_y && r.w > 0.0);
+        assert!(r.right() <= WIDTH - PAD, "fits in the notification");
+        let mid = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+        assert_eq!(click(&l, Some(r), mid.0, mid.1), NoticeAction::Reveal);
+        assert_eq!(click(&l, None, mid.0, mid.1), NoticeAction::Open);
+        let thumb = (l.thumb.x + 5.0, l.thumb.y + 5.0);
+        assert_eq!(click(&l, Some(r), thumb.0, thumb.1), NoticeAction::Open);
+        let close = (l.close.x + 2.0, l.close.y + 2.0);
+        assert_eq!(click(&l, Some(r), close.0, close.1), NoticeAction::None);
+    }
+
+    #[test]
+    fn open_folder_fits_in_every_language() {
+        let l = layout((320, 180));
+        for lang in gyozarec::i18n::Language::ALL {
+            let texts = lang.texts();
+            let fonts = Fonts::for_language(lang);
+            let r = reveal_rect(&l, texts.notice_open, texts.notice_reveal, &fonts);
+            assert!(r.right() <= WIDTH - PAD, "{lang:?}: ends at {}", r.right());
+        }
+    }
+
+    #[test]
+    fn name_line_counts_the_parts_of_a_split_recording() {
+        let texts = gyozarec::i18n::Language::It.texts();
+        assert_eq!(name_line("clip.mp4", 1, texts), "clip.mp4");
+        assert_eq!(name_line("clip.mp4", 3, texts), "clip.mp4 · 3 parti");
+        let long = "GyozaRec_2026-11-27_18-30-12_abcdefgh.mp4";
+        assert!(name_line(long, 12, texts).chars().count() <= NAME_CHARS + 2);
+    }
+
     /// Draws a notification offscreen into `%TEMP%\gyozarec-notice.png`.
     #[test]
     #[ignore = "desktop"]
@@ -238,8 +336,19 @@ mod tests {
         let size = PixelSize { width: l.size.0 as i32, height: l.size.1 as i32 };
         let mut p = Painter::new(size, 1.0);
         let texts = gyozarec::i18n::Language::En.texts();
-        let name = shorten_middle("GyozaRec_2026-10-25_18-30-12.png", NAME_CHARS);
-        paint_notice(&mut p, &l, &close_button(&l), &thumb, &name, texts.notice_edit, &fonts);
+        let name = name_line("GyozaRec_2026-10-25_18-30-12.mp4", 3, texts);
+        let reveal = Some((
+            texts.notice_reveal,
+            reveal_rect(&l, texts.notice_open, texts.notice_reveal, &fonts),
+        ));
+        paint_notice(
+            &mut p,
+            &l,
+            &close_button(&l),
+            &thumb,
+            Lines { name: &name, hint: texts.notice_open, reveal },
+            &fonts,
+        );
         let mut pixels = vec![0u32; (size.width * size.height) as usize];
         p.to_softbuffer(&mut pixels);
         let img = image::RgbImage::from_fn(size.width as u32, size.height as u32, |x, y| {

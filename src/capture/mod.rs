@@ -13,9 +13,11 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SinkKind {
-    /// `audio`: the file gets an audio track.
+    /// `audio`: the file gets an audio track. `split`: the most bytes a file
+    /// may have; past it the recording continues in a new file.
     Mp4 {
         audio: bool,
+        split: Option<u64>,
     },
     Gif {
         max_long_side: u32,
@@ -92,7 +94,8 @@ pub trait SelectionUi: Send {
 
 pub trait ClipboardService: Send {
     fn set_image(&self, img: &PixelBuffer) -> bool;
-    fn set_file(&self, path: &Path) -> bool;
+    /// Puts files on the clipboard, as Explorer's copy does.
+    fn set_files(&self, paths: &[PathBuf]) -> bool;
 }
 
 pub trait FileRevealer: Send {

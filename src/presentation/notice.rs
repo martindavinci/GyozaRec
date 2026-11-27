@@ -21,6 +21,8 @@ pub struct Notice {
     /// Work area and DPI scale of the monitor the capture came from.
     pub work_area: PixelRect,
     pub scale: f64,
+    /// Files of the recording (1 for images and unsplit videos).
+    pub parts: usize,
 }
 
 pub const NOTICE_TIMEOUT: Duration = Duration::from_secs(6);

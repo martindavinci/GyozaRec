@@ -5,7 +5,8 @@ use super::surface::WindowSurface;
 use gyozarec::i18n::{Language, Texts};
 use gyozarec::presentation::{
     GIF_FPS_CHOICES, GIF_LONG_SIDE_CHOICES, GIF_MAX_SECONDS_CHOICES, JPEG_QUALITY_CHOICES,
-    OptionsForm, VIDEO_FPS_CHOICES, VIDEO_MAX_SECONDS_CHOICES, choices_with, shorten_middle,
+    OptionsForm, VIDEO_FPS_CHOICES, VIDEO_MAX_SECONDS_CHOICES, VIDEO_SPLIT_MB_CHOICES,
+    choices_with, shorten_middle,
 };
 use gyozarec::settings::THEME_CHOICES;
 use gyozarec::uikit::painter::{Fonts, Painter, measure_text};
@@ -38,6 +39,8 @@ const ID_NOTICE: u32 = 33;
 const ID_UPDATES: u32 = 34;
 const ID_ASK_TO_SAVE: u32 = 36;
 const ID_REUSE_EDITOR: u32 = 37;
+/// The part-size dropdown (in `COMBOS`); its value 0 means "don't split".
+const ID_SPLIT_MB: u32 = 27;
 const ID_UPDATE_LINK: u32 = 23;
 /// Widest hint line before wrapping, in logical pixels.
 const HINT_WIDTH: f32 = 340.0;
@@ -75,13 +78,14 @@ fn file_names_label(form: &OptionsForm, texts: &Texts) -> &'static str {
 }
 
 /// The numeric dropdowns: id, base choices.
-const COMBOS: [(u32, &[u32]); 6] = [
+const COMBOS: [(u32, &[u32]); 7] = [
     (16, &JPEG_QUALITY_CHOICES),
     (10, &GIF_FPS_CHOICES),
     (11, &GIF_MAX_SECONDS_CHOICES),
     (12, &GIF_LONG_SIDE_CHOICES),
     (13, &VIDEO_FPS_CHOICES),
     (14, &VIDEO_MAX_SECONDS_CHOICES),
+    (ID_SPLIT_MB, &SPLIT_CHOICES),
 ];
 
 fn combo_label(id: u32, texts: &Texts) -> &'static str {
@@ -91,6 +95,7 @@ fn combo_label(id: u32, texts: &Texts) -> &'static str {
         11 => texts.gif_max_seconds,
         12 => texts.gif_max_long_side,
         13 => texts.video_fps,
+        ID_SPLIT_MB => texts.video_split_mb,
         _ => texts.video_max_seconds,
     }
 }
@@ -102,6 +107,8 @@ fn combo_value(form: &OptionsForm, id: u32) -> u32 {
         11 => form.gif_max_seconds,
         12 => form.gif_max_long_side,
         13 => form.video_fps,
+        ID_SPLIT_MB if !form.video_split => 0,
+        ID_SPLIT_MB => form.video_split_mb,
         _ => form.video_max_seconds,
     }
 }
@@ -113,7 +120,33 @@ fn set_combo_value(form: &mut OptionsForm, id: u32, value: u32) {
         11 => form.gif_max_seconds = value,
         12 => form.gif_max_long_side = value,
         13 => form.video_fps = value,
+        ID_SPLIT_MB => {
+            form.video_split = value > 0;
+            if value > 0 {
+                form.video_split_mb = value;
+            }
+        }
         _ => form.video_max_seconds = value,
+    }
+}
+
+/// "Don't split" first, then the part sizes in MB.
+const SPLIT_CHOICES: [u32; 7] = {
+    let mut all = [0; 7];
+    let mut i = 0;
+    while i < VIDEO_SPLIT_MB_CHOICES.len() {
+        all[i + 1] = VIDEO_SPLIT_MB_CHOICES[i];
+        i += 1;
+    }
+    all
+};
+
+/// How a dropdown shows `value`.
+fn combo_text(id: u32, value: u32, texts: &Texts) -> String {
+    if id == ID_SPLIT_MB && value == 0 {
+        texts.video_split_off.to_string()
+    } else {
+        value.to_string()
     }
 }
 
@@ -352,7 +385,10 @@ fn build_ui(
     let mut y = PAD;
     let dropdowns: Vec<(u32, &str, String)> = COMBOS
         .iter()
-        .map(|(id, _)| (*id, combo_label(*id, texts), combo_value(form, *id).to_string()))
+        .filter(|(id, _)| *id != ID_SPLIT_MB)
+        .map(|(id, _)| {
+            (*id, combo_label(*id, texts), combo_text(*id, combo_value(form, *id), texts))
+        })
         .chain([
             (ID_LANGUAGE, texts.language, language_label(form.language, texts).to_string()),
             (ID_THEME, texts.theme, texts.theme_choices[theme_index(form)].to_string()),
@@ -379,6 +415,17 @@ fn build_ui(
         y += row_h + ROW_GAP;
         widgets.extend(row);
         widgets.extend(button);
+    }
+    // The part size shares the maximum length's row: both are about videos,
+    // and the column has no room for another row.
+    if let Some(length) = widgets.iter().find(|w| w.id == 14).map(|w| w.rect) {
+        let value = combo_text(ID_SPLIT_MB, combo_value(form, ID_SPLIT_MB), texts);
+        let items = vec![
+            (200 + ID_SPLIT_MB, label(texts.video_split_mb)),
+            (ID_SPLIT_MB, WidgetKind::Button { label: value, dropdown: true }),
+        ];
+        let row = layout_row(items, length.right() + 16.0, length.y, 10.0, fonts, theme::current());
+        widgets.extend(row);
     }
     // The interface size shares the theme's row: no room for another one.
     if let Some(theme_button) = widgets.iter().find(|w| w.id == ID_THEME).map(|w| w.rect) {
@@ -746,7 +793,7 @@ impl OptionsWindow {
             for value in choices_with(base, current) {
                 let _ = menu.append(&CheckMenuItem::with_id(
                     format!("{MENU_PREFIX}{id}:{value}"),
-                    value.to_string(),
+                    combo_text(id, value, self.texts),
                     true,
                     value == current,
                     None,
@@ -1103,6 +1150,20 @@ mod layout_tests {
         assert!(link.right() < version.x && (link.y - version.y).abs() < 0.01);
         let ok = ui.widget(ID_CANCEL).unwrap().rect;
         assert!(link.x > ok.right(), "clear of the buttons");
+    }
+
+    #[test]
+    fn part_size_dropdown_turns_splitting_on_and_off() {
+        let texts = Language::It.texts();
+        let mut form = OptionsForm::from_settings(&gyozarec::settings::AppSettings::default());
+        assert_eq!(combo_value(&form, ID_SPLIT_MB), 0);
+        assert_eq!(combo_text(ID_SPLIT_MB, 0, texts), "No");
+        set_combo_value(&mut form, ID_SPLIT_MB, 50);
+        assert_eq!((form.video_split, form.video_split_mb), (true, 50));
+        assert_eq!(combo_value(&form, ID_SPLIT_MB), 50);
+        set_combo_value(&mut form, ID_SPLIT_MB, 0);
+        assert_eq!((form.video_split, form.video_split_mb), (false, 50), "keeps the last size");
+        assert_eq!(SPLIT_CHOICES, [0, 10, 20, 25, 50, 100, 500]);
     }
 
     /// Fits a 768-pixel-high screen at 125% scaling (614 logical pixels

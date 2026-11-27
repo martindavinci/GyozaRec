@@ -12,7 +12,7 @@ use crate::geometry::{CaptureArea, OutputFormat, meets_minimum};
 use crate::output::{FileNamer, ensure_folder, save_image};
 use crate::pixels::PixelBuffer;
 use crate::presentation::{Notice, NoticeKind, thumbnail};
-use crate::recording::{LoopConfig, RecordingOutcome};
+use crate::recording::{LoopConfig, RecordingOutcome, megabytes};
 use crate::settings::AppSettings;
 use std::sync::Arc;
 use std::time::Duration;
@@ -146,7 +146,13 @@ impl CaptureCoordinator {
         }
         let monitor = monitor_from_point(&monitors, region.center()).clone();
         let (ext, fps, max_seconds, kind) = if video {
-            ("mp4", settings.video_fps, settings.video_max_seconds, SinkKind::Mp4 { audio: false })
+            let split = settings.video_split.then(|| megabytes(settings.video_split_mb));
+            (
+                "mp4",
+                settings.video_fps,
+                settings.video_max_seconds,
+                SinkKind::Mp4 { audio: false, split },
+            )
         } else {
             let kind = SinkKind::Gif { max_long_side: settings.gif_max_long_side };
             ("gif", settings.gif_fps, settings.gif_max_seconds, kind)
@@ -159,7 +165,7 @@ impl CaptureCoordinator {
             None
         };
         let kind = match kind {
-            SinkKind::Mp4 { .. } => SinkKind::Mp4 { audio: feed.is_some() },
+            SinkKind::Mp4 { split, .. } => SinkKind::Mp4 { audio: feed.is_some(), split },
             other => other,
         };
         // The start sound plays once the audio runs, then the recording waits it
@@ -206,7 +212,8 @@ impl CaptureCoordinator {
         match (result.outcome, result.path) {
             (RecordingOutcome::Saved, Some(path)) => {
                 // The recording panel already played the stop sound.
-                let copied = settings.copy_to_clipboard && self.clipboard.set_file(&path);
+                let parts = if result.parts.is_empty() { vec![path.clone()] } else { result.parts };
+                let copied = settings.copy_to_clipboard && self.clipboard.set_files(&parts);
                 if settings.open_folder_after_recording {
                     self.revealer.reveal(&path);
                 }
@@ -222,6 +229,7 @@ impl CaptureCoordinator {
                         thumbnail,
                         work_area,
                         scale,
+                        parts: parts.len(),
                     });
                 }
                 CaptureOutcome::saved(path, copied)
@@ -294,6 +302,7 @@ impl CaptureCoordinator {
                                 thumbnail: thumbnail(img),
                                 work_area,
                                 scale,
+                                parts: 1,
                             });
                         }
                     }
@@ -346,7 +355,7 @@ mod tests {
         assert_eq!(o.kind, CaptureOutcomeKind::Saved);
         let ev = h.events();
         assert!(ev.contains(&"select:Rectangle:frozen=true:windows=0".to_string()));
-        assert!(ev.contains(&"sink:Mp4 { audio: false }:100x64".to_string()));
+        assert!(ev.contains(&"sink:Mp4 { audio: false, split: None }:100x64".to_string()));
         assert!(ev.contains(&"record:0,0,100,64:mp4:fps=30:max=300".to_string()));
         assert!(ev.iter().any(|e| e.starts_with("clip:file:") && e.ends_with(".mp4")));
         assert_eq!(h.clock.sleeps(), [Duration::from_millis(200), Duration::from_millis(150)]);
@@ -360,7 +369,10 @@ mod tests {
         mp4.run(AppSettings { format: OutputFormat::Mp4, ..mp4.settings() });
         let ev = mp4.events();
         assert!(ev.contains(&"audio:start".to_string()), "{ev:?}");
-        assert!(ev.contains(&"sink:Mp4 { audio: true }:200x100".to_string()), "{ev:?}");
+        assert!(
+            ev.contains(&"sink:Mp4 { audio: true, split: None }:200x100".to_string()),
+            "{ev:?}"
+        );
 
         let mut gif =
             CoordinatorHarness::rect(rect).with_audio().recording(RecordingOutcome::Saved);
@@ -375,7 +387,50 @@ mod tests {
             ..off.settings()
         });
         assert!(!off.events().contains(&"audio:start".to_string()));
-        assert!(off.events().contains(&"sink:Mp4 { audio: false }:200x100".to_string()));
+        assert!(
+            off.events().contains(&"sink:Mp4 { audio: false, split: None }:200x100".to_string())
+        );
+    }
+
+    #[test]
+    fn split_option_sets_the_size_limit_of_mp4_only() {
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut mp4 = CoordinatorHarness::rect(rect).recording(RecordingOutcome::Saved);
+        mp4.run(AppSettings {
+            format: OutputFormat::Mp4,
+            video_split: true,
+            video_split_mb: 20,
+            ..mp4.settings()
+        });
+        let ev = mp4.events();
+        assert!(
+            ev.contains(&"sink:Mp4 { audio: false, split: Some(20971520) }:200x100".to_string()),
+            "{ev:?}"
+        );
+
+        let mut gif = CoordinatorHarness::rect(rect).recording(RecordingOutcome::Saved);
+        gif.run(AppSettings { format: OutputFormat::Gif, video_split: true, ..gif.settings() });
+        assert!(
+            gif.events().contains(&"sink:Gif { max_long_side: 800 }:200x100".to_string()),
+            "{:?}",
+            gif.events()
+        );
+    }
+
+    #[test]
+    fn a_recording_in_parts_copies_every_part_and_counts_them_in_the_notice() {
+        let rect = Some(PixelRect::new(0, 0, 200, 100));
+        let mut h = CoordinatorHarness::rect(rect).recording_parts(3);
+        let o = h.run(AppSettings { format: OutputFormat::Mp4, ..h.settings() });
+        assert_eq!(o.kind, CaptureOutcomeKind::Saved);
+        let ev = h.events();
+        let copied: Vec<_> = ev.iter().filter(|e| e.starts_with("clip:file:")).collect();
+        assert_eq!(copied.len(), 3, "{ev:?}");
+        assert!(copied[1].ends_with("_part2.mp4") && copied[2].ends_with("_part3.mp4"));
+        assert!(
+            ev.iter().any(|e| e.starts_with("notice:video:") && e.ends_with(":parts=3")),
+            "{ev:?}"
+        );
     }
 
     #[test]
@@ -419,7 +474,10 @@ mod tests {
         assert_eq!(o.kind, CaptureOutcomeKind::Saved);
         let ev = h.events();
         assert!(ev.contains(&"audio:start".to_string()), "it was tried: {ev:?}");
-        assert!(ev.contains(&"sink:Mp4 { audio: false }:200x100".to_string()), "{ev:?}");
+        assert!(
+            ev.contains(&"sink:Mp4 { audio: false, split: None }:200x100".to_string()),
+            "{ev:?}"
+        );
     }
 
     #[test]

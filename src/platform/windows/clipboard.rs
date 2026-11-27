@@ -2,7 +2,7 @@
 use crate::capture::ClipboardService;
 use crate::pixels::PixelBuffer;
 use clipboard_win::{Clipboard, Setter, formats};
-use std::path::Path;
+use std::path::PathBuf;
 
 const ATTEMPTS: usize = 10;
 
@@ -54,10 +54,10 @@ impl ClipboardService for Win32Clipboard {
         clipboard_win::raw::set_without_clear(formats::CF_DIB, &dib_bytes(&img.on_white())).is_ok()
     }
 
-    fn set_file(&self, path: &Path) -> bool {
+    fn set_files(&self, paths: &[PathBuf]) -> bool {
         let Ok(_open) = Clipboard::new_attempts(ATTEMPTS) else { return false };
-        let path = path.to_string_lossy().into_owned();
-        clipboard_win::empty().is_ok() && formats::FileList.write_clipboard(&[path]).is_ok()
+        let paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        clipboard_win::empty().is_ok() && formats::FileList.write_clipboard(&paths).is_ok()
     }
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-use super::mp4::Mp4Sink;
+use super::mp4::{Mp4Sink, split_mp4_sink};
 use crate::capture::{SinkFactory, SinkKind};
 use crate::geometry::PixelSize;
 use crate::recording::{FrameSink, GifSink};
@@ -184,7 +184,12 @@ impl SinkFactory for DefaultSinkFactory {
         fps: u32,
     ) -> crate::Result<Box<dyn FrameSink>> {
         Ok(match kind {
-            SinkKind::Mp4 { audio } => Box::new(Mp4Sink::new(path, size, fps, *audio)?),
+            SinkKind::Mp4 { audio, split: None } => {
+                Box::new(Mp4Sink::new(path, size, fps, *audio)?)
+            }
+            SinkKind::Mp4 { audio, split: Some(limit) } => {
+                Box::new(split_mp4_sink(path, size, fps, *audio, *limit)?)
+            }
             SinkKind::Gif { max_long_side } => {
                 Box::new(GifSink::create(path, size, *max_long_side, fps)?)
             }

@@ -2,8 +2,8 @@
 //! Runs the capture loop on its own thread.
 
 use super::{
-    CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, PauseClock, RUN, RecordingOutcome,
-    RecordingResult, STOP, run_capture_loop_with_audio,
+    CANCEL, FrameSink, LoopConfig, LoopEnd, PAUSE, PauseClock, RUN, RecordingResult, STOP,
+    run_capture_loop_with_audio,
 };
 use crate::capture::ScreenGrabber;
 use crate::clock::Clock;
@@ -14,7 +14,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 pub struct RecordingWorker {
-    handle: JoinHandle<crate::Result<LoopEnd>>,
+    /// The loop's end and every file the sink wrote.
+    handle: JoinHandle<(crate::Result<LoopEnd>, Vec<PathBuf>)>,
     control: Arc<AtomicU8>,
     /// When the last pause was asked, in nanoseconds on `clock`.
     paused_at: Arc<AtomicU64>,
@@ -52,7 +53,7 @@ impl RecordingWorker {
             .name("gyozarec-recording".into())
             .spawn(move || {
                 // The sink (and its open file) is dropped when this returns.
-                run_capture_loop_with_audio(
+                let end = run_capture_loop_with_audio(
                     &*grabber,
                     &mut *sink,
                     &*loop_clock,
@@ -60,7 +61,8 @@ impl RecordingWorker {
                     &loop_control,
                     &loop_paused_at,
                     audio,
-                )
+                );
+                (end, sink.files())
             })
             .expect("spawn recording thread");
         let pauses = Mutex::new(PauseClock::default());
@@ -107,43 +109,46 @@ impl RecordingWorker {
     /// Discards the recording, even if the loop had already finished.
     pub fn cancel(self) -> RecordingResult {
         self.control.store(CANCEL, Ordering::SeqCst);
-        let _ = self.handle.join();
-        remove_partial(&self.output);
-        RecordingResult { outcome: RecordingOutcome::Canceled, path: None, error: None }
+        let files = self.handle.join().map(|(_, files)| files).unwrap_or_default();
+        remove_partial(&written(files, self.output));
+        RecordingResult::canceled()
     }
 
     pub fn wait(self) -> RecordingResult {
-        let failed = |error: crate::Failure| RecordingResult {
-            outcome: RecordingOutcome::Failed,
-            path: None,
-            error: Some(error),
+        let (end, files) = match self.handle.join() {
+            Ok((end, files)) => (Ok(end), files),
+            // The recording thread panicked.
+            Err(_) => (Err(()), Vec::new()),
         };
-        match self.handle.join() {
+        let files = written(files, self.output);
+        match end {
             Ok(Ok(LoopEnd::Canceled)) => {
-                remove_partial(&self.output);
-                RecordingResult { outcome: RecordingOutcome::Canceled, path: None, error: None }
+                remove_partial(&files);
+                RecordingResult::canceled()
             }
-            Ok(Ok(_)) => RecordingResult {
-                outcome: RecordingOutcome::Saved,
-                path: Some(self.output),
-                error: None,
-            },
+            Ok(Ok(_)) => RecordingResult::saved(files),
             Ok(Err(err)) => {
-                remove_partial(&self.output);
-                failed(err.into())
+                remove_partial(&files);
+                RecordingResult::failed(err.into())
             }
-            Err(_) => {
-                // The recording thread panicked.
-                remove_partial(&self.output);
-                failed(crate::UserError::RecordingFailed.into())
+            Err(()) => {
+                remove_partial(&files);
+                RecordingResult::failed(crate::UserError::RecordingFailed.into())
             }
         }
     }
 }
 
-fn remove_partial(path: &std::path::Path) {
-    if path.exists() {
-        let _ = std::fs::remove_file(path);
+/// The files a sink reported, or the output it was created with.
+fn written(files: Vec<PathBuf>, output: PathBuf) -> Vec<PathBuf> {
+    if files.is_empty() { vec![output] } else { files }
+}
+
+fn remove_partial(paths: &[PathBuf]) {
+    for path in paths {
+        if path.exists() {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -178,10 +183,7 @@ mod tests {
             Box::new(VecSink::default()),
             out.clone(),
         );
-        assert_eq!(
-            w.wait(),
-            RecordingResult { outcome: RecordingOutcome::Saved, path: Some(out), error: None }
-        );
+        assert_eq!(w.wait(), RecordingResult::saved(vec![out]));
     }
 
     #[test]
@@ -251,6 +253,66 @@ mod tests {
         release.send(()).unwrap();
         assert_eq!(w.cancel().outcome, RecordingOutcome::Canceled);
         assert!(!out.exists(), "the partial GIF must be deleted");
+    }
+
+    /// A sink that reports it wrote `files` (as a splitting sink does).
+    #[derive(Default)]
+    struct PartsSink {
+        files: Vec<PathBuf>,
+    }
+
+    impl FrameSink for PartsSink {
+        fn push(&mut self, _: &crate::pixels::PixelBuffer, _: Duration) -> crate::Result<()> {
+            Ok(())
+        }
+        fn finish(&mut self) -> crate::Result<()> {
+            Ok(())
+        }
+        fn files(&self) -> Vec<PathBuf> {
+            self.files.clone()
+        }
+    }
+
+    #[test]
+    fn saved_result_lists_the_output_or_every_part() {
+        let d = tempdir().unwrap();
+        let out = d.path().join("a.mp4");
+        let spawn = |sink: PartsSink| {
+            RecordingWorker::spawn(
+                Arc::new(FakeGrabber::default()),
+                Arc::new(FakeClock::default()),
+                cfg(),
+                Box::new(sink),
+                out.clone(),
+            )
+        };
+        assert_eq!(spawn(PartsSink::default()).wait().parts, vec![out.clone()]);
+        let parts = vec![out.clone(), d.path().join("a_part2.mp4")];
+        let result = spawn(PartsSink { files: parts.clone() }).wait();
+        assert_eq!((result.path, result.parts), (Some(out.clone()), parts));
+    }
+
+    #[test]
+    fn cancel_deletes_every_part() {
+        let d = tempdir().unwrap();
+        let out = d.path().join("a.mp4");
+        let parts = vec![out.clone(), d.path().join("a_part2.mp4")];
+        for p in &parts {
+            fs::write(p, b"partial").unwrap();
+        }
+        let w = RecordingWorker::spawn(
+            Arc::new(FakeGrabber::default()),
+            Arc::new(FakeClock::default()),
+            cfg(),
+            Box::new(PartsSink { files: parts.clone() }),
+            out,
+        );
+        // Let the loop finish first, so the sink has reported its files.
+        while !w.is_finished() {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(w.cancel().outcome, RecordingOutcome::Canceled);
+        assert!(parts.iter().all(|p| !p.exists()));
     }
 
     #[test]

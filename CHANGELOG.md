@@ -2,6 +2,12 @@
 
 All notable changes to GyozaRec are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Parts (MB)** in Options, next to the maximum length of videos (off by default): an MP4 recording continues in a new file before it reaches the chosen size (10, 20, 25, 50, 100 or 500 MB, where 1 MB is 1,048,576 bytes, as Windows Explorer counts them), so a long recording ends up as files under a size limit. The parts are named `name.mp4`, `name_part2.mp4`, `name_part3.mp4`…; each starts at zero and plays on its own, and the next one continues where it stopped, with no frame or sound lost between them. Copy to clipboard copies every part, and discarding a recording deletes them all.
+- "Open folder" on a video's notification, next to "Click to open": it shows the file selected in File Explorer. The notification of a recording in parts also says how many files it made.
+
 ## [0.8.0] - 2026-11-07
 
 ### Added

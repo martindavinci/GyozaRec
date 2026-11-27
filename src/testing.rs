@@ -15,7 +15,7 @@ use crate::pixels::PixelBuffer;
 use crate::recording::{FrameSink, RecordingOutcome, RecordingResult};
 use crate::settings::AppSettings;
 use chrono::{NaiveDate, NaiveDateTime};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -167,6 +167,8 @@ impl UiSender for FakeUiSender {
 pub struct FakeRecordingUi {
     pub outcome: RecordingOutcome,
     pub log: EventLog,
+    /// Files a saved recording reports (1 = only the job's path).
+    pub parts: u32,
 }
 
 impl RecordingUi for FakeRecordingUi {
@@ -182,8 +184,12 @@ impl RecordingUi for FakeRecordingUi {
                 job.config.max_duration.as_secs()
             ),
         );
-        let path = (self.outcome == RecordingOutcome::Saved).then_some(job.path);
-        RecordingResult { outcome: self.outcome, path, error: None }
+        let parts: Vec<_> = if self.outcome == RecordingOutcome::Saved {
+            (1..=self.parts.max(1)).map(|n| crate::recording::part_path(&job.path, n)).collect()
+        } else {
+            Vec::new()
+        };
+        RecordingResult { outcome: self.outcome, path: parts.first().cloned(), error: None, parts }
     }
 }
 
@@ -319,8 +325,10 @@ impl ClipboardService for FakeClipboard {
         true
     }
 
-    fn set_file(&self, path: &Path) -> bool {
-        log_event(&Some(self.log.clone()), format!("clip:file:{}", path.display()));
+    fn set_files(&self, paths: &[PathBuf]) -> bool {
+        for path in paths {
+            log_event(&Some(self.log.clone()), format!("clip:file:{}", path.display()));
+        }
         true
     }
 }
@@ -383,7 +391,7 @@ impl EditorLauncher for FakeEditor {
     }
 }
 
-/// Logs `notice:<image|video>:<file>:<thumbnail w>x<h>`.
+/// Logs `notice:<image|video>:<file>:<thumbnail w>x<h>`, plus `:parts=<n>` past one.
 pub struct FakeNotifier {
     pub log: EventLog,
 }
@@ -393,7 +401,8 @@ impl crate::capture::Notifier for FakeNotifier {
         let name = n.path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
         let kind = format!("{:?}", n.kind).to_lowercase();
         let (w, h) = (n.thumbnail.width(), n.thumbnail.height());
-        log_event(&Some(self.log.clone()), format!("notice:{kind}:{name}:{w}x{h}"));
+        let parts = if n.parts > 1 { format!(":parts={}", n.parts) } else { String::new() };
+        log_event(&Some(self.log.clone()), format!("notice:{kind}:{name}:{w}x{h}{parts}"));
     }
 }
 
@@ -461,6 +470,7 @@ impl CoordinatorHarness {
             recording_ui: Box::new(FakeRecordingUi {
                 outcome: RecordingOutcome::Saved,
                 log: log.clone(),
+                parts: 1,
             }),
             sinks: Box::new(FakeSinkFactory { log: log.clone() }),
             clock: Arc::new(clock.clone()),
@@ -521,7 +531,17 @@ impl CoordinatorHarness {
     /// Makes the fake recording UI answer with `outcome`.
     pub fn recording(mut self, outcome: RecordingOutcome) -> Self {
         self.coordinator.recording_ui =
-            Box::new(FakeRecordingUi { outcome, log: self.log.clone() });
+            Box::new(FakeRecordingUi { outcome, log: self.log.clone(), parts: 1 });
+        self
+    }
+
+    /// Makes the fake recording UI save a recording split into `parts` files.
+    pub fn recording_parts(mut self, parts: u32) -> Self {
+        self.coordinator.recording_ui = Box::new(FakeRecordingUi {
+            outcome: RecordingOutcome::Saved,
+            log: self.log.clone(),
+            parts,
+        });
         self
     }
 

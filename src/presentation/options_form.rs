@@ -10,6 +10,7 @@ pub const GIF_MAX_SECONDS_CHOICES: [u32; 5] = [5, 10, 15, 30, 60];
 pub const GIF_LONG_SIDE_CHOICES: [u32; 6] = [480, 640, 800, 1024, 1280, 1920];
 pub const VIDEO_FPS_CHOICES: [u32; 3] = [15, 30, 60];
 pub const VIDEO_MAX_SECONDS_CHOICES: [u32; 7] = [30, 60, 120, 300, 600, 1800, 3600];
+pub const VIDEO_SPLIT_MB_CHOICES: [u32; 6] = [10, 20, 25, 50, 100, 500];
 
 /// Shortens `text` to `max` characters by replacing its middle with "…".
 pub fn shorten_middle(text: &str, max: usize) -> String {
@@ -67,6 +68,8 @@ pub struct OptionsForm {
     pub gif_max_long_side: u32,
     pub video_fps: u32,
     pub video_max_seconds: u32,
+    pub video_split: bool,
+    pub video_split_mb: u32,
     /// `None` = follow Windows.
     pub language: Option<crate::i18n::Language>,
 }
@@ -120,6 +123,8 @@ impl OptionsForm {
             gif_max_long_side: s.gif_max_long_side,
             video_fps: s.video_fps,
             video_max_seconds: s.video_max_seconds,
+            video_split: s.video_split,
+            video_split_mb: s.video_split_mb,
             language: s.language(),
         }
     }
@@ -156,6 +161,8 @@ impl OptionsForm {
             gif_max_long_side: self.gif_max_long_side,
             video_fps: self.video_fps,
             video_max_seconds: self.video_max_seconds,
+            video_split: self.video_split,
+            video_split_mb: self.video_split_mb,
             language: self.language.map(|l| l.code().to_string()),
             ..base.clone()
         }
@@ -242,6 +249,17 @@ mod tests {
         assert!(f.record_system_audio);
         f.record_system_audio = false;
         assert!(!f.to_settings(&base, &cap()).record_system_audio);
+    }
+
+    #[test]
+    fn video_split_defaults_off_at_20_mb_and_roundtrips() {
+        let base = AppSettings::defaults(&cap());
+        let mut f = OptionsForm::from_settings(&base);
+        assert_eq!((f.video_split, f.video_split_mb), (false, 20));
+        f.video_split = true;
+        f.video_split_mb = 50;
+        let s = f.to_settings(&base, &cap());
+        assert_eq!((s.video_split, s.video_split_mb), (true, 50));
     }
 
     #[test]
